@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Material de referência (fora do controle de versão, ver .gitignore).
+    "referencia/**",
   ]),
 ]);
 

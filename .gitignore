@@ -40,6 +40,9 @@ yarn-error.log*
 # claude code (local/personal settings, not shared with the team)
 .claude/settings.local.json
 
+# material de referência (design/código de sistema anterior) — não versionar
+/referencia
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

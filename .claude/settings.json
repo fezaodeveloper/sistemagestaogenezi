@@ -16,7 +16,24 @@
       "Bash(node --env-file=.env.local \"C:\\\\Users\\\\nando\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-nando-sistemagestaogenezi\\\\a8986740-296a-4b61-8ce3-bc099d34dedc\\\\scratchpad\\\\test-supabase-connection.mjs\")",
       "Bash(node --env-file=.env.local .tmp-test-supabase.mjs)",
       "Bash(node -e ' *)",
-      "Bash(node --env-file=.env.local -e ' *)"
+      "Bash(node --env-file=.env.local -e ' *)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run list --repo fezaodeveloper/sistemagestaogenezi --limit 3 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run watch 30638650420 --repo fezaodeveloper/sistemagestaogenezi --exit-status 2>&1)",
+      "PowerShell(npx shadcn@latest add --help 2>&1)",
+      "PowerShell(npx shadcn@latest add sidebar avatar dropdown-menu button input label card separator -y 2>&1)",
+      "Bash(chromium-cli --help)",
+      "Bash(npx --yes playwright --version)",
+      "Bash(npx --yes playwright install chromium --with-deps)",
+      "Bash(node --env-file=.env.local .tmp-create-test-user.mjs)",
+      "Bash(mkdir -p .tmp-screenshots)",
+      "Bash(npx --yes playwright install-deps chromium)",
+      "Bash(node .tmp-playwright-test.mjs)",
+      "Bash(tail -100 /tmp/nextdev.log 2>&1)",
+      "Read(//tmp/**)",
+      "Bash(lsof -ti:3000 -sTCP:LISTEN)",
+      "Bash(xargs -r kill)",
+      "Bash(node .tmp-playwright-login-only.mjs)",
+      "Bash(tail -20 /tmp/nextdev.log 2>&1)"
     ]
   }
 }
