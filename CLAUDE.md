@@ -19,6 +19,7 @@
 
 - Toda tabela nova tem RLS habilitado (`enable row level security`) e políticas explícitas por operação (select/insert/update/delete).
 - Além das policies, cada tabela recebe `grant`s explícitos por coluna/operação para o role `authenticated` — não depender dos grants default do Postgres. Operações que não devem ser permitidas via API (ex.: criação de linha feita só por trigger `security definer`) não recebem grant correspondente.
+- `service_role` bypassa RLS, mas **não** bypassa grants de tabela — toda tabela usada pelo client admin (`src/lib/supabase/admin.ts`) também precisa de `grant` explícito para `service_role` (geralmente amplo, sem restrição de coluna, já que essa role é o bypass administrativo).
 
 ## Commits
 

@@ -12,7 +12,11 @@
       "WebFetch(domain:supabase.com)",
       "WebSearch",
       "Bash(supabase --version)",
-      "Bash(xargs grep -l \"getAll\\\\|CookieMethods\")"
+      "Bash(xargs grep -l \"getAll\\\\|CookieMethods\")",
+      "Bash(node --env-file=.env.local \"C:\\\\Users\\\\nando\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-nando-sistemagestaogenezi\\\\a8986740-296a-4b61-8ce3-bc099d34dedc\\\\scratchpad\\\\test-supabase-connection.mjs\")",
+      "Bash(node --env-file=.env.local .tmp-test-supabase.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(node --env-file=.env.local -e ' *)"
     ]
   }
 }
