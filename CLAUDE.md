@@ -29,6 +29,20 @@
 - Áreas novas dentro de `/admin` ou `/aluno` devem sempre chamar `requireRole()` no topo da própria `page.tsx`, mesmo já protegidas pelo layout.
 - **Server Action + `redirect()` encadeado (bug/limitação do Next 16):** se uma Server Action chama `redirect("/x")` e a página `/x` por sua vez chama `redirect("/y")` durante o mesmo ciclo de "single response" (form enviado via JS, não um POST puro), o router do client fica preso em `/x` sem aplicar o segundo redirect — confirmado empiricamente em `signInWithPassword`. Solução: a Server Action deve calcular e redirecionar direto para o destino final (um único `redirect()`), nunca depender de uma página intermediária redirecionar de novo. Redirects reais de Route Handler (`NextResponse.redirect`, como em `auth/callback`) não têm esse problema — cada hop é uma request HTTP de verdade.
 
+## Formulários e Server Actions
+
+- Toda Server Action que recebe input de formulário valida com **Zod** antes de tocar no Supabase — nunca confiar em `FormData` bruto. Erros de validação retornam por campo (`useActionState`), não como exceção.
+- Toda Server Action chama `requireRole(...)` no próprio corpo, mesmo que a página que a invoca já esteja protegida por layout/page — a action é um endpoint alcançável por POST direto, precisa se autoproteger.
+- CRUDs de gestão usam página dedicada para criar/editar (`/recurso/novo`, `/recurso/[id]/editar`), não modal — funciona sem JS, URL compartilhável, mais simples com Server Actions.
+
+## Estados de UI: loading, vazio e erro
+
+Toda tela que busca dados trata os três estados explicitamente:
+
+- **Loading**: `loading.tsx` do próprio Next (Suspense automático) com skeleton, não spinner client-side, para telas que buscam dados em Server Component.
+- **Vazio**: mensagem + call-to-action específico da tela (ex.: "nenhum curso cadastrado" + botão "novo curso"), nunca só uma tabela em branco.
+- **Erro**: erro de query tratado inline na própria página (sem deixar estourar exceção); `error.tsx` no segmento como rede de segurança para exceções inesperadas; erro de submit de formulário exibido no próprio form via `useActionState`.
+
 ## Commits
 
 - Seguir [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc.).
