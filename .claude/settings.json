@@ -4,7 +4,15 @@
       "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); gh --version 2>&1)",
       "PowerShell(gh auth status 2>&1)",
       "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); \\(Get-Command gh\\).Source)",
-      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)"
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create sistemagestaogenezi --private --source=. --remote=origin --push 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo view fezaodeveloper/sistemagestaogenezi --json name,visibility,url,defaultBranchRef 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run list --repo fezaodeveloper/sistemagestaogenezi --limit 5 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run view 30634578166 --repo fezaodeveloper/sistemagestaogenezi 2>&1)",
+      "WebFetch(domain:supabase.com)",
+      "WebSearch",
+      "Bash(supabase --version)",
+      "Bash(xargs grep -l \"getAll\\\\|CookieMethods\")"
     ]
   }
 }
