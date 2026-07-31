@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, LayoutDashboard } from "lucide-react";
+import { GraduationCap, LayoutDashboard, Users } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
 import {
@@ -42,6 +42,16 @@ export function AdminSidebar({ user }: { user: CurrentUser }) {
                     <Link href="/admin/cursos">
                       <GraduationCap />
                       <span>Cursos</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/admin/turmas">
+                      <Users />
+                      <span>Turmas</span>
                     </Link>
                   }
                 />

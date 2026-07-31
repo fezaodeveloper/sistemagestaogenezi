@@ -1,0 +1,133 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
+import { turmaFormSchema } from "@/lib/turmas/schema";
+
+type TurmaFormValuesEcho = {
+  curso_id: string;
+  nome: string;
+  data_inicio: string;
+  data_fim: string;
+  capacidade_maxima: string;
+  status: string;
+};
+
+export type TurmaFormState =
+  | {
+      errors?: Partial<
+        Record<
+          "curso_id" | "nome" | "data_inicio" | "data_fim" | "capacidade_maxima" | "status",
+          string[]
+        >
+      >;
+      error?: string;
+      values?: TurmaFormValuesEcho;
+    }
+  | undefined;
+
+function echoValues(formData: FormData): TurmaFormValuesEcho {
+  return {
+    curso_id: String(formData.get("curso_id") ?? ""),
+    nome: String(formData.get("nome") ?? ""),
+    data_inicio: String(formData.get("data_inicio") ?? ""),
+    data_fim: String(formData.get("data_fim") ?? ""),
+    capacidade_maxima: String(formData.get("capacidade_maxima") ?? ""),
+    status: String(formData.get("status") ?? ""),
+  };
+}
+
+function parseTurmaForm(formData: FormData) {
+  return turmaFormSchema.safeParse({
+    curso_id: formData.get("curso_id"),
+    nome: formData.get("nome"),
+    data_inicio: formData.get("data_inicio"),
+    data_fim: formData.get("data_fim"),
+    capacidade_maxima: formData.get("capacidade_maxima"),
+    status: formData.get("status"),
+  });
+}
+
+export async function createTurma(
+  _prevState: TurmaFormState,
+  formData: FormData,
+): Promise<TurmaFormState> {
+  await requireRole("admin");
+
+  const parsed = parseTurmaForm(formData);
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("turmas").insert({
+    curso_id: parsed.data.curso_id,
+    nome: parsed.data.nome,
+    data_inicio: parsed.data.data_inicio,
+    data_fim: parsed.data.data_fim,
+    capacidade_maxima: parsed.data.capacidade_maxima,
+    status: parsed.data.status,
+  });
+
+  if (error) {
+    return {
+      error: "Não foi possível criar a turma. Tente novamente.",
+      values: echoValues(formData),
+    };
+  }
+
+  revalidatePath("/admin/turmas");
+  redirect("/admin/turmas");
+}
+
+export async function updateTurma(
+  id: string,
+  _prevState: TurmaFormState,
+  formData: FormData,
+): Promise<TurmaFormState> {
+  await requireRole("admin");
+
+  const parsed = parseTurmaForm(formData);
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("turmas")
+    .update({
+      curso_id: parsed.data.curso_id,
+      nome: parsed.data.nome,
+      data_inicio: parsed.data.data_inicio,
+      data_fim: parsed.data.data_fim,
+      capacidade_maxima: parsed.data.capacidade_maxima,
+      status: parsed.data.status,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return {
+      error: "Não foi possível salvar as alterações. Tente novamente.",
+      values: echoValues(formData),
+    };
+  }
+
+  revalidatePath("/admin/turmas");
+  redirect("/admin/turmas");
+}
+
+export async function deleteTurma(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("turmas").delete().eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível excluir a turma." };
+  }
+
+  revalidatePath("/admin/turmas");
+  return {};
+}

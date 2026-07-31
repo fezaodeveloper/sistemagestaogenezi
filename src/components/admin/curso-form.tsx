@@ -41,12 +41,20 @@ export function CursoForm({
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState<CursoFormState, FormData>(action, undefined);
+  // Se a validação falhar, o formulário reaparece com defaultValue do mount
+  // original — sem isso, o usuário perde tudo que digitou. Trocar a key força
+  // o React a remontar os inputs não controlados com os valores ecoados.
+  const values = state?.values ?? defaultValues;
 
   return (
-    <form action={formAction} className="flex max-w-xl flex-col gap-4">
+    <form
+      key={JSON.stringify(state?.values)}
+      action={formAction}
+      className="flex max-w-xl flex-col gap-4"
+    >
       <div className="flex flex-col gap-2">
         <Label htmlFor="nome">Nome</Label>
-        <Input id="nome" name="nome" defaultValue={defaultValues?.nome} required />
+        <Input id="nome" name="nome" defaultValue={values?.nome} required />
         {state?.errors?.nome && (
           <p role="alert" className="text-destructive text-sm">
             {state.errors.nome[0]}
@@ -56,12 +64,7 @@ export function CursoForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="descricao">Descrição</Label>
-        <Textarea
-          id="descricao"
-          name="descricao"
-          defaultValue={defaultValues?.descricao}
-          rows={4}
-        />
+        <Textarea id="descricao" name="descricao" defaultValue={values?.descricao} rows={4} />
         {state?.errors?.descricao && (
           <p role="alert" className="text-destructive text-sm">
             {state.errors.descricao[0]}
@@ -71,7 +74,7 @@ export function CursoForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="tipo">Tipo</Label>
-        <Select name="tipo" defaultValue={defaultValues?.tipo}>
+        <Select name="tipo" items={CURSO_TIPO_LABELS} defaultValue={values?.tipo || undefined}>
           <SelectTrigger id="tipo" className="w-full">
             <SelectValue placeholder="Selecione o tipo" />
           </SelectTrigger>
@@ -92,7 +95,7 @@ export function CursoForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="status">Status</Label>
-        <Select name="status" defaultValue={defaultValues?.status ?? "ativo"}>
+        <Select name="status" items={CURSO_STATUS_LABELS} defaultValue={values?.status || "ativo"}>
           <SelectTrigger id="status" className="w-full">
             <SelectValue placeholder="Selecione o status" />
           </SelectTrigger>

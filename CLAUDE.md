@@ -5,6 +5,8 @@
 ## Stack
 
 - Next.js 16 (App Router), TypeScript (strict), Tailwind CSS v4, shadcn/ui (preset `nova`: Base UI + Lucide + Geist). Base UI usa a prop `render` para composição (equivalente ao `asChild` do Radix) — ex.: `<SidebarMenuButton render={<Link href="/admin">...</Link>} />`.
+- `Button` do Base UI espera um `<button>` nativo por padrão (`nativeButton` default `true`). Ao compor com `render={<Link .../>}` (uma `<a>`), sempre passar `nativeButton={false}` — sem isso, funciona visualmente mas loga erro de runtime sobre semântica de acessibilidade.
+- `Select` do Base UI (`src/components/ui/select.tsx`) só resolve o label exibido a partir de um `defaultValue`/`value` se a prop `items` (`Record<string, ReactNode>`) for passada em `<Select>`. Sem isso, ao carregar a página já com um valor selecionado (ex.: formulário de edição), o trigger mostra o valor cru (ex.: um UUID) em vez do label — só corrige depois que o usuário abre o dropdown manualmente. Sempre passar `items` quando o `Select` puder nascer com `defaultValue` preenchido.
 - Gerenciador de pacotes: npm.
 
 ## Convenções

@@ -6,12 +6,24 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { cursoFormSchema } from "@/lib/cursos/schema";
 
+type CursoFormValuesEcho = { nome: string; descricao: string; tipo: string; status: string };
+
 export type CursoFormState =
   | {
       errors?: Partial<Record<"nome" | "descricao" | "tipo" | "status", string[]>>;
       error?: string;
+      values?: CursoFormValuesEcho;
     }
   | undefined;
+
+function echoValues(formData: FormData): CursoFormValuesEcho {
+  return {
+    nome: String(formData.get("nome") ?? ""),
+    descricao: String(formData.get("descricao") ?? ""),
+    tipo: String(formData.get("tipo") ?? ""),
+    status: String(formData.get("status") ?? ""),
+  };
+}
 
 function parseCursoForm(formData: FormData) {
   return cursoFormSchema.safeParse({
@@ -30,7 +42,7 @@ export async function createCurso(
 
   const parsed = parseCursoForm(formData);
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors };
+    return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
   const supabase = await createClient();
@@ -42,7 +54,10 @@ export async function createCurso(
   });
 
   if (error) {
-    return { error: "Não foi possível criar o curso. Tente novamente." };
+    return {
+      error: "Não foi possível criar o curso. Tente novamente.",
+      values: echoValues(formData),
+    };
   }
 
   revalidatePath("/admin/cursos");
@@ -58,7 +73,7 @@ export async function updateCurso(
 
   const parsed = parseCursoForm(formData);
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors };
+    return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
   const supabase = await createClient();
@@ -73,7 +88,10 @@ export async function updateCurso(
     .eq("id", id);
 
   if (error) {
-    return { error: "Não foi possível salvar as alterações. Tente novamente." };
+    return {
+      error: "Não foi possível salvar as alterações. Tente novamente.",
+      values: echoValues(formData),
+    };
   }
 
   revalidatePath("/admin/cursos");
@@ -87,6 +105,9 @@ export async function deleteCurso(id: string): Promise<{ error?: string }> {
   const { error } = await supabase.from("cursos").delete().eq("id", id);
 
   if (error) {
+    if (error.code === "23503") {
+      return { error: "Esse curso tem turmas cadastradas — exclua as turmas primeiro." };
+    }
     return { error: "Não foi possível excluir o curso." };
   }
 
