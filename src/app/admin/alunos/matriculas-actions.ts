@@ -1,0 +1,86 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
+import { matriculaFormSchema, MATRICULA_STATUSES } from "@/lib/matriculas/schema";
+
+export type MatriculaFormState =
+  { errors?: Partial<Record<"turma_id" | "data_matricula", string[]>>; error?: string } | undefined;
+
+export async function createMatricula(
+  alunoId: string,
+  _prevState: MatriculaFormState,
+  formData: FormData,
+): Promise<MatriculaFormState> {
+  await requireRole("admin");
+
+  const parsed = matriculaFormSchema.safeParse({
+    turma_id: formData.get("turma_id"),
+    data_matricula: formData.get("data_matricula"),
+  });
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("matriculas").insert({
+    aluno_id: alunoId,
+    turma_id: parsed.data.turma_id,
+    data_matricula: parsed.data.data_matricula,
+    status: "ativa",
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "O aluno já tem uma matrícula ativa nessa turma." };
+    }
+    return { error: "Não foi possível criar a matrícula. Tente novamente." };
+  }
+
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return undefined;
+}
+
+export async function updateMatriculaStatus(
+  matriculaId: string,
+  alunoId: string,
+  status: string,
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  if (!MATRICULA_STATUSES.includes(status as (typeof MATRICULA_STATUSES)[number])) {
+    return { error: "Status inválido." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("matriculas").update({ status }).eq("id", matriculaId);
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "Já existe uma matrícula ativa do aluno nessa turma." };
+    }
+    return { error: "Não foi possível atualizar o status da matrícula. Tente novamente." };
+  }
+
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return {};
+}
+
+export async function deleteMatricula(
+  matriculaId: string,
+  alunoId: string,
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("matriculas").delete().eq("id", matriculaId);
+
+  if (error) {
+    return { error: "Não foi possível excluir a matrícula. Tente novamente." };
+  }
+
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return {};
+}
