@@ -16,15 +16,28 @@ import {
 } from "@/components/ui/table";
 import { DeleteAlunoButton } from "@/components/admin/delete-aluno-button";
 
+type AlunoListItem = AlunoWithRelations & {
+  matriculas: { status: string; turmas: { nome: string } | null }[];
+};
+
+function turmasAtivasLabel(aluno: AlunoListItem) {
+  const nomes = aluno.matriculas
+    .filter((matricula) => matricula.status === "ativa")
+    .map((matricula) => matricula.turmas?.nome)
+    .filter((nome): nome is string => Boolean(nome));
+
+  return nomes.length > 0 ? nomes.join(", ") : "—";
+}
+
 export default async function AlunosPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("alunos")
-    .select("*, profiles!alunos_id_fkey(full_name)")
+    .select("*, profiles!alunos_id_fkey(full_name), matriculas(status, turmas(nome))")
     .order("created_at", { ascending: false });
-  const alunos = data as AlunoWithRelations[] | null;
+  const alunos = data as AlunoListItem[] | null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,6 +79,7 @@ export default async function AlunosPage() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>E-mail</TableHead>
+                <TableHead>Turmas ativas</TableHead>
                 <TableHead>Idade</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -75,6 +89,7 @@ export default async function AlunosPage() {
                 <TableRow key={aluno.id}>
                   <TableCell className="font-medium">{aluno.profiles?.full_name ?? "—"}</TableCell>
                   <TableCell>{aluno.email}</TableCell>
+                  <TableCell>{turmasAtivasLabel(aluno)}</TableCell>
                   <TableCell>
                     {isMinor(aluno.data_nascimento) ? (
                       <Badge variant="secondary">Menor de idade</Badge>
