@@ -43,7 +43,6 @@ const commonAlunoFields = {
     .refine((value) => new Date(`${value}T00:00:00`) <= new Date(), {
       error: "A data de nascimento não pode ser no futuro.",
     }),
-  turma_id: z.uuid().optional().or(z.literal("")),
   responsavel_nome: z.string().trim().optional(),
   responsavel_cpf: z.string().trim().optional(),
   responsavel_telefone: z.string().trim().optional(),
@@ -109,7 +108,6 @@ export type Aluno = {
   telefone: string;
   endereco: string | null;
   data_nascimento: string;
-  turma_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -117,7 +115,6 @@ export type Aluno = {
 
 export type AlunoWithRelations = Aluno & {
   profiles: { full_name: string | null } | null;
-  turmas: { nome: string } | null;
 };
 
 export type Responsavel = {

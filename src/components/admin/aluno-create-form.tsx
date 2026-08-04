@@ -7,13 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { isMinor } from "@/lib/alunos/schema";
 import { createAluno, type AlunoFormState } from "@/app/admin/alunos/actions";
@@ -27,7 +20,7 @@ function SubmitButton() {
   );
 }
 
-export function AlunoCreateForm({ turmas }: { turmas: { id: string; nome: string }[] }) {
+export function AlunoCreateForm() {
   const [state, formAction] = useActionState<AlunoFormState, FormData>(createAluno, undefined);
   const values = state && !state.success ? state.values : undefined;
   const [dataNascimento, setDataNascimento] = useState(values?.data_nascimento ?? "");
@@ -44,6 +37,10 @@ export function AlunoCreateForm({ turmas }: { turmas: { id: string; nome: string
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="bg-muted rounded-md p-4 font-mono text-lg">{state.tempPassword}</div>
+          <p className="text-muted-foreground text-sm">
+            Para matricular o aluno em uma turma, use a ação &quot;Nova matrícula&quot; na tela
+            dele.
+          </p>
           <div>
             <Button render={<Link href="/admin/alunos" />} nativeButton={false}>
               Ir para a lista de alunos
@@ -56,10 +53,6 @@ export function AlunoCreateForm({ turmas }: { turmas: { id: string; nome: string
 
   const errors = state && !state.success ? state.errors : undefined;
   const generalError = state && !state.success ? state.error : undefined;
-  const turmaItems: Record<string, string> = { none: "Nenhuma turma" };
-  turmas.forEach((turma) => {
-    turmaItems[turma.id] = turma.nome;
-  });
 
   return (
     <form key={JSON.stringify(values)} action={formAction} className="flex max-w-xl flex-col gap-4">
@@ -139,28 +132,6 @@ export function AlunoCreateForm({ turmas }: { turmas: { id: string; nome: string
         {errors?.data_nascimento && (
           <p role="alert" className="text-destructive text-sm">
             {errors.data_nascimento[0]}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="turma_id">Turma</Label>
-        <Select name="turma_id" items={turmaItems} defaultValue={values?.turma_id || "none"}>
-          <SelectTrigger id="turma_id" className="w-full">
-            <SelectValue placeholder="Selecione a turma" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Nenhuma turma</SelectItem>
-            {turmas.map((turma) => (
-              <SelectItem key={turma.id} value={turma.id}>
-                {turma.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors?.turma_id && (
-          <p role="alert" className="text-destructive text-sm">
-            {errors.turma_id[0]}
           </p>
         )}
       </div>

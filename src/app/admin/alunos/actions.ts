@@ -16,7 +16,6 @@ type AlunoFieldErrors = Partial<
     | "telefone"
     | "endereco"
     | "data_nascimento"
-    | "turma_id"
     | "responsavel_nome"
     | "responsavel_cpf"
     | "responsavel_telefone",
@@ -31,7 +30,6 @@ type AlunoFormValuesEcho = {
   telefone: string;
   endereco: string;
   data_nascimento: string;
-  turma_id: string;
   responsavel_nome: string;
   responsavel_cpf: string;
   responsavel_telefone: string;
@@ -46,13 +44,6 @@ export type AlunoEditFormState =
   | { errors?: AlunoFieldErrors; error?: string; values?: Omit<AlunoFormValuesEcho, "email"> }
   | undefined;
 
-// "none" é o valor sentinela do <Select> pra "sem turma" — o Base UI Select
-// não lida bem com item de value="". Convertido pra undefined aqui antes do Zod.
-function readTurmaId(formData: FormData) {
-  const raw = formData.get("turma_id");
-  return raw && raw !== "none" ? raw : undefined;
-}
-
 function echoValues(formData: FormData): AlunoFormValuesEcho {
   return { email: String(formData.get("email") ?? ""), ...echoEditValues(formData) };
 }
@@ -64,7 +55,6 @@ function echoEditValues(formData: FormData): Omit<AlunoFormValuesEcho, "email"> 
     telefone: String(formData.get("telefone") ?? ""),
     endereco: String(formData.get("endereco") ?? ""),
     data_nascimento: String(formData.get("data_nascimento") ?? ""),
-    turma_id: String(formData.get("turma_id") ?? "none"),
     responsavel_nome: String(formData.get("responsavel_nome") ?? ""),
     responsavel_cpf: String(formData.get("responsavel_cpf") ?? ""),
     responsavel_telefone: String(formData.get("responsavel_telefone") ?? ""),
@@ -90,7 +80,6 @@ export async function createAluno(
     telefone: formData.get("telefone"),
     endereco: formData.get("endereco") || undefined,
     data_nascimento: formData.get("data_nascimento"),
-    turma_id: readTurmaId(formData),
     responsavel_nome: formData.get("responsavel_nome") || undefined,
     responsavel_cpf: formData.get("responsavel_cpf") || undefined,
     responsavel_telefone: formData.get("responsavel_telefone") || undefined,
@@ -136,7 +125,6 @@ export async function createAluno(
     telefone: data.telefone,
     endereco: data.endereco ?? null,
     data_nascimento: data.data_nascimento,
-    turma_id: data.turma_id || null,
   });
 
   if (alunoError) {
@@ -184,7 +172,6 @@ export async function updateAluno(
     telefone: formData.get("telefone"),
     endereco: formData.get("endereco") || undefined,
     data_nascimento: formData.get("data_nascimento"),
-    turma_id: readTurmaId(formData),
     responsavel_nome: formData.get("responsavel_nome") || undefined,
     responsavel_cpf: formData.get("responsavel_cpf") || undefined,
     responsavel_telefone: formData.get("responsavel_telefone") || undefined,
@@ -218,7 +205,6 @@ export async function updateAluno(
       telefone: data.telefone,
       endereco: data.endereco ?? null,
       data_nascimento: data.data_nascimento,
-      turma_id: data.turma_id || null,
     })
     .eq("id", id);
 
@@ -262,8 +248,8 @@ export async function updateAluno(
 export async function deleteAluno(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 
-  // Apaga o usuário no Auth — profiles, alunos e responsaveis já têm
-  // "on delete cascade" encadeado a partir de auth.users, então tudo é
+  // Apaga o usuário no Auth — profiles, alunos, matriculas e responsaveis já
+  // têm "on delete cascade" encadeado a partir de auth.users, então tudo é
   // removido junto sem precisar de deletes separados.
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(id);

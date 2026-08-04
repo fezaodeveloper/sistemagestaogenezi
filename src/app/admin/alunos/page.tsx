@@ -22,7 +22,7 @@ export default async function AlunosPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("alunos")
-    .select("*, profiles!alunos_id_fkey(full_name), turmas(nome)")
+    .select("*, profiles!alunos_id_fkey(full_name)")
     .order("created_at", { ascending: false });
   const alunos = data as AlunoWithRelations[] | null;
 
@@ -31,7 +31,7 @@ export default async function AlunosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Alunos</h1>
-          <p className="text-muted-foreground text-sm">Cadastro de alunos e suas turmas.</p>
+          <p className="text-muted-foreground text-sm">Cadastro de alunos.</p>
         </div>
         <Button render={<Link href="/admin/alunos/novo" />} nativeButton={false}>
           <Plus />
@@ -66,7 +66,6 @@ export default async function AlunosPage() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>E-mail</TableHead>
-                <TableHead>Turma</TableHead>
                 <TableHead>Idade</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -76,7 +75,6 @@ export default async function AlunosPage() {
                 <TableRow key={aluno.id}>
                   <TableCell className="font-medium">{aluno.profiles?.full_name ?? "—"}</TableCell>
                   <TableCell>{aluno.email}</TableCell>
-                  <TableCell>{aluno.turmas?.nome ?? "—"}</TableCell>
                   <TableCell>
                     {isMinor(aluno.data_nascimento) ? (
                       <Badge variant="secondary">Menor de idade</Badge>

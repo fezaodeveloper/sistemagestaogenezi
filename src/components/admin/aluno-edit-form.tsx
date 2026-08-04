@@ -6,13 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { isMinor } from "@/lib/alunos/schema";
 import { updateAluno, type AlunoEditFormState } from "@/app/admin/alunos/actions";
 
@@ -31,7 +24,6 @@ type AlunoEditDefaults = {
   telefone: string;
   endereco: string;
   data_nascimento: string;
-  turma_id: string;
   responsavel_nome?: string;
   responsavel_cpf?: string;
   responsavel_telefone?: string;
@@ -40,11 +32,9 @@ type AlunoEditDefaults = {
 export function AlunoEditForm({
   id,
   defaultValues,
-  turmas,
 }: {
   id: string;
   defaultValues: AlunoEditDefaults;
-  turmas: { id: string; nome: string }[];
 }) {
   const action = updateAluno.bind(null, id);
   const [state, formAction] = useActionState<AlunoEditFormState, FormData>(action, undefined);
@@ -53,10 +43,6 @@ export function AlunoEditForm({
   const menorDeIdade = dataNascimento ? isMinor(dataNascimento) : false;
 
   const errors = state?.errors;
-  const turmaItems: Record<string, string> = { none: "Nenhuma turma" };
-  turmas.forEach((turma) => {
-    turmaItems[turma.id] = turma.nome;
-  });
 
   return (
     <form
@@ -130,28 +116,6 @@ export function AlunoEditForm({
         {errors?.data_nascimento && (
           <p role="alert" className="text-destructive text-sm">
             {errors.data_nascimento[0]}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="turma_id">Turma</Label>
-        <Select name="turma_id" items={turmaItems} defaultValue={values.turma_id || "none"}>
-          <SelectTrigger id="turma_id" className="w-full">
-            <SelectValue placeholder="Selecione a turma" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Nenhuma turma</SelectItem>
-            {turmas.map((turma) => (
-              <SelectItem key={turma.id} value={turma.id}>
-                {turma.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors?.turma_id && (
-          <p role="alert" className="text-destructive text-sm">
-            {errors.turma_id[0]}
           </p>
         )}
       </div>

@@ -9,16 +9,9 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
   const { id } = await params;
 
   const supabase = await createClient();
-  const [{ data: alunoData }, { data: responsavelData }, { data: turmas }] = await Promise.all([
-    supabase
-      .from("alunos")
-      .select("*, profiles!alunos_id_fkey(full_name), turmas(nome)")
-      .eq("id", id)
-      .single(),
+  const [{ data: alunoData }, { data: responsavelData }] = await Promise.all([
+    supabase.from("alunos").select("*, profiles!alunos_id_fkey(full_name)").eq("id", id).single(),
     supabase.from("responsaveis").select("*").eq("aluno_id", id).maybeSingle(),
-    // Sem filtro de status: a turma já vinculada pode ter sido encerrada
-    // depois do aluno cadastrado, e ela precisa continuar aparecendo aqui.
-    supabase.from("turmas").select("id, nome").order("nome"),
   ]);
   const aluno = alunoData as AlunoWithRelations | null;
   const responsavel = responsavelData as Responsavel | null;
@@ -35,19 +28,18 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
       </div>
       <AlunoEditForm
         id={aluno.id}
-        turmas={turmas ?? []}
         defaultValues={{
           full_name: aluno.profiles?.full_name ?? "",
           cpf: aluno.cpf,
           telefone: aluno.telefone,
           endereco: aluno.endereco ?? "",
           data_nascimento: aluno.data_nascimento,
-          turma_id: aluno.turma_id ?? "none",
           responsavel_nome: responsavel?.nome,
           responsavel_cpf: responsavel?.cpf,
           responsavel_telefone: responsavel?.telefone,
         }}
       />
+      {/* Seção de matrículas entra na parte 4 (telas) da Fase 4. */}
     </div>
   );
 }
