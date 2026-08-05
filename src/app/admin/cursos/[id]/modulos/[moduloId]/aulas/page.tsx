@@ -104,6 +104,18 @@ export default async function AulasPage({
                     <Button
                       render={
                         <Link
+                          href={`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}/quiz`}
+                        />
+                      }
+                      nativeButton={false}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      Quiz
+                    </Button>
+                    <Button
+                      render={
+                        <Link
                           href={`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}/materiais`}
                         />
                       }
