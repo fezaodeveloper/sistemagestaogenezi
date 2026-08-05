@@ -64,3 +64,11 @@ Toda tela que busca dados trata os três estados explicitamente:
 ## Contexto do projeto
 
 _(a preencher nas próximas fases conforme o domínio de negócio for definido)_
+
+### Fase 14 (Portal do aluno) — especificações confirmadas
+
+Ainda não implementado; documentado aqui com antecedência para orientar o desenho das fases anteriores (ex.: schema de `materiais`).
+
+- Vídeos do YouTube devem ser embutidos via player embed dentro da própria plataforma — o aluno nunca deve ser levado ao YouTube externo. Usar parâmetros do embed (`modestbranding`, sem vídeos relacionados, etc.) para minimizar a marca do YouTube o quanto o embed permitir, sem tentar remover 100% — isso violaria os termos do YouTube.
+- PDFs e slides devem ter visualizador interno na plataforma — sem download direto, sem abrir em nova aba ou app externo.
+- O player/visualizador de aula deve ter um botão "próxima aula" para o aluno navegar sequencialmente sem sair da tela.

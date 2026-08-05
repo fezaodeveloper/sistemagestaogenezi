@@ -100,6 +100,14 @@ export default async function TurmasPage() {
                   </TableCell>
                   <TableCell className="flex justify-end gap-1">
                     <Button
+                      render={<Link href={`/admin/turmas/${turma.id}/presencas`} />}
+                      nativeButton={false}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      Presenças
+                    </Button>
+                    <Button
                       render={<Link href={`/admin/turmas/${turma.id}/editar`} />}
                       nativeButton={false}
                       variant="ghost"
