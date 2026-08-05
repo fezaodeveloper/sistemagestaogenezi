@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MATERIAL_TIPOS, MATERIAL_TIPO_LABELS, MATERIAL_URL_LABELS } from "@/lib/materiais/schema";
-import type { MaterialFormState } from "@/app/admin/cursos/[id]/aulas/[aulaId]/materiais/actions";
+import type { MaterialFormState } from "@/app/admin/cursos/[id]/modulos/[moduloId]/aulas/[aulaId]/materiais/actions";
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();

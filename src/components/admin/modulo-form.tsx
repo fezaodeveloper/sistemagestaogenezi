@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { AulaFormValues } from "@/lib/aulas/schema";
-import type { AulaFormState } from "@/app/admin/cursos/[id]/modulos/[moduloId]/aulas/actions";
+import type { ModuloFormValues } from "@/lib/modulos/schema";
+import type { ModuloFormState } from "@/app/admin/cursos/[id]/modulos/actions";
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -18,16 +18,16 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export function AulaForm({
+export function ModuloForm({
   action,
   defaultValues,
   submitLabel,
 }: {
-  action: (state: AulaFormState, formData: FormData) => Promise<AulaFormState>;
-  defaultValues?: Partial<AulaFormValues>;
+  action: (state: ModuloFormState, formData: FormData) => Promise<ModuloFormState>;
+  defaultValues?: Partial<ModuloFormValues>;
   submitLabel: string;
 }) {
-  const [state, formAction] = useActionState<AulaFormState, FormData>(action, undefined);
+  const [state, formAction] = useActionState<ModuloFormState, FormData>(action, undefined);
   // Se a validação falhar, o formulário reaparece com defaultValue do mount
   // original — sem isso, o usuário perde tudo que digitou. Trocar a key força
   // o React a remontar os inputs não controlados com os valores ecoados.
@@ -67,11 +67,11 @@ export function AulaForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="conteudo">Conteúdo</Label>
-        <Textarea id="conteudo" name="conteudo" defaultValue={values?.conteudo} rows={8} />
-        {state?.errors?.conteudo && (
+        <Label htmlFor="descricao">Descrição</Label>
+        <Textarea id="descricao" name="descricao" rows={4} defaultValue={values?.descricao} />
+        {state?.errors?.descricao && (
           <p role="alert" className="text-destructive text-sm">
-            {state.errors.conteudo[0]}
+            {state.errors.descricao[0]}
           </p>
         )}
       </div>

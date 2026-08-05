@@ -21,7 +21,7 @@ export type AulaFormValues = z.infer<typeof aulaFormSchema>;
 
 export type Aula = {
   id: string;
-  curso_id: string;
+  modulo_id: string;
   numero: number;
   titulo: string;
   conteudo: string | null;

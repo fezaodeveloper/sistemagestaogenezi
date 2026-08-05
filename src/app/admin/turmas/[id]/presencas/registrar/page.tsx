@@ -39,7 +39,7 @@ export default async function RegistrarPresencaPage({
   const supabase = await createClient();
   const [{ data: turmaData }, { data: aulasData }] = await Promise.all([
     supabase.from("turmas").select("*").eq("id", turmaId).single(),
-    supabase.from("aulas").select("id, titulo, curso_id").order("numero"),
+    supabase.from("aulas").select("id, titulo, modulo_id, modulos(curso_id)").order("numero"),
   ]);
   const turma = turmaData as Turma | null;
 
@@ -47,8 +47,14 @@ export default async function RegistrarPresencaPage({
     notFound();
   }
 
-  const aulasDoCurso = ((aulasData ?? []) as { id: string; titulo: string; curso_id: string }[])
-    .filter((aula) => aula.curso_id === turma.curso_id)
+  const aulasDoCurso = (
+    (aulasData ?? []) as unknown as {
+      id: string;
+      titulo: string;
+      modulos: { curso_id: string } | null;
+    }[]
+  )
+    .filter((aula) => aula.modulos?.curso_id === turma.curso_id)
     .map((aula): AulaOpcao => ({ id: aula.id, titulo: aula.titulo }));
 
   // Passo 1: sem aula + data escolhidos ainda, mostra o seletor.

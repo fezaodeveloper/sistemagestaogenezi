@@ -28,19 +28,20 @@ export async function registrarPresencas(
 
   const supabase = await createClient();
 
-  // Revalida aula + a consistência aula.curso_id = turma.curso_id — decisão
-  // de produto: só na aplicação, sem trigger no banco (ver CLAUDE.md).
-  const [{ data: turma }, { data: aula }, { data: matriculasData }] = await Promise.all([
+  // Revalida aula + a consistência aula (via módulo) .curso_id = turma.curso_id
+  // — decisão de produto: só na aplicação, sem trigger no banco (ver CLAUDE.md).
+  const [{ data: turma }, { data: aulaData }, { data: matriculasData }] = await Promise.all([
     supabase.from("turmas").select("id, curso_id").eq("id", turmaId).single(),
-    supabase.from("aulas").select("id, curso_id").eq("id", aulaId).single(),
+    supabase.from("aulas").select("id, modulos(curso_id)").eq("id", aulaId).single(),
     supabase
       .from("matriculas")
       .select("id, alunos(email, profiles!alunos_id_fkey(full_name))")
       .eq("turma_id", turmaId)
       .eq("status", "ativa"),
   ]);
+  const aula = aulaData as unknown as { id: string; modulos: { curso_id: string } | null } | null;
 
-  if (!turma || !aula || aula.curso_id !== turma.curso_id) {
+  if (!turma || !aula || aula.modulos?.curso_id !== turma.curso_id) {
     return { error: "Aula inválida para esta turma." };
   }
 

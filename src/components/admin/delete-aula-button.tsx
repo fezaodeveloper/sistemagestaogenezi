@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
-import { deleteAula } from "@/app/admin/cursos/[id]/aulas/actions";
+import { deleteAula } from "@/app/admin/cursos/[id]/modulos/[moduloId]/aulas/actions";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -18,10 +18,12 @@ import {
 
 export function DeleteAulaButton({
   cursoId,
+  moduloId,
   aulaId,
   titulo,
 }: {
   cursoId: string;
+  moduloId: string;
   aulaId: string;
   titulo: string;
 }) {
@@ -31,7 +33,7 @@ export function DeleteAulaButton({
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await deleteAula(cursoId, aulaId);
+      const result = await deleteAula(cursoId, moduloId, aulaId);
       if (result.error) {
         setError(result.error);
       } else {

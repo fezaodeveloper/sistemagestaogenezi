@@ -21,14 +21,14 @@ import { DeleteMaterialButton } from "@/components/admin/delete-material-button"
 export default async function MateriaisPage({
   params,
 }: {
-  params: Promise<{ id: string; aulaId: string }>;
+  params: Promise<{ id: string; moduloId: string; aulaId: string }>;
 }) {
   await requireRole("admin");
-  const { id: cursoId, aulaId } = await params;
+  const { id: cursoId, moduloId, aulaId } = await params;
 
   const supabase = await createClient();
   const [{ data: aulaData }, { data, error }] = await Promise.all([
-    supabase.from("aulas").select("*").eq("id", aulaId).eq("curso_id", cursoId).single(),
+    supabase.from("aulas").select("*").eq("id", aulaId).eq("modulo_id", moduloId).single(),
     supabase.from("materiais").select("*").eq("aula_id", aulaId).order("ordem"),
   ]);
   const aula = aulaData as Aula | null;
@@ -38,11 +38,14 @@ export default async function MateriaisPage({
     notFound();
   }
 
+  const aulasHref = `/admin/cursos/${cursoId}/modulos/${moduloId}/aulas`;
+  const novoHref = `${aulasHref}/${aulaId}/materiais/novo`;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <Button
-          render={<Link href={`/admin/cursos/${cursoId}/aulas`} />}
+          render={<Link href={aulasHref} />}
           nativeButton={false}
           variant="ghost"
           size="sm"
@@ -56,10 +59,7 @@ export default async function MateriaisPage({
             <h1 className="text-2xl font-semibold">Materiais</h1>
             <p className="text-muted-foreground text-sm">{aula.titulo}</p>
           </div>
-          <Button
-            render={<Link href={`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais/novo`} />}
-            nativeButton={false}
-          >
+          <Button render={<Link href={novoHref} />} nativeButton={false}>
             <Plus />
             Novo material
           </Button>
@@ -76,11 +76,7 @@ export default async function MateriaisPage({
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <p className="text-muted-foreground text-sm">Nenhum material cadastrado ainda.</p>
-            <Button
-              render={<Link href={`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais/novo`} />}
-              nativeButton={false}
-              variant="outline"
-            >
+            <Button render={<Link href={novoHref} />} nativeButton={false} variant="outline">
               <Plus />
               Cadastrar primeiro material
             </Button>
@@ -123,9 +119,7 @@ export default async function MateriaisPage({
                   <TableCell className="flex justify-end gap-1">
                     <Button
                       render={
-                        <Link
-                          href={`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais/${material.id}/editar`}
-                        />
+                        <Link href={`${aulasHref}/${aulaId}/materiais/${material.id}/editar`} />
                       }
                       nativeButton={false}
                       variant="ghost"
@@ -133,7 +127,12 @@ export default async function MateriaisPage({
                     >
                       Editar
                     </Button>
-                    <DeleteMaterialButton cursoId={cursoId} aulaId={aulaId} material={material} />
+                    <DeleteMaterialButton
+                      cursoId={cursoId}
+                      moduloId={moduloId}
+                      aulaId={aulaId}
+                      material={material}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -4,7 +4,7 @@ import { Plus, ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import type { Aula } from "@/lib/aulas/schema";
-import type { Curso } from "@/lib/cursos/schema";
+import type { Modulo } from "@/lib/modulos/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -17,19 +17,23 @@ import {
 } from "@/components/ui/table";
 import { DeleteAulaButton } from "@/components/admin/delete-aula-button";
 
-export default async function AulasPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AulasPage({
+  params,
+}: {
+  params: Promise<{ id: string; moduloId: string }>;
+}) {
   await requireRole("admin");
-  const { id: cursoId } = await params;
+  const { id: cursoId, moduloId } = await params;
 
   const supabase = await createClient();
-  const [{ data: cursoData }, { data, error }] = await Promise.all([
-    supabase.from("cursos").select("*").eq("id", cursoId).single(),
-    supabase.from("aulas").select("*").eq("curso_id", cursoId).order("numero"),
+  const [{ data: moduloData }, { data, error }] = await Promise.all([
+    supabase.from("modulos").select("*").eq("id", moduloId).eq("curso_id", cursoId).single(),
+    supabase.from("aulas").select("*").eq("modulo_id", moduloId).order("numero"),
   ]);
-  const curso = cursoData as Curso | null;
+  const modulo = moduloData as Modulo | null;
   const aulas = data as Aula[] | null;
 
-  if (!curso) {
+  if (!modulo) {
     notFound();
   }
 
@@ -37,22 +41,22 @@ export default async function AulasPage({ params }: { params: Promise<{ id: stri
     <div className="flex flex-col gap-6">
       <div>
         <Button
-          render={<Link href="/admin/cursos" />}
+          render={<Link href={`/admin/cursos/${cursoId}/modulos`} />}
           nativeButton={false}
           variant="ghost"
           size="sm"
           className="mb-2 -ml-2"
         >
           <ArrowLeft />
-          Cursos
+          Módulos
         </Button>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Aulas</h1>
-            <p className="text-muted-foreground text-sm">{curso.nome}</p>
+            <p className="text-muted-foreground text-sm">{modulo.titulo}</p>
           </div>
           <Button
-            render={<Link href={`/admin/cursos/${cursoId}/aulas/novo`} />}
+            render={<Link href={`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/novo`} />}
             nativeButton={false}
           >
             <Plus />
@@ -72,7 +76,7 @@ export default async function AulasPage({ params }: { params: Promise<{ id: stri
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <p className="text-muted-foreground text-sm">Nenhuma aula cadastrada ainda.</p>
             <Button
-              render={<Link href={`/admin/cursos/${cursoId}/aulas/novo`} />}
+              render={<Link href={`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/novo`} />}
               nativeButton={false}
               variant="outline"
             >
@@ -98,7 +102,11 @@ export default async function AulasPage({ params }: { params: Promise<{ id: stri
                   <TableCell className="font-medium">{aula.titulo}</TableCell>
                   <TableCell className="flex justify-end gap-1">
                     <Button
-                      render={<Link href={`/admin/cursos/${cursoId}/aulas/${aula.id}/materiais`} />}
+                      render={
+                        <Link
+                          href={`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}/materiais`}
+                        />
+                      }
                       nativeButton={false}
                       variant="ghost"
                       size="sm"
@@ -106,14 +114,23 @@ export default async function AulasPage({ params }: { params: Promise<{ id: stri
                       Materiais
                     </Button>
                     <Button
-                      render={<Link href={`/admin/cursos/${cursoId}/aulas/${aula.id}/editar`} />}
+                      render={
+                        <Link
+                          href={`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}/editar`}
+                        />
+                      }
                       nativeButton={false}
                       variant="ghost"
                       size="sm"
                     >
                       Editar
                     </Button>
-                    <DeleteAulaButton cursoId={cursoId} aulaId={aula.id} titulo={aula.titulo} />
+                    <DeleteAulaButton
+                      cursoId={cursoId}
+                      moduloId={moduloId}
+                      aulaId={aula.id}
+                      titulo={aula.titulo}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

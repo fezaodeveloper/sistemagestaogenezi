@@ -84,12 +84,12 @@ export default async function CursosPage() {
                   </TableCell>
                   <TableCell className="flex justify-end gap-1">
                     <Button
-                      render={<Link href={`/admin/cursos/${curso.id}/aulas`} />}
+                      render={<Link href={`/admin/cursos/${curso.id}/modulos`} />}
                       nativeButton={false}
                       variant="ghost"
                       size="sm"
                     >
-                      Aulas
+                      Módulos
                     </Button>
                     <Button
                       render={<Link href={`/admin/cursos/${curso.id}/editar`} />}

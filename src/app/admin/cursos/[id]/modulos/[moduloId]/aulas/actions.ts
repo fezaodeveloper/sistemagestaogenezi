@@ -34,6 +34,7 @@ function parseAulaForm(formData: FormData) {
 
 export async function createAula(
   cursoId: string,
+  moduloId: string,
   _prevState: AulaFormState,
   formData: FormData,
 ): Promise<AulaFormState> {
@@ -46,7 +47,7 @@ export async function createAula(
 
   const supabase = await createClient();
   const { error } = await supabase.from("aulas").insert({
-    curso_id: cursoId,
+    modulo_id: moduloId,
     numero: parsed.data.numero,
     titulo: parsed.data.titulo,
     conteudo: parsed.data.conteudo ?? null,
@@ -55,7 +56,7 @@ export async function createAula(
   if (error) {
     if (error.code === "23505") {
       return {
-        error: "Já existe uma aula com esse número neste curso.",
+        error: "Já existe uma aula com esse número neste módulo.",
         values: echoValues(formData),
       };
     }
@@ -65,12 +66,13 @@ export async function createAula(
     };
   }
 
-  revalidatePath(`/admin/cursos/${cursoId}/aulas`);
-  redirect(`/admin/cursos/${cursoId}/aulas`);
+  revalidatePath(`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas`);
+  redirect(`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas`);
 }
 
 export async function updateAula(
   cursoId: string,
+  moduloId: string,
   aulaId: string,
   _prevState: AulaFormState,
   formData: FormData,
@@ -95,7 +97,7 @@ export async function updateAula(
   if (error) {
     if (error.code === "23505") {
       return {
-        error: "Já existe uma aula com esse número neste curso.",
+        error: "Já existe uma aula com esse número neste módulo.",
         values: echoValues(formData),
       };
     }
@@ -105,11 +107,15 @@ export async function updateAula(
     };
   }
 
-  revalidatePath(`/admin/cursos/${cursoId}/aulas`);
-  redirect(`/admin/cursos/${cursoId}/aulas`);
+  revalidatePath(`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas`);
+  redirect(`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas`);
 }
 
-export async function deleteAula(cursoId: string, aulaId: string): Promise<{ error?: string }> {
+export async function deleteAula(
+  cursoId: string,
+  moduloId: string,
+  aulaId: string,
+): Promise<{ error?: string }> {
   await requireRole("admin");
 
   const supabase = await createClient();
@@ -119,6 +125,6 @@ export async function deleteAula(cursoId: string, aulaId: string): Promise<{ err
     return { error: "Não foi possível excluir a aula." };
   }
 
-  revalidatePath(`/admin/cursos/${cursoId}/aulas`);
+  revalidatePath(`/admin/cursos/${cursoId}/modulos/${moduloId}/aulas`);
   return {};
 }

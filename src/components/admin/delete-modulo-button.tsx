@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
-import { deleteMaterial } from "@/app/admin/cursos/[id]/modulos/[moduloId]/aulas/[aulaId]/materiais/actions";
-import type { Material } from "@/lib/materiais/schema";
+import { deleteModulo } from "@/app/admin/cursos/[id]/modulos/actions";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -17,16 +16,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export function DeleteMaterialButton({
+export function DeleteModuloButton({
   cursoId,
   moduloId,
-  aulaId,
-  material,
+  titulo,
 }: {
   cursoId: string;
   moduloId: string;
-  aulaId: string;
-  material: Pick<Material, "id" | "tipo" | "url" | "titulo">;
+  titulo: string;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +31,7 @@ export function DeleteMaterialButton({
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await deleteMaterial(
-        cursoId,
-        moduloId,
-        aulaId,
-        material.id,
-        material.tipo,
-        material.url,
-      );
+      const result = await deleteModulo(cursoId, moduloId);
       if (result.error) {
         setError(result.error);
       } else {
@@ -60,17 +50,17 @@ export function DeleteMaterialButton({
     >
       <AlertDialogTrigger
         render={
-          <Button variant="ghost" size="icon-sm" aria-label={`Excluir ${material.titulo}`}>
+          <Button variant="ghost" size="icon-sm" aria-label={`Excluir ${titulo}`}>
             <Trash2 />
           </Button>
         }
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Excluir material</AlertDialogTitle>
+          <AlertDialogTitle>Excluir módulo</AlertDialogTitle>
           <AlertDialogDescription>
-            Tem certeza que deseja excluir &quot;{material.titulo}&quot;? Essa ação não pode ser
-            desfeita.
+            Tem certeza que deseja excluir &quot;{titulo}&quot;? As aulas e materiais desse módulo
+            também serão excluídos. Essa ação não pode ser desfeita.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && (

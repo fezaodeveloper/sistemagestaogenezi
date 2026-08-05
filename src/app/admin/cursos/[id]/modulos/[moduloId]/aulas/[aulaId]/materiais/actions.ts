@@ -56,8 +56,13 @@ async function uploadPdf(
   return { path: error ? null : path, error };
 }
 
+function materiaisPath(cursoId: string, moduloId: string, aulaId: string) {
+  return `/admin/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/materiais`;
+}
+
 export async function createMaterial(
   cursoId: string,
+  moduloId: string,
   aulaId: string,
   _prevState: MaterialFormState,
   formData: FormData,
@@ -138,12 +143,13 @@ export async function createMaterial(
     }
   }
 
-  revalidatePath(`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais`);
-  redirect(`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais`);
+  revalidatePath(materiaisPath(cursoId, moduloId, aulaId));
+  redirect(materiaisPath(cursoId, moduloId, aulaId));
 }
 
 export async function updateMaterial(
   cursoId: string,
+  moduloId: string,
   aulaId: string,
   materialId: string,
   current: Pick<Material, "tipo" | "url">,
@@ -246,12 +252,13 @@ export async function updateMaterial(
     }
   }
 
-  revalidatePath(`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais`);
-  redirect(`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais`);
+  revalidatePath(materiaisPath(cursoId, moduloId, aulaId));
+  redirect(materiaisPath(cursoId, moduloId, aulaId));
 }
 
 export async function deleteMaterial(
   cursoId: string,
+  moduloId: string,
   aulaId: string,
   materialId: string,
   tipo: Material["tipo"],
@@ -270,6 +277,6 @@ export async function deleteMaterial(
     await supabase.storage.from(MATERIAIS_BUCKET).remove([url]);
   }
 
-  revalidatePath(`/admin/cursos/${cursoId}/aulas/${aulaId}/materiais`);
+  revalidatePath(materiaisPath(cursoId, moduloId, aulaId));
   return {};
 }
