@@ -24,6 +24,12 @@
 - Além das policies, cada tabela recebe `grant`s explícitos por coluna/operação para o role `authenticated` — não depender dos grants default do Postgres. Operações que não devem ser permitidas via API (ex.: criação de linha feita só por trigger `security definer`) não recebem grant correspondente.
 - `service_role` bypassa RLS, mas **não** bypassa grants de tabela — toda tabela usada pelo client admin (`src/lib/supabase/admin.ts`) também precisa de `grant` explícito para `service_role` (geralmente amplo, sem restrição de coluna, já que essa role é o bypass administrativo).
 
+## Storage (Supabase)
+
+- Buckets que guardam arquivo de conteúdo protegido (ex.: `materiais`, PDFs de curso) são privados (`public: false`) com policies em `storage.objects` filtrando por `bucket_id` + `is_admin()`, mesmo padrão de RLS das tabelas. Nunca expor URL pública permanente para esse tipo de arquivo — a visualização gera signed URL de curta duração sob demanda.
+- **Limitação conhecida, não urgente:** exclusão em cascata via FK (ex.: apagar um curso ou aula que tem `materiais` do tipo `pdf` vinculados) remove as linhas da tabela, mas não aciona nenhum código de aplicação — o arquivo correspondente no bucket do Storage fica órfão, já que o cascade do Postgres não tem visibilidade sobre `storage.objects`. Só a exclusão de um material individual (`deleteMaterial`) limpa o arquivo, porque é código de aplicação, não FK cascade. Resolver mais adiante com uma rotina de limpeza (comparar bucket vs. linhas existentes) ou um trigger/Edge Function, se o volume de exclusão em cascata justificar.
+- Upload de arquivo via Server Action exige aumentar `experimental.serverActions.bodySizeLimit` no `next.config.ts` (default do Next é 1MB, pequeno demais para PDF) — configurado para `10mb`.
+
 ## Autenticação e autorização
 
 - Diferenciação de papéis via coluna `role` em `profiles` (`admin` | `aluno`, default `aluno`). Sem tabelas separadas por papel.

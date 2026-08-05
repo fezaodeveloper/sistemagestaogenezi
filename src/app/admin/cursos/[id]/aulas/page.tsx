@@ -98,6 +98,14 @@ export default async function AulasPage({ params }: { params: Promise<{ id: stri
                   <TableCell className="font-medium">{aula.titulo}</TableCell>
                   <TableCell className="flex justify-end gap-1">
                     <Button
+                      render={<Link href={`/admin/cursos/${cursoId}/aulas/${aula.id}/materiais`} />}
+                      nativeButton={false}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      Materiais
+                    </Button>
+                    <Button
                       render={<Link href={`/admin/cursos/${cursoId}/aulas/${aula.id}/editar`} />}
                       nativeButton={false}
                       variant="ghost"
