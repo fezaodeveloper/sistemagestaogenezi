@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { PRESENCA_STATUSES } from "@/lib/presencas/schema";
+import { presencaRowSchema } from "@/lib/presencas/schema";
 
 export type RegistrarPresencasState = { error?: string } | undefined;
+
+type MatriculaAluno = {
+  id: string;
+  alunos: { email: string; profiles: { full_name: string | null } | null } | null;
+};
 
 export async function registrarPresencas(
   turmaId: string,
@@ -25,42 +30,71 @@ export async function registrarPresencas(
 
   // Revalida aula + a consistência aula.curso_id = turma.curso_id — decisão
   // de produto: só na aplicação, sem trigger no banco (ver CLAUDE.md).
-  const [{ data: turma }, { data: aula }, { data: matriculas }] = await Promise.all([
+  const [{ data: turma }, { data: aula }, { data: matriculasData }] = await Promise.all([
     supabase.from("turmas").select("id, curso_id").eq("id", turmaId).single(),
     supabase.from("aulas").select("id, curso_id").eq("id", aulaId).single(),
-    supabase.from("matriculas").select("id").eq("turma_id", turmaId).eq("status", "ativa"),
+    supabase
+      .from("matriculas")
+      .select("id, alunos(email, profiles!alunos_id_fkey(full_name))")
+      .eq("turma_id", turmaId)
+      .eq("status", "ativa"),
   ]);
 
   if (!turma || !aula || aula.curso_id !== turma.curso_id) {
     return { error: "Aula inválida para esta turma." };
   }
 
+  const matriculas = (matriculasData ?? []) as unknown as MatriculaAluno[];
+
   // O roster vem sempre do banco (não do formData) — evita que uma matrícula
   // adulterada ou desatualizada no cliente entre na chamada.
-  const rows = (matriculas ?? []).flatMap((matricula) => {
-    const status = formData.get(`status_${matricula.id}`);
-    if (
-      typeof status !== "string" ||
-      !PRESENCA_STATUSES.includes(status as (typeof PRESENCA_STATUSES)[number])
-    ) {
-      return [];
-    }
-    return [{ matricula_id: matricula.id, aula_id: aulaId, data, status }];
-  });
+  const matriculaIds: string[] = [];
+  const statuses: string[] = [];
+  const dataReposicoes: (string | null)[] = [];
+  const justificativas: (string | null)[] = [];
+  const erros: string[] = [];
 
-  if (rows.length === 0) {
+  for (const matricula of matriculas) {
+    const status = formData.get(`status_${matricula.id}`);
+    const parsed = presencaRowSchema.safeParse({
+      status,
+      justificativa: formData.get(`justificativa_${matricula.id}`) || undefined,
+      data_reposicao: formData.get(`data_reposicao_${matricula.id}`) || undefined,
+    });
+
+    if (!parsed.success) {
+      const nome = matricula.alunos?.profiles?.full_name || matricula.alunos?.email || "Aluno";
+      const primeiroErro = parsed.error.issues[0]?.message ?? "Dados inválidos.";
+      erros.push(`${nome}: ${primeiroErro}`);
+      continue;
+    }
+
+    matriculaIds.push(matricula.id);
+    statuses.push(parsed.data.status);
+    dataReposicoes.push(parsed.data.status === "reposicao" ? parsed.data.data_reposicao : null);
+    justificativas.push(parsed.data.status === "justificada" ? parsed.data.justificativa : null);
+  }
+
+  if (erros.length > 0) {
+    return { error: erros.join(" ") };
+  }
+
+  if (matriculaIds.length === 0) {
     return { error: "Nenhum aluno com matrícula ativa nesta turma." };
   }
 
   // RPC em vez de .upsert(): o upsert genérico do PostgREST reenvia todas as
   // colunas do payload no "on conflict do update", o que exigiria grant de
-  // update além de "status". A function upsert_presencas só atualiza
-  // "status" no conflito — ver comentário na migration.
+  // update em matricula_id/aula_id/data também. A function upsert_presencas
+  // só atualiza status/data_reposicao/justificativa no conflito — ver
+  // comentário na migration.
   const { error } = await supabase.rpc("upsert_presencas", {
-    p_matricula_ids: rows.map((row) => row.matricula_id),
+    p_matricula_ids: matriculaIds,
     p_aula_id: aulaId,
     p_data: data,
-    p_statuses: rows.map((row) => row.status),
+    p_statuses: statuses,
+    p_data_reposicoes: dataReposicoes,
+    p_justificativas: justificativas,
   });
 
   if (error) {

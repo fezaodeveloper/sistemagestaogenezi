@@ -135,26 +135,33 @@ export default async function RegistrarPresencaPage({
       .eq("status", "ativa"),
     supabase
       .from("presencas")
-      .select("matricula_id, status")
+      .select("matricula_id, status, data_reposicao, justificativa")
       .eq("aula_id", aulaId)
       .eq("data", data),
   ]);
 
-  const statusPorMatricula = new Map(
+  const presencaPorMatricula = new Map(
     (
       (presencasData ?? []) as {
         matricula_id: string;
         status: (typeof PRESENCA_STATUSES)[number];
+        data_reposicao: string | null;
+        justificativa: string | null;
       }[]
-    ).map((presenca) => [presenca.matricula_id, presenca.status]),
+    ).map((presenca) => [presenca.matricula_id, presenca]),
   );
 
   const alunos = ((matriculasData ?? []) as unknown as MatriculaAluno[])
-    .map((matricula) => ({
-      matriculaId: matricula.id,
-      nome: matricula.alunos?.profiles?.full_name || matricula.alunos?.email || "—",
-      statusInicial: statusPorMatricula.get(matricula.id) ?? ("presente" as const),
-    }))
+    .map((matricula) => {
+      const existente = presencaPorMatricula.get(matricula.id);
+      return {
+        matriculaId: matricula.id,
+        nome: matricula.alunos?.profiles?.full_name || matricula.alunos?.email || "—",
+        statusInicial: existente?.status ?? ("presente" as const),
+        dataReposicaoInicial: existente?.data_reposicao ?? "",
+        justificativaInicial: existente?.justificativa ?? "",
+      };
+    })
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
   return (
