@@ -106,6 +106,14 @@ export default async function ModulosPage({ params }: { params: Promise<{ id: st
                       Aulas
                     </Button>
                     <Button
+                      render={<Link href={`/admin/cursos/${cursoId}/modulos/${modulo.id}/prova`} />}
+                      nativeButton={false}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      Prova
+                    </Button>
+                    <Button
                       render={
                         <Link href={`/admin/cursos/${cursoId}/modulos/${modulo.id}/editar`} />
                       }
