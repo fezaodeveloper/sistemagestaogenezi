@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
@@ -74,17 +75,19 @@ export default async function AlunoDashboardPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cursos.map((curso) => (
-            <Card key={curso.id}>
-              <CardHeader>
-                <CardTitle>{curso.nome}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
-                <Badge variant={curso.emAndamento ? "default" : "outline"}>
-                  {curso.emAndamento ? "Em andamento" : "Concluído"}
-                </Badge>
-              </CardContent>
-            </Card>
+            <Link key={curso.id} href={`/aluno/cursos/${curso.id}`}>
+              <Card className="hover:bg-accent/50 transition-colors">
+                <CardHeader>
+                  <CardTitle>{curso.nome}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
+                  <Badge variant={curso.emAndamento ? "default" : "outline"}>
+                    {curso.emAndamento ? "Em andamento" : "Concluído"}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
