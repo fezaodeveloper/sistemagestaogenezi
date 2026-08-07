@@ -9,6 +9,10 @@ export default function AulaConteudoLoading() {
       </div>
 
       <Skeleton className="aspect-video w-full rounded-xl" />
+
+      <div className="flex flex-wrap gap-2">
+        <Skeleton className="h-9 w-40 rounded-lg" />
+      </div>
     </div>
   );
 }

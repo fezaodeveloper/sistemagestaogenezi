@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { alunoTemAcessoAoCurso } from "@/lib/matriculas/access";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
+import { PdfViewerButton } from "@/components/aluno/pdf-viewer-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -17,6 +18,29 @@ type AulaRow = {
 };
 
 type NextAula = { moduloId: string; aulaId: string } | null;
+
+type PdfMaterialView = { id: string; titulo: string };
+
+// Só busca id/título aqui — a signed URL é gerada sob demanda (Server
+// Action `getPdfSignedUrl`, ver actions.ts) quando o aluno abre o modal de
+// um material específico, não no carregamento da página.
+async function getPdfMateriais(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  aulaId: string,
+): Promise<{ pdfs: PdfMaterialView[]; error: boolean }> {
+  const { data, error } = await supabase
+    .from("materiais")
+    .select("id, titulo")
+    .eq("aula_id", aulaId)
+    .eq("tipo", "pdf")
+    .order("ordem");
+
+  if (error) {
+    return { pdfs: [], error: true };
+  }
+
+  return { pdfs: (data ?? []) as PdfMaterialView[], error: false };
+}
 
 // Sem tabela de progresso ainda — a "próxima aula" é puramente sequencial
 // (numero da aula dentro do módulo, depois numero do módulo dentro do
@@ -91,16 +115,18 @@ export default async function AulaConteudoPage({
 
   const modulo = aula.modulos;
 
-  const [{ data: materiaisData, error: materiaisError }, nextAula] = await Promise.all([
-    supabase
-      .from("materiais")
-      .select("id, url")
-      .eq("aula_id", aulaId)
-      .eq("tipo", "video_youtube")
-      .order("ordem")
-      .limit(1),
-    getNextAula(supabase, cursoId, modulo, aulaId),
-  ]);
+  const [{ data: materiaisData, error: materiaisError }, nextAula, { pdfs, error: pdfsError }] =
+    await Promise.all([
+      supabase
+        .from("materiais")
+        .select("id, url")
+        .eq("aula_id", aulaId)
+        .eq("tipo", "video_youtube")
+        .order("ordem")
+        .limit(1),
+      getNextAula(supabase, cursoId, modulo, aulaId),
+      getPdfMateriais(supabase, aulaId),
+    ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
   const videoId = videoMaterial ? extractYoutubeVideoId(videoMaterial.url) : null;
@@ -147,6 +173,22 @@ export default async function AulaConteudoPage({
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {pdfsError ? (
+        <Card>
+          <CardContent className="text-destructive py-10 text-center text-sm">
+            Não foi possível carregar os materiais desta aula. Tente recarregar a página.
+          </CardContent>
+        </Card>
+      ) : (
+        pdfs.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {pdfs.map((pdf) => (
+              <PdfViewerButton key={pdf.id} materialId={pdf.id} titulo={pdf.titulo} />
+            ))}
+          </div>
+        )
       )}
 
       {nextAula && (
