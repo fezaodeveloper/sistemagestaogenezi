@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { alunoTemAcessoAoCurso } from "@/lib/matriculas/access";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
 import { PdfViewerButton } from "@/components/aluno/pdf-viewer-button";
+import { ToggleAulaConcluidaButton } from "@/components/aluno/toggle-aula-concluida-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -115,21 +116,27 @@ export default async function AulaConteudoPage({
 
   const modulo = aula.modulos;
 
-  const [{ data: materiaisData, error: materiaisError }, nextAula, { pdfs, error: pdfsError }] =
-    await Promise.all([
-      supabase
-        .from("materiais")
-        .select("id, url")
-        .eq("aula_id", aulaId)
-        .eq("tipo", "video_youtube")
-        .order("ordem")
-        .limit(1),
-      getNextAula(supabase, cursoId, modulo, aulaId),
-      getPdfMateriais(supabase, aulaId),
-    ]);
+  const [
+    { data: materiaisData, error: materiaisError },
+    nextAula,
+    { pdfs, error: pdfsError },
+    { data: concluidaData },
+  ] = await Promise.all([
+    supabase
+      .from("materiais")
+      .select("id, url")
+      .eq("aula_id", aulaId)
+      .eq("tipo", "video_youtube")
+      .order("ordem")
+      .limit(1),
+    getNextAula(supabase, cursoId, modulo, aulaId),
+    getPdfMateriais(supabase, aulaId),
+    supabase.from("aulas_concluidas").select("id").eq("aula_id", aulaId).limit(1).maybeSingle(),
+  ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
   const videoId = videoMaterial ? extractYoutubeVideoId(videoMaterial.url) : null;
+  const concluidaInicial = !!concluidaData;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -190,6 +197,14 @@ export default async function AulaConteudoPage({
           </div>
         )
       )}
+
+      <div className="flex justify-end">
+        <ToggleAulaConcluidaButton
+          cursoId={cursoId}
+          aulaId={aulaId}
+          concluidaInicial={concluidaInicial}
+        />
+      </div>
 
       {nextAula && (
         <div className="flex justify-end">

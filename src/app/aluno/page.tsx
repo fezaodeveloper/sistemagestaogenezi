@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { getCursoProgresso, type CursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 type CursoTipo = (typeof CURSO_TIPOS)[number];
 
@@ -51,6 +53,16 @@ export default async function AlunoDashboardPage() {
 
   const cursos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
 
+  const progressos: Record<string, CursoProgresso> = {};
+  if (cursos && cursos.length > 0) {
+    const resultados = await Promise.all(
+      cursos.map((curso) => getCursoProgresso(supabase, curso.id)),
+    );
+    cursos.forEach((curso, i) => {
+      progressos[curso.id] = resultados[i];
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -74,21 +86,39 @@ export default async function AlunoDashboardPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cursos.map((curso) => (
-            <Link key={curso.id} href={`/aluno/cursos/${curso.id}`}>
-              <Card className="hover:bg-accent/50 transition-colors">
-                <CardHeader>
-                  <CardTitle>{curso.nome}</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
-                  <Badge variant={curso.emAndamento ? "default" : "outline"}>
-                    {curso.emAndamento ? "Em andamento" : "Concluído"}
-                  </Badge>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          {cursos.map((curso) => {
+            const progresso = progressos[curso.id];
+            const percentual =
+              progresso && progresso.total > 0
+                ? Math.round((progresso.concluidas / progresso.total) * 100)
+                : 0;
+
+            return (
+              <Link key={curso.id} href={`/aluno/cursos/${curso.id}`}>
+                <Card className="hover:bg-accent/50 transition-colors">
+                  <CardHeader>
+                    <CardTitle>{curso.nome}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
+                      <Badge variant={curso.emAndamento ? "default" : "outline"}>
+                        {curso.emAndamento ? "Em andamento" : "Concluído"}
+                      </Badge>
+                    </div>
+                    {progresso && progresso.total > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Progress value={percentual} className="flex-1" />
+                        <span className="text-muted-foreground text-xs">
+                          {progresso.concluidas}/{progresso.total}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

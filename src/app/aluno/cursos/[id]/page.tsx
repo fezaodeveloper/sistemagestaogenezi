@@ -4,10 +4,12 @@ import { ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { alunoTemAcessoAoCurso } from "@/lib/matriculas/access";
+import { getCursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 type CursoTipo = (typeof CURSO_TIPOS)[number];
 
@@ -30,14 +32,18 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
     notFound();
   }
 
-  const [{ data: cursoData }, { data, error }] = await Promise.all([
+  const [{ data: cursoData }, { data, error }, progresso] = await Promise.all([
     supabase.from("cursos").select("id, nome, tipo").eq("id", cursoId).single(),
     supabase
       .from("modulos")
       .select("id, numero, titulo, aulas(id), provas(id)")
       .eq("curso_id", cursoId)
       .order("numero"),
+    getCursoProgresso(supabase, cursoId),
   ]);
+
+  const percentual =
+    progresso.total > 0 ? Math.round((progresso.concluidas / progresso.total) * 100) : 0;
 
   const curso = cursoData as { id: string; nome: string; tipo: CursoTipo } | null;
   const modulos = data as unknown as ModuloAlunoRow[] | null;
@@ -63,6 +69,14 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
           <h1 className="text-2xl font-semibold">{curso.nome}</h1>
           <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
         </div>
+        {progresso.total > 0 && (
+          <div className="mt-3 flex items-center gap-3">
+            <Progress value={percentual} className="max-w-xs flex-1" />
+            <span className="text-muted-foreground text-sm">
+              {progresso.concluidas}/{progresso.total} aulas concluídas
+            </span>
+          </div>
+        )}
       </div>
 
       {error ? (

@@ -1,7 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -38,4 +40,41 @@ export async function getPdfSignedUrl(
   }
 
   return { url: signed.signedUrl };
+}
+
+// Toggle simples: se já concluída, desmarcar é só apagar a linha (RLS já
+// restringe a linhas de matrículas do próprio aluno, cobre o caso de mais
+// de uma matrícula pro mesmo curso automaticamente). Se ainda não
+// concluída, precisa resolver a matrícula concreta pra gravar (FK not
+// null) — usa a mais recente entre ativa/concluída pro curso.
+export async function toggleAulaConcluida(
+  cursoId: string,
+  aulaId: string,
+  currentlyConcluida: boolean,
+): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+  const supabase = await createClient();
+
+  if (currentlyConcluida) {
+    const { error } = await supabase.from("aulas_concluidas").delete().eq("aula_id", aulaId);
+    if (error) {
+      return { error: "Não foi possível desmarcar a aula. Tente novamente." };
+    }
+  } else {
+    const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
+    if (!matriculaId) {
+      return { error: "Matrícula não encontrada." };
+    }
+
+    const { error } = await supabase
+      .from("aulas_concluidas")
+      .insert({ matricula_id: matriculaId, aula_id: aulaId });
+    if (error) {
+      return { error: "Não foi possível marcar a aula como concluída. Tente novamente." };
+    }
+  }
+
+  revalidatePath(`/aluno/cursos/${cursoId}`);
+  revalidatePath("/aluno");
+  return {};
 }
