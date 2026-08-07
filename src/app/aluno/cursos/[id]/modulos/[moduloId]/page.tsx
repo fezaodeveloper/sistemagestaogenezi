@@ -98,21 +98,26 @@ export default async function ModuloAulasPage({
             const temQuiz = !!aula.quizzes;
 
             return (
-              <Card key={aula.id}>
-                <CardContent className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium">
-                    Aula {aula.numero} — {aula.titulo}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {totalMateriais > 0 && (
-                      <Badge variant="secondary">
-                        {totalMateriais} {totalMateriais === 1 ? "material" : "materiais"}
-                      </Badge>
-                    )}
-                    {temQuiz && <Badge variant="default">Quiz disponível</Badge>}
-                  </div>
-                </CardContent>
-              </Card>
+              <Link
+                key={aula.id}
+                href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}`}
+              >
+                <Card className="hover:bg-accent/50 transition-colors">
+                  <CardContent className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium">
+                      Aula {aula.numero} — {aula.titulo}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {totalMateriais > 0 && (
+                        <Badge variant="secondary">
+                          {totalMateriais} {totalMateriais === 1 ? "material" : "materiais"}
+                        </Badge>
+                      )}
+                      {temQuiz && <Badge variant="default">Quiz disponível</Badge>}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>
