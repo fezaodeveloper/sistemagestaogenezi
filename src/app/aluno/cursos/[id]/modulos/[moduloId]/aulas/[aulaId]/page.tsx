@@ -3,11 +3,12 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso } from "@/lib/matriculas/access";
+import { alunoTemAcessoAoCurso, getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
 import { PdfViewerButton } from "@/components/aluno/pdf-viewer-button";
 import { ToggleAulaConcluidaButton } from "@/components/aluno/toggle-aula-concluida-button";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
 type AulaRow = {
@@ -41,6 +42,52 @@ async function getPdfMateriais(
   }
 
   return { pdfs: (data ?? []) as PdfMaterialView[], error: false };
+}
+
+type QuizResumo = {
+  id: string;
+  titulo: string;
+  tentativasUsadas: number;
+  tentativasLimitadas: boolean;
+  tentativasMaximas: number | null;
+  ultimaNota: number | null;
+} | null;
+
+async function getQuizResumo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  aulaId: string,
+  matriculaId: string | null,
+): Promise<QuizResumo> {
+  const { data: quiz } = await supabase
+    .from("quizzes")
+    .select("id, titulo, tentativas_limitadas, tentativas_maximas")
+    .eq("aula_id", aulaId)
+    .maybeSingle();
+
+  if (!quiz) return null;
+
+  let tentativasUsadas = 0;
+  let ultimaNota: number | null = null;
+
+  if (matriculaId) {
+    const { data: tentativas } = await supabase
+      .from("tentativas_quiz")
+      .select("nota")
+      .eq("quiz_id", quiz.id)
+      .eq("matricula_id", matriculaId)
+      .order("numero", { ascending: false });
+    tentativasUsadas = tentativas?.length ?? 0;
+    ultimaNota = tentativas?.[0]?.nota ?? null;
+  }
+
+  return {
+    id: quiz.id,
+    titulo: quiz.titulo,
+    tentativasUsadas,
+    tentativasLimitadas: quiz.tentativas_limitadas,
+    tentativasMaximas: quiz.tentativas_maximas,
+    ultimaNota,
+  };
 }
 
 // Sem tabela de progresso ainda — a "próxima aula" é puramente sequencial
@@ -115,12 +162,14 @@ export default async function AulaConteudoPage({
   }
 
   const modulo = aula.modulos;
+  const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
 
   const [
     { data: materiaisData, error: materiaisError },
     nextAula,
     { pdfs, error: pdfsError },
     { data: concluidaData },
+    quizResumo,
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -132,6 +181,7 @@ export default async function AulaConteudoPage({
     getNextAula(supabase, cursoId, modulo, aulaId),
     getPdfMateriais(supabase, aulaId),
     supabase.from("aulas_concluidas").select("id").eq("aula_id", aulaId).limit(1).maybeSingle(),
+    getQuizResumo(supabase, aulaId, matriculaId),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
@@ -196,6 +246,28 @@ export default async function AulaConteudoPage({
             ))}
           </div>
         )
+      )}
+
+      {quizResumo && (
+        <Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}>
+          <Card className="hover:bg-accent/50 transition-colors">
+            <CardContent className="flex items-center justify-between gap-2">
+              <div>
+                <p className="font-medium">{quizResumo.titulo}</p>
+                <p className="text-muted-foreground text-sm">
+                  {quizResumo.tentativasUsadas === 0
+                    ? "Quiz disponível"
+                    : `Última nota: ${quizResumo.ultimaNota}%`}
+                </p>
+              </div>
+              {quizResumo.tentativasLimitadas && (
+                <Badge variant="secondary">
+                  {quizResumo.tentativasUsadas}/{quizResumo.tentativasMaximas}
+                </Badge>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
       )}
 
       <div className="flex justify-end">
