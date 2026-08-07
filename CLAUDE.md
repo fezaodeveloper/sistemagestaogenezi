@@ -10,6 +10,12 @@
 - `Select` do Base UI (`src/components/ui/select.tsx`) só resolve o label exibido a partir de um `defaultValue`/`value` se a prop `items` (`Record<string, ReactNode>`) for passada em `<Select>`. Sem isso, ao carregar a página já com um valor selecionado (ex.: formulário de edição), o trigger mostra o valor cru (ex.: um UUID) em vez do label — só corrige depois que o usuário abre o dropdown manualmente. Sempre passar `items` quando o `Select` puder nascer com `defaultValue` preenchido.
 - Gerenciador de pacotes: npm.
 
+## Ambiente de desenvolvimento (dev server)
+
+- **Cache stale do Turbopack após mudança estrutural de rotas:** já aconteceu mais de uma vez o `npm run dev` continuar rodando com uma versão stale do cache depois que arquivos de rota são criados/movidos (ex.: uma pasta nova em `src/app/.../[param]/page.tsx`) com o servidor já de pé. **Sintoma:** 404 ("This page could not be found") numa rota que existe de verdade no disco e está correta — muitas vezes logo depois de criar os arquivos com o dev server já rodando desde antes. Isso confunde com um bug de lógica (ex.: um `notFound()` sendo chamado por engano na página), mas não é — os arquivos e o código estão certos, só o processo do dev server é que está com uma visão desatualizada da árvore de rotas.
+  - **Diagnóstico rápido:** testar a mesma URL sem autenticação. Se vier um redirect (302/307) em vez de 404 puro, o Next _está_ reconhecendo a rota e executando o código — descarta bug de lógica, indica cache stale.
+  - **Solução:** encerrar o processo Node do dev server e rodar `npm run dev` de novo (não precisa recompilar o projeto inteiro nem apagar `node_modules`). Se persistir, apagar a pasta `.next` antes de subir de novo.
+
 ## Convenções
 
 - Componentes reutilizáveis em `src/components`; componentes gerados pelo shadcn ficam em `src/components/ui` e não devem ser editados manualmente além do necessário para customização de tema — prefira compor por cima.
