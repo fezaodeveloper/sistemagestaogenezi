@@ -5,10 +5,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { alunoTemAcessoAoCurso, getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
-import { PdfViewerButton } from "@/components/aluno/pdf-viewer-button";
-import { ToggleAulaConcluidaButton } from "@/components/aluno/toggle-aula-concluida-button";
+import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
 type AulaRow = {
@@ -22,6 +20,8 @@ type AulaRow = {
 type NextAula = { moduloId: string; aulaId: string } | null;
 
 type PdfMaterialView = { id: string; titulo: string };
+
+type Resumo = { tentativasUsadas: number; ultimaNota: number | null } | null;
 
 // Só busca id/título aqui — a signed URL é gerada sob demanda (Server
 // Action `getPdfSignedUrl`, ver actions.ts) quando o aluno abre o modal de
@@ -44,71 +44,77 @@ async function getPdfMateriais(
   return { pdfs: (data ?? []) as PdfMaterialView[], error: false };
 }
 
-type QuizResumo = {
-  id: string;
-  titulo: string;
-  tentativasUsadas: number;
-  tentativasLimitadas: boolean;
-  tentativasMaximas: number | null;
-  ultimaNota: number | null;
-} | null;
-
 async function getQuizResumo(
   supabase: Awaited<ReturnType<typeof createClient>>,
   aulaId: string,
   matriculaId: string | null,
-): Promise<QuizResumo> {
+): Promise<Resumo> {
   const { data: quiz } = await supabase
     .from("quizzes")
-    .select("id, titulo, tentativas_limitadas, tentativas_maximas")
+    .select("id")
     .eq("aula_id", aulaId)
     .maybeSingle();
 
   if (!quiz) return null;
+  if (!matriculaId) return { tentativasUsadas: 0, ultimaNota: null };
 
-  let tentativasUsadas = 0;
-  let ultimaNota: number | null = null;
-
-  if (matriculaId) {
-    const { data: tentativas } = await supabase
-      .from("tentativas_quiz")
-      .select("nota")
-      .eq("quiz_id", quiz.id)
-      .eq("matricula_id", matriculaId)
-      .order("numero", { ascending: false });
-    tentativasUsadas = tentativas?.length ?? 0;
-    ultimaNota = tentativas?.[0]?.nota ?? null;
-  }
+  const { data: tentativas } = await supabase
+    .from("tentativas_quiz")
+    .select("nota")
+    .eq("quiz_id", quiz.id)
+    .eq("matricula_id", matriculaId)
+    .order("numero", { ascending: false });
 
   return {
-    id: quiz.id,
-    titulo: quiz.titulo,
-    tentativasUsadas,
-    tentativasLimitadas: quiz.tentativas_limitadas,
-    tentativasMaximas: quiz.tentativas_maximas,
-    ultimaNota,
+    tentativasUsadas: tentativas?.length ?? 0,
+    ultimaNota: tentativas?.[0]?.nota ?? null,
+  };
+}
+
+// Só chamada quando a aula atual é a última do módulo (prova é do módulo
+// inteiro, não da aula) — ver isUltimaAulaDoModulo mais abaixo.
+async function getProvaResumo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  moduloId: string,
+  matriculaId: string | null,
+): Promise<Resumo> {
+  const { data: prova } = await supabase
+    .from("provas")
+    .select("id")
+    .eq("modulo_id", moduloId)
+    .maybeSingle();
+
+  if (!prova) return null;
+  if (!matriculaId) return { tentativasUsadas: 0, ultimaNota: null };
+
+  const { data: tentativas } = await supabase
+    .from("tentativas_prova")
+    .select("nota")
+    .eq("prova_id", prova.id)
+    .eq("matricula_id", matriculaId)
+    .order("numero", { ascending: false });
+
+  return {
+    tentativasUsadas: tentativas?.length ?? 0,
+    ultimaNota: tentativas?.[0]?.nota ?? null,
   };
 }
 
 // Sem tabela de progresso ainda — a "próxima aula" é puramente sequencial
 // (numero da aula dentro do módulo, depois numero do módulo dentro do
-// curso), recalculada a cada carregamento da página.
+// curso), recalculada a cada carregamento da página. Recebe a lista de
+// aulas do módulo já buscada pela página (evita query duplicada — a mesma
+// lista também é usada pra calcular isUltimaAulaDoModulo).
 async function getNextAula(
   supabase: Awaited<ReturnType<typeof createClient>>,
   cursoId: string,
   moduloAtual: { id: string; numero: number },
   aulaAtualId: string,
+  aulasDoModuloAtual: { id: string; numero: number }[],
 ): Promise<NextAula> {
-  const { data: aulasDoModulo } = await supabase
-    .from("aulas")
-    .select("id, numero")
-    .eq("modulo_id", moduloAtual.id)
-    .order("numero");
-
-  const aulas = (aulasDoModulo ?? []) as { id: string; numero: number }[];
-  const idx = aulas.findIndex((a) => a.id === aulaAtualId);
-  if (idx !== -1 && idx < aulas.length - 1) {
-    return { moduloId: moduloAtual.id, aulaId: aulas[idx + 1].id };
+  const idx = aulasDoModuloAtual.findIndex((a) => a.id === aulaAtualId);
+  if (idx !== -1 && idx < aulasDoModuloAtual.length - 1) {
+    return { moduloId: moduloAtual.id, aulaId: aulasDoModuloAtual[idx + 1].id };
   }
 
   const { data: proximoModulo } = await supabase
@@ -164,12 +170,22 @@ export default async function AulaConteudoPage({
   const modulo = aula.modulos;
   const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
 
+  const { data: aulasDoModuloData } = await supabase
+    .from("aulas")
+    .select("id, numero")
+    .eq("modulo_id", moduloId)
+    .order("numero");
+  const aulasDoModulo = (aulasDoModuloData ?? []) as { id: string; numero: number }[];
+  const isUltimaAulaDoModulo =
+    aulasDoModulo.length > 0 && aula.numero === Math.max(...aulasDoModulo.map((a) => a.numero));
+
   const [
     { data: materiaisData, error: materiaisError },
     nextAula,
     { pdfs, error: pdfsError },
     { data: concluidaData },
     quizResumo,
+    provaResumo,
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -178,10 +194,11 @@ export default async function AulaConteudoPage({
       .eq("tipo", "video_youtube")
       .order("ordem")
       .limit(1),
-    getNextAula(supabase, cursoId, modulo, aulaId),
+    getNextAula(supabase, cursoId, modulo, aulaId, aulasDoModulo),
     getPdfMateriais(supabase, aulaId),
     supabase.from("aulas_concluidas").select("id").eq("aula_id", aulaId).limit(1).maybeSingle(),
     getQuizResumo(supabase, aulaId, matriculaId),
+    isUltimaAulaDoModulo ? getProvaResumo(supabase, moduloId, matriculaId) : Promise.resolve(null),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
@@ -232,51 +249,17 @@ export default async function AulaConteudoPage({
         </Card>
       )}
 
-      {pdfsError ? (
-        <Card>
-          <CardContent className="text-destructive py-10 text-center text-sm">
-            Não foi possível carregar os materiais desta aula. Tente recarregar a página.
-          </CardContent>
-        </Card>
-      ) : (
-        pdfs.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {pdfs.map((pdf) => (
-              <PdfViewerButton key={pdf.id} materialId={pdf.id} titulo={pdf.titulo} />
-            ))}
-          </div>
-        )
-      )}
-
-      {quizResumo && (
-        <Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}>
-          <Card className="hover:bg-accent/50 transition-colors">
-            <CardContent className="flex items-center justify-between gap-2">
-              <div>
-                <p className="font-medium">{quizResumo.titulo}</p>
-                <p className="text-muted-foreground text-sm">
-                  {quizResumo.tentativasUsadas === 0
-                    ? "Quiz disponível"
-                    : `Última nota: ${quizResumo.ultimaNota}%`}
-                </p>
-              </div>
-              {quizResumo.tentativasLimitadas && (
-                <Badge variant="secondary">
-                  {quizResumo.tentativasUsadas}/{quizResumo.tentativasMaximas}
-                </Badge>
-              )}
-            </CardContent>
-          </Card>
-        </Link>
-      )}
-
-      <div className="flex justify-end">
-        <ToggleAulaConcluidaButton
-          cursoId={cursoId}
-          aulaId={aulaId}
-          concluidaInicial={concluidaInicial}
-        />
-      </div>
+      <AulaAcoesBar
+        cursoId={cursoId}
+        aulaId={aulaId}
+        pdfs={pdfs}
+        pdfsError={pdfsError}
+        quizResumo={quizResumo}
+        quizHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}
+        provaResumo={provaResumo}
+        provaHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/prova`}
+        concluidaInicial={concluidaInicial}
+      />
 
       {nextAula && (
         <div className="flex justify-end">
