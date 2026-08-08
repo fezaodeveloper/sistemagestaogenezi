@@ -12,7 +12,7 @@ export default async function NovaTurmaPage() {
   const supabase = await createClient();
   const { data: cursos } = await supabase
     .from("cursos")
-    .select("id, nome")
+    .select("id, nome, tipo")
     .eq("status", "ativo")
     .order("nome");
 

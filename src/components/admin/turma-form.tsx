@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,8 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TURMA_STATUSES, TURMA_STATUS_LABELS, type TurmaFormValues } from "@/lib/turmas/schema";
+import {
+  DIAS_SEMANA,
+  DIA_SEMANA_LABELS,
+  TURMA_STATUSES,
+  TURMA_STATUS_LABELS,
+  type TurmaFormValues,
+} from "@/lib/turmas/schema";
 import type { TurmaFormState } from "@/app/admin/turmas/actions";
+
+type CursoOption = { id: string; nome: string; tipo: string };
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -33,7 +42,7 @@ export function TurmaForm({
   action: (state: TurmaFormState, formData: FormData) => Promise<TurmaFormState>;
   defaultValues?: Partial<TurmaFormValues>;
   submitLabel: string;
-  cursos: { id: string; nome: string }[];
+  cursos: CursoOption[];
 }) {
   const [state, formAction] = useActionState<TurmaFormState, FormData>(action, undefined);
   // Se a validação falhar, o formulário reaparece com defaultValue do mount
@@ -41,6 +50,17 @@ export function TurmaForm({
   // o React a remontar os inputs não controlados com os valores ecoados.
   const values = state?.values ?? defaultValues;
   const cursoItems = Object.fromEntries(cursos.map((curso) => [curso.id, curso.nome]));
+
+  // O bloco de cadência só aparece pra curso presencial/híbrido — precisa
+  // saber o tipo do curso selecionado em tempo real (não só no mount), daí
+  // o Select de curso ser controlado por esse estado via onValueChange.
+  const [cursoId, setCursoId] = useState(values?.curso_id ?? "");
+  const cursoSelecionado = cursos.find((curso) => curso.id === cursoId);
+  const mostrarCadencia = !!cursoSelecionado && cursoSelecionado.tipo !== "ead";
+
+  const [diasSelecionados, setDiasSelecionados] = useState<string[]>(
+    values?.cadencia_dias_semana ?? [],
+  );
 
   return (
     <form
@@ -50,7 +70,12 @@ export function TurmaForm({
     >
       <div className="flex flex-col gap-2">
         <Label htmlFor="curso_id">Curso</Label>
-        <Select name="curso_id" items={cursoItems} defaultValue={values?.curso_id || undefined}>
+        <Select
+          name="curso_id"
+          items={cursoItems}
+          defaultValue={values?.curso_id || undefined}
+          onValueChange={(value) => setCursoId(String(value))}
+        >
           <SelectTrigger id="curso_id" className="w-full">
             <SelectValue placeholder="Selecione o curso" />
           </SelectTrigger>
@@ -153,6 +178,45 @@ export function TurmaForm({
           </p>
         )}
       </div>
+
+      {mostrarCadencia && (
+        <div className="flex flex-col gap-2">
+          <Label>Cadência de liberação</Label>
+          <p className="text-muted-foreground text-sm">
+            Dias da semana em que novas aulas são liberadas no cronograma da turma.
+          </p>
+          <div className="flex flex-wrap gap-4">
+            {DIAS_SEMANA.map((dia) => (
+              <div key={dia} className="flex items-center gap-2">
+                <Checkbox
+                  id={`dia-${dia}`}
+                  name="cadencia_dias_semana"
+                  value={dia}
+                  checked={diasSelecionados.includes(dia)}
+                  onCheckedChange={(checked) =>
+                    setDiasSelecionados((prev) =>
+                      checked ? [...prev, dia] : prev.filter((d) => d !== dia),
+                    )
+                  }
+                />
+                <Label htmlFor={`dia-${dia}`} className="font-normal">
+                  {DIA_SEMANA_LABELS[dia]}
+                </Label>
+              </div>
+            ))}
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {diasSelecionados.length === 0
+              ? "Nenhum dia selecionado."
+              : `${diasSelecionados.length}x por semana.`}
+          </p>
+          {state?.errors?.cadencia_dias_semana && (
+            <p role="alert" className="text-destructive text-sm">
+              {state.errors.cadencia_dias_semana[0]}
+            </p>
+          )}
+        </div>
+      )}
 
       {state?.error && (
         <p role="alert" className="text-destructive text-sm">

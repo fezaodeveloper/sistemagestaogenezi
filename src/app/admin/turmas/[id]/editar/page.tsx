@@ -14,7 +14,7 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
     supabase.from("turmas").select("*").eq("id", id).single(),
     // Sem filtro de status: o curso já vinculado pode ter sido desativado
     // depois da turma criada, e ele precisa continuar aparecendo aqui.
-    supabase.from("cursos").select("id, nome").order("nome"),
+    supabase.from("cursos").select("id, nome, tipo").order("nome"),
   ]);
   const turma = turmaData as Turma | null;
 
@@ -38,6 +38,7 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
           data_fim: turma.data_fim,
           capacidade_maxima: turma.capacidade_maxima,
           status: turma.status,
+          cadencia_dias_semana: turma.cadencia_dias_semana ?? [],
         }}
         submitLabel="Salvar alterações"
       />

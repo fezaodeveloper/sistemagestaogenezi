@@ -13,13 +13,20 @@ type TurmaFormValuesEcho = {
   data_fim: string;
   capacidade_maxima: string;
   status: string;
+  cadencia_dias_semana: string[];
 };
 
 export type TurmaFormState =
   | {
       errors?: Partial<
         Record<
-          "curso_id" | "nome" | "data_inicio" | "data_fim" | "capacidade_maxima" | "status",
+          | "curso_id"
+          | "nome"
+          | "data_inicio"
+          | "data_fim"
+          | "capacidade_maxima"
+          | "status"
+          | "cadencia_dias_semana",
           string[]
         >
       >;
@@ -36,6 +43,7 @@ function echoValues(formData: FormData): TurmaFormValuesEcho {
     data_fim: String(formData.get("data_fim") ?? ""),
     capacidade_maxima: String(formData.get("capacidade_maxima") ?? ""),
     status: String(formData.get("status") ?? ""),
+    cadencia_dias_semana: formData.getAll("cadencia_dias_semana").map(String),
   };
 }
 
@@ -47,7 +55,36 @@ function parseTurmaForm(formData: FormData) {
     data_fim: formData.get("data_fim"),
     capacidade_maxima: formData.get("capacidade_maxima"),
     status: formData.get("status"),
+    cadencia_dias_semana: formData.getAll("cadencia_dias_semana"),
   });
+}
+
+// Turma de curso EAD não usa cadência — zera o valor no servidor
+// independente do que veio no submit (nunca confiar que o client escondeu
+// o campo direito). Turma de curso presencial/híbrido exige pelo menos 1
+// dia selecionado.
+async function resolverCadencia(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  cursoId: string,
+  diasSelecionados: string[],
+): Promise<
+  | { ok: true; cadenciaDiasSemana: string[] | null }
+  | { ok: false; error?: string; fieldError?: string }
+> {
+  const { data: curso } = await supabase.from("cursos").select("tipo").eq("id", cursoId).single();
+  if (!curso) {
+    return { ok: false, error: "Curso não encontrado." };
+  }
+
+  if (curso.tipo === "ead") {
+    return { ok: true, cadenciaDiasSemana: null };
+  }
+
+  if (diasSelecionados.length === 0) {
+    return { ok: false, fieldError: "Selecione ao menos um dia da semana." };
+  }
+
+  return { ok: true, cadenciaDiasSemana: diasSelecionados };
 }
 
 export async function createTurma(
@@ -62,6 +99,20 @@ export async function createTurma(
   }
 
   const supabase = await createClient();
+
+  const cadencia = await resolverCadencia(
+    supabase,
+    parsed.data.curso_id,
+    parsed.data.cadencia_dias_semana ?? [],
+  );
+  if (!cadencia.ok) {
+    return {
+      error: cadencia.error,
+      errors: cadencia.fieldError ? { cadencia_dias_semana: [cadencia.fieldError] } : undefined,
+      values: echoValues(formData),
+    };
+  }
+
   const { error } = await supabase.from("turmas").insert({
     curso_id: parsed.data.curso_id,
     nome: parsed.data.nome,
@@ -69,6 +120,7 @@ export async function createTurma(
     data_fim: parsed.data.data_fim,
     capacidade_maxima: parsed.data.capacidade_maxima,
     status: parsed.data.status,
+    cadencia_dias_semana: cadencia.cadenciaDiasSemana,
   });
 
   if (error) {
@@ -95,6 +147,20 @@ export async function updateTurma(
   }
 
   const supabase = await createClient();
+
+  const cadencia = await resolverCadencia(
+    supabase,
+    parsed.data.curso_id,
+    parsed.data.cadencia_dias_semana ?? [],
+  );
+  if (!cadencia.ok) {
+    return {
+      error: cadencia.error,
+      errors: cadencia.fieldError ? { cadencia_dias_semana: [cadencia.fieldError] } : undefined,
+      values: echoValues(formData),
+    };
+  }
+
   const { error } = await supabase
     .from("turmas")
     .update({
@@ -104,6 +170,7 @@ export async function updateTurma(
       data_fim: parsed.data.data_fim,
       capacidade_maxima: parsed.data.capacidade_maxima,
       status: parsed.data.status,
+      cadencia_dias_semana: cadencia.cadenciaDiasSemana,
     })
     .eq("id", id);
 
