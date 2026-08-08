@@ -71,8 +71,9 @@ async function getQuizResumo(
   };
 }
 
-// Só chamada quando a aula atual é a última do módulo (prova é do módulo
-// inteiro, não da aula) — ver isUltimaAulaDoModulo mais abaixo.
+// Sempre buscada — a prova é do módulo inteiro, e o pill só é exibido
+// (ver isModuloCompleto mais abaixo) quando todas as aulas do módulo
+// estiverem concluídas, independente de em qual aula o aluno está.
 async function getProvaResumo(
   supabase: Awaited<ReturnType<typeof createClient>>,
   moduloId: string,
@@ -104,7 +105,7 @@ async function getProvaResumo(
 // (numero da aula dentro do módulo, depois numero do módulo dentro do
 // curso), recalculada a cada carregamento da página. Recebe a lista de
 // aulas do módulo já buscada pela página (evita query duplicada — a mesma
-// lista também é usada pra calcular isUltimaAulaDoModulo).
+// lista também é usada pra calcular isModuloCompleto).
 async function getNextAula(
   supabase: Awaited<ReturnType<typeof createClient>>,
   cursoId: string,
@@ -137,6 +138,25 @@ async function getNextAula(
   if (!primeiraAula) return null;
 
   return { moduloId: proximoModulo.id, aulaId: primeiraAula.id };
+}
+
+// Ids das aulas do módulo que já têm conclusão registrada pra essa
+// matrícula — usado pra decidir se o módulo está 100% concluído (ver
+// isModuloCompleto), o gate de exibição do pill da prova.
+async function getAulasConcluidasIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  aulaIds: string[],
+  matriculaId: string | null,
+): Promise<Set<string>> {
+  if (!matriculaId || aulaIds.length === 0) return new Set();
+
+  const { data } = await supabase
+    .from("aulas_concluidas")
+    .select("aula_id")
+    .in("aula_id", aulaIds)
+    .eq("matricula_id", matriculaId);
+
+  return new Set((data ?? []).map((row) => row.aula_id as string));
 }
 
 export default async function AulaConteudoPage({
@@ -176,8 +196,6 @@ export default async function AulaConteudoPage({
     .eq("modulo_id", moduloId)
     .order("numero");
   const aulasDoModulo = (aulasDoModuloData ?? []) as { id: string; numero: number }[];
-  const isUltimaAulaDoModulo =
-    aulasDoModulo.length > 0 && aula.numero === Math.max(...aulasDoModulo.map((a) => a.numero));
 
   const [
     { data: materiaisData, error: materiaisError },
@@ -186,6 +204,7 @@ export default async function AulaConteudoPage({
     { data: concluidaData },
     quizResumo,
     provaResumo,
+    aulasConcluidasIds,
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -198,12 +217,19 @@ export default async function AulaConteudoPage({
     getPdfMateriais(supabase, aulaId),
     supabase.from("aulas_concluidas").select("id").eq("aula_id", aulaId).limit(1).maybeSingle(),
     getQuizResumo(supabase, aulaId, matriculaId),
-    isUltimaAulaDoModulo ? getProvaResumo(supabase, moduloId, matriculaId) : Promise.resolve(null),
+    getProvaResumo(supabase, moduloId, matriculaId),
+    getAulasConcluidasIds(
+      supabase,
+      aulasDoModulo.map((a) => a.id),
+      matriculaId,
+    ),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
   const videoId = videoMaterial ? extractYoutubeVideoId(videoMaterial.url) : null;
   const concluidaInicial = !!concluidaData;
+  const isModuloCompleto =
+    aulasDoModulo.length > 0 && aulasDoModulo.every((a) => aulasConcluidasIds.has(a.id));
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -251,12 +277,13 @@ export default async function AulaConteudoPage({
 
       <AulaAcoesBar
         cursoId={cursoId}
+        moduloId={moduloId}
         aulaId={aulaId}
         pdfs={pdfs}
         pdfsError={pdfsError}
         quizResumo={quizResumo}
         quizHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}
-        provaResumo={provaResumo}
+        provaResumo={isModuloCompleto ? provaResumo : null}
         provaHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/prova`}
         concluidaInicial={concluidaInicial}
       />

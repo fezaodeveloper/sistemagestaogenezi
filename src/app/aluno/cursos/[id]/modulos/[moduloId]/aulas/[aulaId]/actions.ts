@@ -49,6 +49,7 @@ export async function getPdfSignedUrl(
 // null) — usa a mais recente entre ativa/concluída pro curso.
 export async function toggleAulaConcluida(
   cursoId: string,
+  moduloId: string,
   aulaId: string,
   currentlyConcluida: boolean,
 ): Promise<{ error?: string }> {
@@ -74,6 +75,11 @@ export async function toggleAulaConcluida(
     }
   }
 
+  // Revalida a própria página da aula (o pill da prova, no AulaAcoesBar de
+  // qualquer aula do módulo, depende de isModuloCompleto, recalculado a
+  // partir do estado de aulas_concluidas) e as telas com barra de progresso
+  // do curso.
+  revalidatePath(`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}`);
   revalidatePath(`/aluno/cursos/${cursoId}`);
   revalidatePath("/aluno");
   return {};

@@ -14,6 +14,7 @@ type Resumo = {
 
 export function AulaAcoesBar({
   cursoId,
+  moduloId,
   aulaId,
   pdfs,
   pdfsError,
@@ -24,6 +25,7 @@ export function AulaAcoesBar({
   concluidaInicial,
 }: {
   cursoId: string;
+  moduloId: string;
   aulaId: string;
   pdfs: Material[];
   pdfsError: boolean;
@@ -64,6 +66,7 @@ export function AulaAcoesBar({
 
       <ToggleAulaConcluidaButton
         cursoId={cursoId}
+        moduloId={moduloId}
         aulaId={aulaId}
         concluidaInicial={concluidaInicial}
       />

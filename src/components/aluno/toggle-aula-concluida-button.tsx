@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 
 export function ToggleAulaConcluidaButton({
   cursoId,
+  moduloId,
   aulaId,
   concluidaInicial,
 }: {
   cursoId: string;
+  moduloId: string;
   aulaId: string;
   concluidaInicial: boolean;
 }) {
@@ -21,7 +23,7 @@ export function ToggleAulaConcluidaButton({
   function handleClick() {
     setError(null);
     startTransition(async () => {
-      const result = await toggleAulaConcluida(cursoId, aulaId, concluida);
+      const result = await toggleAulaConcluida(cursoId, moduloId, aulaId, concluida);
       if (result.error) {
         setError(result.error);
       } else {
