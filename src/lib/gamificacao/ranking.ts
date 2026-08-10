@@ -2,7 +2,12 @@ import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
-export type RankingEntry = { alunoId: string; fullName: string | null; totalPontos: number };
+export type RankingEntry = {
+  alunoId: string;
+  fullName: string | null;
+  totalPontos: number;
+  avatarId: string;
+};
 
 // ranking_geral já filtra curso EAD pelo toggle atual (ver migration) e
 // agrega por aluno entre todas as matrículas — só ordena aqui. Alunos sem
@@ -12,13 +17,14 @@ export type RankingEntry = { alunoId: string; fullName: string | null; totalPont
 export async function getRankingGeral(supabase: SupabaseServerClient): Promise<RankingEntry[]> {
   const { data } = await supabase
     .from("ranking_geral")
-    .select("aluno_id, full_name, total_pontos")
+    .select("aluno_id, full_name, total_pontos, avatar_id")
     .order("total_pontos", { ascending: false });
 
   return (data ?? []).map((row) => ({
     alunoId: row.aluno_id as string,
     fullName: row.full_name as string | null,
     totalPontos: row.total_pontos as number,
+    avatarId: row.avatar_id as string,
   }));
 }
 

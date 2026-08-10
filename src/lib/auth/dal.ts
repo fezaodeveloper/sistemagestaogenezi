@@ -10,6 +10,7 @@ export type Profile = {
   role: Role;
   full_name: string | null;
   avatar_url: string | null;
+  avatar_id: string;
 };
 
 export type CurrentUser = Profile & { email: string | null };
@@ -27,7 +28,7 @@ export const getCurrentProfile = cache(async (): Promise<CurrentUser | null> => 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, full_name, avatar_url")
+    .select("id, role, full_name, avatar_url, avatar_id")
     .eq("id", claims.sub)
     .single();
 

@@ -6,6 +6,8 @@ import { getCursoProgresso, type CursoProgresso } from "@/lib/aulas-concluidas/p
 import { getMeusPontos } from "@/lib/gamificacao/ranking";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
+import { isAvatarId } from "@/lib/avatares/catalog";
+import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -99,11 +101,14 @@ export default async function AlunoDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Meus Cursos</h1>
-          <p className="text-muted-foreground text-sm">
-            Bem-vindo, {user.full_name ?? user.email}.
-          </p>
+        <div className="flex items-center gap-3">
+          <AlunoAvatar avatarId={isAvatarId(user.avatar_id) ? user.avatar_id : "raposa"} size="lg" />
+          <div>
+            <h1 className="text-2xl font-semibold">Meus Cursos</h1>
+            <p className="text-muted-foreground text-sm">
+              Bem-vindo, {user.full_name ?? user.email}.
+            </p>
+          </div>
         </div>
         <Link
           href="/aluno/ranking"

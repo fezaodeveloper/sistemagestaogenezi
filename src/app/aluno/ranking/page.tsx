@@ -1,6 +1,10 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getRankingGeral } from "@/lib/gamificacao/ranking";
+import { getBadgesPublicosPorAluno } from "@/lib/gamificacao/badges";
+import { isAvatarId } from "@/lib/avatares/catalog";
+import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -17,6 +21,10 @@ export default async function RankingPage() {
 
   const supabase = await createClient();
   const ranking = await getRankingGeral(supabase);
+  const badgesPorAluno = await getBadgesPublicosPorAluno(
+    supabase,
+    ranking.map((r) => r.alunoId),
+  );
 
   const minhaPosicao = ranking.findIndex((r) => r.alunoId === user.id);
   const meuTotal = minhaPosicao === -1 ? 0 : ranking[minhaPosicao].totalPontos;
@@ -39,6 +47,9 @@ export default async function RankingPage() {
               {minhaPosicao + 1}º lugar de {ranking.length}
             </span>
           )}
+          <Link href="/aluno/perfil" className="text-primary text-xs hover:underline">
+            Trocar avatar e ver conquistas
+          </Link>
         </CardContent>
       </Card>
 
@@ -63,16 +74,24 @@ export default async function RankingPage() {
             <TableBody>
               {ranking.map((entry, index) => {
                 const souEu = entry.alunoId === user.id;
+                const badges = badgesPorAluno.get(entry.alunoId) ?? [];
                 return (
                   <TableRow key={entry.alunoId} className={souEu ? "bg-accent/50" : undefined}>
                     <TableCell className="font-medium">{index + 1}º</TableCell>
                     <TableCell>
-                      {entry.fullName ?? "—"}
-                      {souEu && (
-                        <Badge variant="secondary" className="ml-2">
-                          Você
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <AlunoAvatar
+                          avatarId={isAvatarId(entry.avatarId) ? entry.avatarId : "raposa"}
+                          size="sm"
+                        />
+                        <span>{entry.fullName ?? "—"}</span>
+                        {souEu && <Badge variant="secondary">Você</Badge>}
+                        {badges.length > 0 && (
+                          <span className="text-sm" title={badges.map((b) => b.nome).join(", ")}>
+                            {badges.map((b) => b.icone).join(" ")}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">{entry.totalPontos}</TableCell>
                   </TableRow>
