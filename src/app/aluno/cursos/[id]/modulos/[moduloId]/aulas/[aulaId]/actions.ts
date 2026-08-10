@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
+import { getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
+import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -62,14 +63,24 @@ export async function toggleAulaConcluida(
       return { error: "Não foi possível desmarcar a aula. Tente novamente." };
     }
   } else {
-    const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
-    if (!matriculaId) {
+    const matricula = await getMatriculaAtivaComTurma(supabase, user.id, cursoId);
+    if (!matricula) {
       return { error: "Matrícula não encontrada." };
+    }
+
+    // Reforça no servidor a mesma regra de liberação (calendário + aula
+    // anterior concluída) usada pra exibir/esconder a página da aula —
+    // essa action é um endpoint POST direto, alcançável sem passar pela UI
+    // (mesmo tipo de brecha já fechada no quiz/prova: nunca confiar que o
+    // client só chegou aqui porque a tela permitiu).
+    const liberacao = await getLiberacaoAulasCurso(supabase, cursoId, matricula.turmaId);
+    if (!liberacao.get(aulaId)?.liberada) {
+      return { error: "Esta aula ainda não está liberada." };
     }
 
     const { error } = await supabase
       .from("aulas_concluidas")
-      .insert({ matricula_id: matriculaId, aula_id: aulaId });
+      .insert({ matricula_id: matricula.id, aula_id: aulaId });
     if (error) {
       return { error: "Não foi possível marcar a aula como concluída. Tente novamente." };
     }

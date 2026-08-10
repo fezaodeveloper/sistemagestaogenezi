@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso, getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
+import { alunoTemAcessoAoCurso, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
+import { getLiberacaoAulasCurso, type AulaLiberacao } from "@/lib/cronograma/liberacao";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
 import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+
+function formatDateBR(isoDate: string) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
 
 type AulaRow = {
   id: string;
@@ -188,7 +194,50 @@ export default async function AulaConteudoPage({
   }
 
   const modulo = aula.modulos;
-  const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
+  const matricula = await getMatriculaAtivaComTurma(supabase, user.id, cursoId);
+
+  const liberacaoMap = matricula
+    ? await getLiberacaoAulasCurso(supabase, cursoId, matricula.turmaId)
+    : new Map<string, AulaLiberacao>();
+  const liberacaoAula = liberacaoMap.get(aulaId) ?? {
+    liberada: true,
+    motivoBloqueio: null,
+    dataLiberacao: null,
+  };
+
+  if (!liberacaoAula.liberada) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div>
+          <Button
+            render={<Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}`} />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2"
+          >
+            <ArrowLeft />
+            Módulo {modulo.numero} — {modulo.titulo}
+          </Button>
+          <h1 className="text-2xl font-semibold">
+            Aula {aula.numero} — {aula.titulo}
+          </h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+            <Lock className="text-muted-foreground size-8" />
+            <p className="text-muted-foreground text-sm">
+              {liberacaoAula.motivoBloqueio === "sequencial"
+                ? "Conclua a aula anterior para desbloquear esta aula."
+                : `Esta aula estará disponível em ${formatDateBR(liberacaoAula.dataLiberacao!)}.`}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const matriculaId = matricula?.id ?? null;
 
   const { data: aulasDoModuloData } = await supabase
     .from("aulas")

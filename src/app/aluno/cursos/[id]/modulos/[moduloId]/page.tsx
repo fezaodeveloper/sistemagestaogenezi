@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso } from "@/lib/matriculas/access";
+import { alunoTemAcessoAoCurso, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
+import { getLiberacaoAulasCurso, type AulaLiberacao } from "@/lib/cronograma/liberacao";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+
+function formatDateBR(isoDate: string) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
 
 type ModuloRow = {
   id: string;
@@ -38,7 +44,7 @@ export default async function ModuloAulasPage({
     notFound();
   }
 
-  const [{ data: moduloData }, { data, error }] = await Promise.all([
+  const [{ data: moduloData }, { data, error }, matricula] = await Promise.all([
     supabase
       .from("modulos")
       .select("id, numero, titulo, cursos(nome)")
@@ -50,6 +56,7 @@ export default async function ModuloAulasPage({
       .select("id, numero, titulo, materiais(id), quizzes(id)")
       .eq("modulo_id", moduloId)
       .order("numero"),
+    getMatriculaAtivaComTurma(supabase, user.id, cursoId),
   ]);
 
   const modulo = moduloData as unknown as ModuloRow | null;
@@ -58,6 +65,15 @@ export default async function ModuloAulasPage({
   if (!modulo) {
     notFound();
   }
+
+  const liberacaoMap = matricula
+    ? await getLiberacaoAulasCurso(supabase, cursoId, matricula.turmaId)
+    : new Map<string, AulaLiberacao>();
+  const liberacaoPadrao: AulaLiberacao = {
+    liberada: true,
+    motivoBloqueio: null,
+    dataLiberacao: null,
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,6 +112,27 @@ export default async function ModuloAulasPage({
           {aulas.map((aula) => {
             const totalMateriais = aula.materiais?.length ?? 0;
             const temQuiz = !!aula.quizzes;
+            const liberacao = liberacaoMap.get(aula.id) ?? liberacaoPadrao;
+
+            if (!liberacao.liberada) {
+              return (
+                <Card key={aula.id} className="opacity-60">
+                  <CardContent className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Lock className="text-muted-foreground size-4 shrink-0" />
+                      <p className="font-medium">
+                        Aula {aula.numero} — {aula.titulo}
+                      </p>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {liberacao.motivoBloqueio === "sequencial"
+                        ? "Conclua a aula anterior"
+                        : `Disponível em ${formatDateBR(liberacao.dataLiberacao!)}`}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            }
 
             return (
               <Link

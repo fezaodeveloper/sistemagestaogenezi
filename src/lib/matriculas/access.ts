@@ -44,3 +44,26 @@ export async function getMatriculaIdAtivaParaCurso(
 
   return data?.id ?? null;
 }
+
+// Variante usada só onde o calendário de liberação (cronograma) precisa ser
+// calculado — além da matrícula, também precisa de turma_id pra buscar
+// cadencia_dias_semana/data_inicio. Query separada da acima (em vez de
+// mudar o retorno dela) pra não afetar os call sites existentes que só
+// precisam do id.
+export async function getMatriculaAtivaComTurma(
+  supabase: SupabaseServerClient,
+  alunoId: string,
+  cursoId: string,
+): Promise<{ id: string; turmaId: string } | null> {
+  const { data } = await supabase
+    .from("matriculas")
+    .select("id, created_at, turma_id, turmas!inner(curso_id)")
+    .eq("aluno_id", alunoId)
+    .eq("turmas.curso_id", cursoId)
+    .in("status", ["ativa", "concluida"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data ? { id: data.id, turmaId: data.turma_id } : null;
+}
