@@ -86,9 +86,14 @@ export async function toggleAulaConcluida(
       return { error: "Esta aula ainda não está liberada." };
     }
 
-    const { error } = await supabase
-      .from("aulas_concluidas")
-      .insert({ matricula_id: matricula.id, aula_id: aulaId });
+    // marcar_aula_concluida (security definer) reimplementa todas essas
+    // mesmas checagens e é o único caminho de escrita em aulas_concluidas
+    // desde a Fase 8 — precisou virar function pra poder lançar pontos em
+    // pontos_eventos com segurança (ver migration).
+    const { error } = await supabase.rpc("marcar_aula_concluida", {
+      p_matricula_id: matricula.id,
+      p_aula_id: aulaId,
+    });
     if (error) {
       return { error: "Não foi possível marcar a aula como concluída. Tente novamente." };
     }

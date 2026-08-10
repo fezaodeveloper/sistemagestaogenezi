@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Trophy } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getCursoProgresso, type CursoProgresso } from "@/lib/aulas-concluidas/progresso";
+import { getMeusPontos } from "@/lib/gamificacao/ranking";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { Badge } from "@/components/ui/badge";
@@ -72,12 +74,15 @@ export default async function AlunoDashboardPage() {
   const user = await requireRole("aluno");
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("matriculas")
-    .select("status, data_expiracao, turmas(cursos(id, nome, tipo))")
-    .eq("aluno_id", user.id)
-    .in("status", ["ativa", "concluida"])
-    .order("created_at", { ascending: false });
+  const [{ data, error }, meusPontos] = await Promise.all([
+    supabase
+      .from("matriculas")
+      .select("status, data_expiracao, turmas(cursos(id, nome, tipo))")
+      .eq("aluno_id", user.id)
+      .in("status", ["ativa", "concluida"])
+      .order("created_at", { ascending: false }),
+    getMeusPontos(supabase, user.id),
+  ]);
 
   const cursos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
 
@@ -93,9 +98,22 @@ export default async function AlunoDashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Meus Cursos</h1>
-        <p className="text-muted-foreground text-sm">Bem-vindo, {user.full_name ?? user.email}.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Meus Cursos</h1>
+          <p className="text-muted-foreground text-sm">
+            Bem-vindo, {user.full_name ?? user.email}.
+          </p>
+        </div>
+        <Link
+          href="/aluno/ranking"
+          className="hover:bg-accent/50 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+        >
+          <Trophy className="text-muted-foreground size-4" />
+          <span>
+            Seus pontos: <span className="font-semibold">{meusPontos}</span>
+          </span>
+        </Link>
       </div>
 
       {error ? (
