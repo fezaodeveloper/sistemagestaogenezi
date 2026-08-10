@@ -48,15 +48,19 @@ export async function getLiberacaoAulasCurso(
     (m) => m.aulas?.map((a) => a.id) ?? [],
   );
 
-  const { data: concluidasData } =
+  const [{ data: concluidasData }, { data: liberadasManualData }] =
     aulaIdsOrdenados.length > 0
-      ? await supabase.from("aulas_concluidas").select("aula_id").in("aula_id", aulaIdsOrdenados)
-      : { data: [] };
+      ? await Promise.all([
+          supabase.from("aulas_concluidas").select("aula_id").in("aula_id", aulaIdsOrdenados),
+          supabase.from("liberacoes_manuais").select("aula_id").in("aula_id", aulaIdsOrdenados),
+        ])
+      : [{ data: [] }, { data: [] }];
 
   const calendarioMap = new Map(
     ((calendarioData ?? []) as CalendarioRow[]).map((row) => [row.aula_id, row]),
   );
   const concluidasSet = new Set((concluidasData ?? []).map((c) => c.aula_id as string));
+  const liberadasManualSet = new Set((liberadasManualData ?? []).map((l) => l.aula_id as string));
 
   // Function devolve zero linhas quando a turma não tem cadência
   // configurada (curso EAD, ou presencial/híbrido ainda sem cronograma) —
@@ -77,7 +81,11 @@ export async function getLiberacaoAulasCurso(
     const calendarioRow = calendarioMap.get(aulaId);
     const liberadaPorCalendario = calendarioRow?.liberada_calendario ?? true;
     const liberadaPorSequencia = anteriorConcluida;
-    const liberada = liberadaPorCalendario && liberadaPorSequencia;
+    // Liberação manual é uma exceção pontual: abre só essa aula, não conta
+    // como "aula anterior concluída" pra destravar a próxima — o aluno
+    // ainda precisa marcar como concluída normalmente pra isso.
+    const liberada =
+      (liberadaPorCalendario && liberadaPorSequencia) || liberadasManualSet.has(aulaId);
 
     resultado.set(aulaId, {
       liberada,
