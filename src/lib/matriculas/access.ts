@@ -67,3 +67,24 @@ export async function getMatriculaAtivaComTurma(
 
   return data ? { id: data.id, turmaId: data.turma_id } : null;
 }
+
+export type ExpiracaoMatricula = { expirada: boolean; dataExpiracao: string };
+
+// O booleano vem de uma function SQL (matricula_expirada), não de comparar
+// Date em JS — mesma disciplina já aplicada no cronograma: current_date do
+// Postgres e new Date() do Node podem divergir por fuso horário, então só
+// o banco decide "expirou ou não". A data crua (dataExpiracao) é só pra
+// exibição da mensagem.
+export async function getExpiracaoMatricula(
+  supabase: SupabaseServerClient,
+  matriculaId: string,
+): Promise<ExpiracaoMatricula | null> {
+  const [{ data: matricula }, { data: expirada }] = await Promise.all([
+    supabase.from("matriculas").select("data_expiracao").eq("id", matriculaId).single(),
+    supabase.rpc("matricula_expirada", { p_matricula_id: matriculaId }),
+  ]);
+
+  if (!matricula) return null;
+
+  return { expirada: !!expirada, dataExpiracao: matricula.data_expiracao };
+}

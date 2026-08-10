@@ -6,6 +6,7 @@ import { Trash2 } from "lucide-react";
 import {
   createMatricula,
   deleteMatricula,
+  updateMatriculaExpiracao,
   updateMatriculaStatus,
   type MatriculaFormState,
 } from "@/app/admin/alunos/matriculas-actions";
@@ -55,6 +56,9 @@ function MatriculaRow({ matricula, alunoId }: { matricula: MatriculaWithTurma; a
   const [statusError, setStatusError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [dataExpiracao, setDataExpiracao] = useState(matricula.data_expiracao);
+  const [expPending, startExpTransition] = useTransition();
+  const [expError, setExpError] = useState<string | null>(null);
 
   function handleStatusChange(status: string | null) {
     if (!status) return;
@@ -62,6 +66,14 @@ function MatriculaRow({ matricula, alunoId }: { matricula: MatriculaWithTurma; a
     startTransition(async () => {
       const result = await updateMatriculaStatus(matricula.id, alunoId, status);
       if (result.error) setStatusError(result.error);
+    });
+  }
+
+  function handleSalvarExpiracao() {
+    setExpError(null);
+    startExpTransition(async () => {
+      const result = await updateMatriculaExpiracao(matricula.id, alunoId, dataExpiracao);
+      if (result.error) setExpError(result.error);
     });
   }
 
@@ -155,6 +167,34 @@ function MatriculaRow({ matricula, alunoId }: { matricula: MatriculaWithTurma; a
           </AlertDialog>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Label htmlFor={`expiracao-${matricula.id}`} className="text-muted-foreground text-xs">
+          Expira em
+        </Label>
+        <Input
+          id={`expiracao-${matricula.id}`}
+          type="date"
+          value={dataExpiracao}
+          onChange={(e) => setDataExpiracao(e.target.value)}
+          className="h-8 w-36"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={expPending || dataExpiracao === matricula.data_expiracao}
+          onClick={handleSalvarExpiracao}
+        >
+          {expPending ? "Salvando..." : "Salvar"}
+        </Button>
+        {expError && (
+          <p role="alert" className="text-destructive text-xs">
+            {expError}
+          </p>
+        )}
+      </div>
+
       {statusError && (
         <p role="alert" className="text-destructive text-sm">
           {statusError}

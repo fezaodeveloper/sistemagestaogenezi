@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
+import {
+  alunoTemAcessoAoCurso,
+  getExpiracaoMatricula,
+  getMatriculaAtivaComTurma,
+} from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso, type AulaLiberacao } from "@/lib/cronograma/liberacao";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +68,39 @@ export default async function ModuloAulasPage({
 
   if (!modulo) {
     notFound();
+  }
+
+  const expiracao = matricula ? await getExpiracaoMatricula(supabase, matricula.id) : null;
+
+  if (expiracao?.expirada) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Button
+            render={<Link href={`/aluno/cursos/${cursoId}`} />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2"
+          >
+            <ArrowLeft />
+            {modulo.cursos?.nome ?? "Curso"}
+          </Button>
+          <h1 className="text-2xl font-semibold">
+            Módulo {modulo.numero} — {modulo.titulo}
+          </h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+            <Lock className="text-muted-foreground size-8" />
+            <p className="text-muted-foreground text-sm">
+              Acesso expirado em {formatDateBR(expiracao.dataExpiracao)}. Fale com a administração
+              para renovar o acesso.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const liberacaoMap = matricula

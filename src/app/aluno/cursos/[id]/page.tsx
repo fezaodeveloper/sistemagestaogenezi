@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso } from "@/lib/matriculas/access";
+import {
+  alunoTemAcessoAoCurso,
+  getExpiracaoMatricula,
+  getMatriculaIdAtivaParaCurso,
+} from "@/lib/matriculas/access";
 import { getCursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { Button } from "@/components/ui/button";
@@ -12,6 +16,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 type CursoTipo = (typeof CURSO_TIPOS)[number];
+
+function formatDateBR(isoDate: string) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
 
 type ModuloAlunoRow = {
   id: string;
@@ -32,8 +41,49 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
     notFound();
   }
 
-  const [{ data: cursoData }, { data, error }, progresso] = await Promise.all([
+  const [{ data: cursoData }, matriculaId] = await Promise.all([
     supabase.from("cursos").select("id, nome, tipo").eq("id", cursoId).single(),
+    getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId),
+  ]);
+
+  const curso = cursoData as { id: string; nome: string; tipo: CursoTipo } | null;
+
+  if (!curso) {
+    notFound();
+  }
+
+  const expiracao = matriculaId ? await getExpiracaoMatricula(supabase, matriculaId) : null;
+
+  if (expiracao?.expirada) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Button
+            render={<Link href="/aluno" />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2"
+          >
+            <ArrowLeft />
+            Meus Cursos
+          </Button>
+          <h1 className="text-2xl font-semibold">{curso.nome}</h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+            <Lock className="text-muted-foreground size-8" />
+            <p className="text-muted-foreground text-sm">
+              Acesso expirado em {formatDateBR(expiracao.dataExpiracao)}. Fale com a administração
+              para renovar o acesso.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const [{ data, error }, progresso] = await Promise.all([
     supabase
       .from("modulos")
       .select("id, numero, titulo, aulas(id), provas(id)")
@@ -45,12 +95,7 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
   const percentual =
     progresso.total > 0 ? Math.round((progresso.concluidas / progresso.total) * 100) : 0;
 
-  const curso = cursoData as { id: string; nome: string; tipo: CursoTipo } | null;
   const modulos = data as unknown as ModuloAlunoRow[] | null;
-
-  if (!curso) {
-    notFound();
-  }
 
   return (
     <div className="flex flex-col gap-6">

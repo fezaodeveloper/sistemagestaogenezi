@@ -12,16 +12,36 @@ type CursoTipo = (typeof CURSO_TIPOS)[number];
 
 type MatriculaCursoRow = {
   status: (typeof MATRICULA_STATUSES)[number];
+  data_expiracao: string;
   turmas: { cursos: { id: string; nome: string; tipo: CursoTipo } | null } | null;
 };
 
-type CursoAluno = { id: string; nome: string; tipo: CursoTipo; emAndamento: boolean };
+type CursoAluno = {
+  id: string;
+  nome: string;
+  tipo: CursoTipo;
+  emAndamento: boolean;
+  dataExpiracao: string;
+  expirada: boolean;
+};
+
+function formatDateBR(isoDate: string) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
 
 // Um card por curso, não por matrícula/turma — o aluno pode ter mais de uma
 // matrícula no mesmo curso (turmas diferentes), mas o conteúdo é o mesmo.
 // Se qualquer matrícula naquele curso estiver "ativa", o curso conta como em
-// andamento; só aparece como concluído se todas forem "concluida".
+// andamento; só aparece como concluído se todas forem "concluida". Já a
+// expiração usa só a matrícula mais recente (linhas vêm ordenadas por
+// created_at desc) — mesmo critério de desempate de getMatriculaIdAtivaParaCurso
+// em todo o resto do sistema, pra o badge aqui bater com o que a página do
+// curso mostra ao clicar. Comparação de data em JS, não via RPC
+// (matricula_expirada): é só um badge informativo, não fronteira de
+// acesso — a página do curso, essa sim, usa a function SQL.
 function agruparPorCurso(rows: MatriculaCursoRow[]): CursoAluno[] {
+  const hoje = new Date().toISOString().slice(0, 10);
   const mapa = new Map<string, CursoAluno>();
 
   for (const row of rows) {
@@ -32,7 +52,14 @@ function agruparPorCurso(rows: MatriculaCursoRow[]): CursoAluno[] {
     const atual = mapa.get(curso.id);
 
     if (!atual) {
-      mapa.set(curso.id, { id: curso.id, nome: curso.nome, tipo: curso.tipo, emAndamento });
+      mapa.set(curso.id, {
+        id: curso.id,
+        nome: curso.nome,
+        tipo: curso.tipo,
+        emAndamento,
+        dataExpiracao: row.data_expiracao,
+        expirada: row.data_expiracao < hoje,
+      });
     } else if (emAndamento) {
       atual.emAndamento = true;
     }
@@ -47,9 +74,10 @@ export default async function AlunoDashboardPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("matriculas")
-    .select("status, turmas(cursos(id, nome, tipo))")
+    .select("status, data_expiracao, turmas(cursos(id, nome, tipo))")
     .eq("aluno_id", user.id)
-    .in("status", ["ativa", "concluida"]);
+    .in("status", ["ativa", "concluida"])
+    .order("created_at", { ascending: false });
 
   const cursos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
 
@@ -102,10 +130,19 @@ export default async function AlunoDashboardPage() {
                   <CardContent className="flex flex-col gap-3">
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
-                      <Badge variant={curso.emAndamento ? "default" : "outline"}>
-                        {curso.emAndamento ? "Em andamento" : "Concluído"}
-                      </Badge>
+                      {curso.expirada ? (
+                        <Badge variant="destructive">Expirado</Badge>
+                      ) : (
+                        <Badge variant={curso.emAndamento ? "default" : "outline"}>
+                          {curso.emAndamento ? "Em andamento" : "Concluído"}
+                        </Badge>
+                      )}
                     </div>
+                    {curso.expirada && (
+                      <p className="text-destructive text-xs">
+                        Acesso expirado em {formatDateBR(curso.dataExpiracao)}
+                      </p>
+                    )}
                     {progresso && progresso.total > 0 && (
                       <div className="flex items-center gap-2">
                         <Progress value={percentual} className="flex-1" />

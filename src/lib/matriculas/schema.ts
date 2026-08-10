@@ -21,6 +21,7 @@ export type Matricula = {
   aluno_id: string;
   turma_id: string;
   data_matricula: string;
+  data_expiracao: string;
   status: (typeof MATRICULA_STATUSES)[number];
   created_by: string;
   created_at: string;

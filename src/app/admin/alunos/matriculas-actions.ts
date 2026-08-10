@@ -68,6 +68,31 @@ export async function updateMatriculaStatus(
   return {};
 }
 
+export async function updateMatriculaExpiracao(
+  matriculaId: string,
+  alunoId: string,
+  dataExpiracao: string,
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  if (!dataExpiracao) {
+    return { error: "Informe a data de expiração." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("matriculas")
+    .update({ data_expiracao: dataExpiracao })
+    .eq("id", matriculaId);
+
+  if (error) {
+    return { error: "Não foi possível atualizar a data de expiração. Tente novamente." };
+  }
+
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return {};
+}
+
 export async function deleteMatricula(
   matriculaId: string,
   alunoId: string,

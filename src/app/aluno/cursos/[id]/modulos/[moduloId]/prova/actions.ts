@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
+import { getExpiracaoMatricula, getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
 
 export type SubmeterProvaState = { error?: string } | undefined;
 
@@ -24,6 +24,14 @@ export async function submeterTentativaProva(
   const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
   if (!matriculaId) {
     return { error: "Matrícula não encontrada." };
+  }
+
+  // Mensagem amigável — a fronteira de verdade é o próprio
+  // criar_tentativa_prova, que reimplementa essa checagem (RPC direto
+  // bypassando essa Server Action não escapa dela).
+  const expiracao = await getExpiracaoMatricula(supabase, matriculaId);
+  if (expiracao?.expirada) {
+    return { error: "Sua matrícula expirou. Fale com a administração para renovar o acesso." };
   }
 
   const { data: prova } = await supabase

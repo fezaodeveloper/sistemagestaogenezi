@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Lock, XCircle } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso, getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
+import {
+  alunoTemAcessoAoCurso,
+  getExpiracaoMatricula,
+  getMatriculaIdAtivaParaCurso,
+} from "@/lib/matriculas/access";
 import type { Quiz } from "@/lib/quizzes/schema";
 import { QuizAnswerForm } from "@/components/aluno/quiz-answer-form";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +46,11 @@ type RespostaRow = {
   resposta_texto: string | null;
   correta: boolean | null;
 };
+
+function formatDateBR(isoDate: string) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
 
 export default async function QuizPage({
   params,
@@ -86,6 +95,37 @@ export default async function QuizPage({
   const matriculaId = await getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId);
   if (!matriculaId) {
     notFound();
+  }
+
+  const expiracao = await getExpiracaoMatricula(supabase, matriculaId);
+
+  if (expiracao?.expirada) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div>
+          <Button
+            render={<Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}`} />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2"
+          >
+            <ArrowLeft />
+            {aula.titulo}
+          </Button>
+          <h1 className="text-2xl font-semibold">{quiz.titulo}</h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+            <Lock className="text-muted-foreground size-8" />
+            <p className="text-muted-foreground text-sm">
+              Acesso expirado em {formatDateBR(expiracao.dataExpiracao)}. Fale com a administração
+              para renovar o acesso.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const [{ data: questoesData, error: questoesError }, { data: tentativasData }] =

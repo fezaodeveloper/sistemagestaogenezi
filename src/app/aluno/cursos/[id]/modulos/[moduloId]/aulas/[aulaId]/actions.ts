@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
+import { getExpiracaoMatricula, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
@@ -66,6 +66,14 @@ export async function toggleAulaConcluida(
     const matricula = await getMatriculaAtivaComTurma(supabase, user.id, cursoId);
     if (!matricula) {
       return { error: "Matrícula não encontrada." };
+    }
+
+    // Expiração é absoluta — checada antes de qualquer outra regra de
+    // liberação (calendário/sequência/manual), mesmo raciocínio da RLS de
+    // aulas_concluidas (que também tem essa condição separada).
+    const expiracao = await getExpiracaoMatricula(supabase, matricula.id);
+    if (expiracao?.expirada) {
+      return { error: "Sua matrícula expirou. Fale com a administração para renovar o acesso." };
     }
 
     // Reforça no servidor a mesma regra de liberação (calendário + aula

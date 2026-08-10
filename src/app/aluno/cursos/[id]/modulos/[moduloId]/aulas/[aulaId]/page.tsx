@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { alunoTemAcessoAoCurso, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
+import {
+  alunoTemAcessoAoCurso,
+  getExpiracaoMatricula,
+  getMatriculaAtivaComTurma,
+} from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso, type AulaLiberacao } from "@/lib/cronograma/liberacao";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
 import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
@@ -195,6 +199,39 @@ export default async function AulaConteudoPage({
 
   const modulo = aula.modulos;
   const matricula = await getMatriculaAtivaComTurma(supabase, user.id, cursoId);
+
+  const expiracao = matricula ? await getExpiracaoMatricula(supabase, matricula.id) : null;
+
+  if (expiracao?.expirada) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div>
+          <Button
+            render={<Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}`} />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2"
+          >
+            <ArrowLeft />
+            Módulo {modulo.numero} — {modulo.titulo}
+          </Button>
+          <h1 className="text-2xl font-semibold">
+            Aula {aula.numero} — {aula.titulo}
+          </h1>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+            <Lock className="text-muted-foreground size-8" />
+            <p className="text-muted-foreground text-sm">
+              Acesso expirado em {formatDateBR(expiracao.dataExpiracao)}. Fale com a administração
+              para renovar o acesso.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const liberacaoMap = matricula
     ? await getLiberacaoAulasCurso(supabase, cursoId, matricula.turmaId)
