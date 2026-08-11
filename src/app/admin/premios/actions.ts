@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { randomUUID } from "node:crypto";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { premioFormSchema } from "@/lib/premios/schema";
+import { uploadImagem, validarImagem } from "@/lib/storage/validar-imagem";
 
 const PREMIOS_BUCKET = "premios";
 
@@ -45,18 +45,6 @@ function parsePremioForm(formData: FormData) {
   });
 }
 
-async function uploadFoto(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  arquivo: File,
-) {
-  const extensao = arquivo.name.split(".").pop() || "jpg";
-  const path = `${randomUUID()}.${extensao}`;
-  const { error } = await supabase.storage
-    .from(PREMIOS_BUCKET)
-    .upload(path, arquivo, { contentType: arquivo.type });
-  return { path: error ? null : path, error };
-}
-
 export async function createPremio(
   _prevState: PremioFormState,
   formData: FormData,
@@ -68,12 +56,16 @@ export async function createPremio(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
+  const { erro: erroFoto, arquivo: arquivoFoto } = validarImagem(formData.get("foto"));
+  if (erroFoto) {
+    return { errors: { foto: [erroFoto] }, values: echoValues(formData) };
+  }
+
   const supabase = await createClient();
 
   let fotoPath: string | null = null;
-  const arquivo = formData.get("foto");
-  if (arquivo instanceof File && arquivo.size > 0) {
-    const { path, error: uploadError } = await uploadFoto(supabase, arquivo);
+  if (arquivoFoto) {
+    const { path, error: uploadError } = await uploadImagem(supabase, PREMIOS_BUCKET, arquivoFoto);
     if (uploadError || !path) {
       return {
         error: "Não foi possível enviar a foto. Tente novamente.",
@@ -117,13 +109,17 @@ export async function updatePremio(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
+  const { erro: erroFoto, arquivo: arquivoFoto } = validarImagem(formData.get("foto"));
+  if (erroFoto) {
+    return { errors: { foto: [erroFoto] }, values: echoValues(formData) };
+  }
+
   const supabase = await createClient();
 
   let fotoPath = fotoAtual;
   let novoPath: string | null = null;
-  const arquivo = formData.get("foto");
-  if (arquivo instanceof File && arquivo.size > 0) {
-    const { path, error: uploadError } = await uploadFoto(supabase, arquivo);
+  if (arquivoFoto) {
+    const { path, error: uploadError } = await uploadImagem(supabase, PREMIOS_BUCKET, arquivoFoto);
     if (uploadError || !path) {
       return {
         error: "Não foi possível enviar a foto. Tente novamente.",

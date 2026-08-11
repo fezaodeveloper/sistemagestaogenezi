@@ -25,6 +25,7 @@ export type Modulo = {
   numero: number;
   titulo: string;
   descricao: string | null;
+  capa_url: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;

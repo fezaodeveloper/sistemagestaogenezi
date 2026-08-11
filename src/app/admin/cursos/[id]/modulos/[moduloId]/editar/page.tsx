@@ -26,6 +26,10 @@ export default async function EditarModuloPage({
     notFound();
   }
 
+  const capaAtualUrl = modulo.capa_url
+    ? supabase.storage.from("modulos").getPublicUrl(modulo.capa_url).data.publicUrl
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -33,12 +37,13 @@ export default async function EditarModuloPage({
         <p className="text-muted-foreground text-sm">{modulo.titulo}</p>
       </div>
       <ModuloForm
-        action={updateModulo.bind(null, cursoId, modulo.id)}
+        action={updateModulo.bind(null, cursoId, modulo.id, modulo.capa_url)}
         defaultValues={{
           numero: modulo.numero,
           titulo: modulo.titulo,
           descricao: modulo.descricao ?? undefined,
         }}
+        capaAtualUrl={capaAtualUrl}
         submitLabel="Salvar alterações"
       />
     </div>

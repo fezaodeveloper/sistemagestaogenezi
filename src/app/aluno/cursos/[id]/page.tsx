@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, PlayCircle } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/lib/matriculas/access";
 import { getCursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
-import { CursoCapa } from "@/components/aluno/curso-capa";
+import { Capa } from "@/components/aluno/capa";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,7 @@ type ModuloAlunoRow = {
   id: string;
   numero: number;
   titulo: string;
+  capa_url: string | null;
   aulas: { id: string }[] | null;
   provas: { id: string } | null;
 };
@@ -43,19 +44,15 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
   }
 
   const [{ data: cursoData }, matriculaId] = await Promise.all([
-    supabase.from("cursos").select("id, nome, tipo, capa_url").eq("id", cursoId).single(),
+    supabase.from("cursos").select("id, nome, tipo").eq("id", cursoId).single(),
     getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId),
   ]);
 
-  const curso = cursoData as { id: string; nome: string; tipo: CursoTipo; capa_url: string | null } | null;
+  const curso = cursoData as { id: string; nome: string; tipo: CursoTipo } | null;
 
   if (!curso) {
     notFound();
   }
-
-  const capaUrl = curso.capa_url
-    ? supabase.storage.from("cursos").getPublicUrl(curso.capa_url).data.publicUrl
-    : null;
 
   const expiracao = matriculaId ? await getExpiracaoMatricula(supabase, matriculaId) : null;
 
@@ -73,10 +70,7 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
             <ArrowLeft />
             Meus Cursos
           </Button>
-          <div className="flex gap-4">
-            <CursoCapa capaUrl={capaUrl} nome={curso.nome} className="w-28 shrink-0 sm:w-36" />
-            <h1 className="text-2xl font-semibold">{curso.nome}</h1>
-          </div>
+          <h1 className="text-2xl font-semibold">{curso.nome}</h1>
         </div>
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
@@ -94,7 +88,7 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
   const [{ data, error }, progresso] = await Promise.all([
     supabase
       .from("modulos")
-      .select("id, numero, titulo, aulas(id), provas(id)")
+      .select("id, numero, titulo, capa_url, aulas(id), provas(id)")
       .eq("curso_id", cursoId)
       .order("numero"),
     getCursoProgresso(supabase, cursoId),
@@ -104,6 +98,17 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
     progresso.total > 0 ? Math.round((progresso.concluidas / progresso.total) * 100) : 0;
 
   const modulos = data as unknown as ModuloAlunoRow[] | null;
+
+  // Capa de módulo fica em bucket público — a URL é montada aqui, mesma
+  // lógica já usada pra capa de curso.
+  const capasModulos = new Map(
+    (modulos ?? []).map((modulo) => [
+      modulo.id,
+      modulo.capa_url
+        ? supabase.storage.from("modulos").getPublicUrl(modulo.capa_url).data.publicUrl
+        : null,
+    ]),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -118,23 +123,18 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
           <ArrowLeft />
           Meus Cursos
         </Button>
-        <div className="flex gap-4">
-          <CursoCapa capaUrl={capaUrl} nome={curso.nome} className="w-28 shrink-0 sm:w-36" />
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{curso.nome}</h1>
-              <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
-            </div>
-            {progresso.total > 0 && (
-              <div className="flex items-center gap-3">
-                <Progress value={percentual} className="max-w-xs flex-1" />
-                <span className="text-muted-foreground text-sm">
-                  {progresso.concluidas}/{progresso.total} aulas concluídas
-                </span>
-              </div>
-            )}
-          </div>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">{curso.nome}</h1>
+          <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
         </div>
+        {progresso.total > 0 && (
+          <div className="mt-3 flex items-center gap-3">
+            <Progress value={percentual} className="max-w-xs flex-1" />
+            <span className="text-muted-foreground text-sm">
+              {progresso.concluidas}/{progresso.total} aulas concluídas
+            </span>
+          </div>
+        )}
       </div>
 
       {error ? (
@@ -159,7 +159,14 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
 
             return (
               <Link key={modulo.id} href={`/aluno/cursos/${cursoId}/modulos/${modulo.id}`}>
-                <Card className="hover:bg-accent/50 transition-colors">
+                <Card className="hover:bg-accent/50 overflow-hidden pt-0 transition-colors">
+                  <Capa
+                    capaUrl={capasModulos.get(modulo.id) ?? null}
+                    nome={modulo.titulo}
+                    aspect="16/9"
+                    icone={PlayCircle}
+                    className="w-full rounded-none"
+                  />
                   <CardHeader>
                     <CardTitle>
                       Módulo {modulo.numero} — {modulo.titulo}

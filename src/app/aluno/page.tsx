@@ -8,7 +8,7 @@ import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
-import { CursoCapa } from "@/components/aluno/curso-capa";
+import { Capa } from "@/components/aluno/capa";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -157,7 +157,7 @@ export default async function AlunoDashboardPage() {
             return (
               <Link key={curso.id} href={`/aluno/cursos/${curso.id}`}>
                 <Card className="group hover:bg-accent/50 hover:shadow-lg hover:shadow-foreground/10 gap-0 overflow-hidden py-0 transition duration-300">
-                  <CursoCapa
+                  <Capa
                     capaUrl={curso.capaUrl}
                     nome={curso.nome}
                     className="w-full rounded-none transition-transform duration-300 ease-out group-hover:scale-105"

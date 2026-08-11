@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { randomUUID } from "node:crypto";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { cursoFormSchema } from "@/lib/cursos/schema";
 import { cursoResgateFormSchema } from "@/lib/cursos/resgate-schema";
+import { uploadImagem, validarImagem } from "@/lib/storage/validar-imagem";
 
 const CURSOS_BUCKET = "cursos";
 
@@ -38,35 +38,6 @@ function parseCursoForm(formData: FormData) {
   });
 }
 
-const TIPOS_IMAGEM_ACEITOS = ["image/jpeg", "image/png", "image/webp"];
-const TAMANHO_MAXIMO_CAPA = 5 * 1024 * 1024; // 5MB
-
-async function uploadCapa(supabase: Awaited<ReturnType<typeof createClient>>, arquivo: File) {
-  const extensao = arquivo.name.split(".").pop() || "jpg";
-  const path = `${randomUUID()}.${extensao}`;
-  const { error } = await supabase.storage
-    .from(CURSOS_BUCKET)
-    .upload(path, arquivo, { contentType: arquivo.type });
-  return { path: error ? null : path, error };
-}
-
-// Valida o arquivo de capa (se algum foi enviado). Não valida proporção
-// — a exibição sempre recorta em 2:3 via CSS (object-cover), então uma
-// imagem "quase 2:3" ainda fica com aparência consistente; a prévia no
-// formulário já mostra o recorte real antes de confirmar.
-function validarCapa(arquivo: FormDataEntryValue | null): { erro?: string; arquivo?: File } {
-  if (!(arquivo instanceof File) || arquivo.size === 0) {
-    return {};
-  }
-  if (!TIPOS_IMAGEM_ACEITOS.includes(arquivo.type)) {
-    return { erro: "A capa precisa ser uma imagem (JPEG, PNG ou WebP)." };
-  }
-  if (arquivo.size > TAMANHO_MAXIMO_CAPA) {
-    return { erro: "A capa pode ter no máximo 5MB." };
-  }
-  return { arquivo };
-}
-
 export async function createCurso(
   _prevState: CursoFormState,
   formData: FormData,
@@ -78,7 +49,7 @@ export async function createCurso(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
-  const { erro: erroCapa, arquivo: arquivoCapa } = validarCapa(formData.get("capa"));
+  const { erro: erroCapa, arquivo: arquivoCapa } = validarImagem(formData.get("capa"));
   if (erroCapa) {
     return { errors: { capa: [erroCapa] }, values: echoValues(formData) };
   }
@@ -87,7 +58,7 @@ export async function createCurso(
 
   let capaPath: string | null = null;
   if (arquivoCapa) {
-    const { path, error: uploadError } = await uploadCapa(supabase, arquivoCapa);
+    const { path, error: uploadError } = await uploadImagem(supabase, CURSOS_BUCKET, arquivoCapa);
     if (uploadError || !path) {
       return {
         error: "Não foi possível enviar a capa. Tente novamente.",
@@ -130,7 +101,7 @@ export async function updateCurso(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
-  const { erro: erroCapa, arquivo: arquivoCapa } = validarCapa(formData.get("capa"));
+  const { erro: erroCapa, arquivo: arquivoCapa } = validarImagem(formData.get("capa"));
   if (erroCapa) {
     return { errors: { capa: [erroCapa] }, values: echoValues(formData) };
   }
@@ -140,7 +111,7 @@ export async function updateCurso(
   let capaPath = capaAtual;
   let novoPath: string | null = null;
   if (arquivoCapa) {
-    const { path, error: uploadError } = await uploadCapa(supabase, arquivoCapa);
+    const { path, error: uploadError } = await uploadImagem(supabase, CURSOS_BUCKET, arquivoCapa);
     if (uploadError || !path) {
       return {
         error: "Não foi possível enviar a capa. Tente novamente.",
