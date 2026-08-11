@@ -1,8 +1,58 @@
+import { Users, GraduationCap, School } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
+import { getNotificacaoResgatesPendentes } from "@/lib/creditos/resgates";
+import type { DashboardNotificacao } from "@/lib/admin/dashboard";
+import { DashboardBalao } from "@/components/admin/dashboard-balao";
+import { Card, CardContent } from "@/components/ui/card";
+
+function StatTile({
+  icone: Icone,
+  valor,
+  label,
+}: {
+  icone: typeof Users;
+  valor: number;
+  label: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 py-4">
+        <div className="bg-muted rounded-full p-2">
+          <Icone className="text-muted-foreground size-5" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-2xl font-semibold">{valor}</span>
+          <span className="text-muted-foreground text-sm">{label}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default async function AdminDashboardPage() {
   const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const [
+    { count: totalAlunos },
+    { count: cursosAtivos },
+    { count: turmasEmAndamento },
+    notificacaoResgates,
+  ] = await Promise.all([
+    supabase.from("alunos").select("*", { count: "exact", head: true }),
+    supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
+    supabase.from("turmas").select("*", { count: "exact", head: true }).eq("status", "ativa"),
+    getNotificacaoResgatesPendentes(supabase),
+  ]);
+
+  // Cada domínio (resgates hoje; certificados/mensagens no futuro)
+  // devolve null quando não há nada pendente — só entra aqui quem tem
+  // algo pra mostrar. Adicionar um balão novo é só empilhar mais uma
+  // function nesse array, sem mexer em mais nada nesta página.
+  const notificacoes: DashboardNotificacao[] = [notificacaoResgates].filter(
+    (n): n is DashboardNotificacao => n !== null,
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -11,15 +61,25 @@ export default async function AdminDashboardPage() {
         <p className="text-muted-foreground text-sm">Bem-vindo, {user.full_name ?? user.email}.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Em construção</CardTitle>
-          <CardDescription>
-            Esta é a base protegida do painel administrativo — os módulos de gestão (alunos, cursos,
-            financeiro...) entram nas próximas fases.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <div>
+        <h2 className="text-muted-foreground mb-3 text-sm font-medium">Resumo geral</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatTile icone={Users} valor={totalAlunos ?? 0} label="Alunos" />
+          <StatTile icone={GraduationCap} valor={cursosAtivos ?? 0} label="Cursos ativos" />
+          <StatTile icone={School} valor={turmasEmAndamento ?? 0} label="Turmas em andamento" />
+        </div>
+      </div>
+
+      {notificacoes.length > 0 && (
+        <div>
+          <h2 className="text-muted-foreground mb-3 text-sm font-medium">Pendências</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {notificacoes.map((notificacao) => (
+              <DashboardBalao key={notificacao.chave} notificacao={notificacao} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

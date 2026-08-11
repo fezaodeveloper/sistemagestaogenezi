@@ -1,4 +1,6 @@
+import { Gift } from "lucide-react";
 import type { createClient } from "@/lib/supabase/server";
+import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -79,4 +81,28 @@ export async function getResgatesAdmin(
     criadoEm: r.created_at,
     alunoNome: r.profiles?.full_name ?? null,
   }));
+}
+
+// count com head:true não traz linha nenhuma, só o total — mais barato
+// que buscar os resgates inteiros só pra contar. /admin/resgates já
+// mostra "Pendentes de entrega" como a primeira seção da página, então
+// o balão não precisa de query param de filtro, só linkar direto.
+export async function getNotificacaoResgatesPendentes(
+  supabase: SupabaseServerClient,
+): Promise<DashboardNotificacao | null> {
+  const { count } = await supabase
+    .from("resgates")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "pendente")
+    .eq("tipo", "premio_fisico");
+
+  if (!count) return null;
+
+  return {
+    chave: "resgates-pendentes",
+    titulo: "Resgates pendentes de entrega",
+    quantidade: count,
+    href: "/admin/resgates",
+    icone: Gift,
+  };
 }
