@@ -10,6 +10,7 @@ import {
 } from "@/lib/matriculas/access";
 import { getCursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
+import { CursoCapa } from "@/components/aluno/curso-capa";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,15 +43,19 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
   }
 
   const [{ data: cursoData }, matriculaId] = await Promise.all([
-    supabase.from("cursos").select("id, nome, tipo").eq("id", cursoId).single(),
+    supabase.from("cursos").select("id, nome, tipo, capa_url").eq("id", cursoId).single(),
     getMatriculaIdAtivaParaCurso(supabase, user.id, cursoId),
   ]);
 
-  const curso = cursoData as { id: string; nome: string; tipo: CursoTipo } | null;
+  const curso = cursoData as { id: string; nome: string; tipo: CursoTipo; capa_url: string | null } | null;
 
   if (!curso) {
     notFound();
   }
+
+  const capaUrl = curso.capa_url
+    ? supabase.storage.from("cursos").getPublicUrl(curso.capa_url).data.publicUrl
+    : null;
 
   const expiracao = matriculaId ? await getExpiracaoMatricula(supabase, matriculaId) : null;
 
@@ -68,7 +73,10 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
             <ArrowLeft />
             Meus Cursos
           </Button>
-          <h1 className="text-2xl font-semibold">{curso.nome}</h1>
+          <div className="flex gap-4">
+            <CursoCapa capaUrl={capaUrl} nome={curso.nome} className="w-28 shrink-0 sm:w-36" />
+            <h1 className="text-2xl font-semibold">{curso.nome}</h1>
+          </div>
         </div>
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
@@ -110,18 +118,23 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
           <ArrowLeft />
           Meus Cursos
         </Button>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{curso.nome}</h1>
-          <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
-        </div>
-        {progresso.total > 0 && (
-          <div className="mt-3 flex items-center gap-3">
-            <Progress value={percentual} className="max-w-xs flex-1" />
-            <span className="text-muted-foreground text-sm">
-              {progresso.concluidas}/{progresso.total} aulas concluídas
-            </span>
+        <div className="flex gap-4">
+          <CursoCapa capaUrl={capaUrl} nome={curso.nome} className="w-28 shrink-0 sm:w-36" />
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold">{curso.nome}</h1>
+              <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
+            </div>
+            {progresso.total > 0 && (
+              <div className="flex items-center gap-3">
+                <Progress value={percentual} className="max-w-xs flex-1" />
+                <span className="text-muted-foreground text-sm">
+                  {progresso.concluidas}/{progresso.total} aulas concluídas
+                </span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {error ? (

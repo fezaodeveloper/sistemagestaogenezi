@@ -19,6 +19,10 @@ export default async function EditarCursoPage({ params }: { params: Promise<{ id
     notFound();
   }
 
+  const capaAtualUrl = curso.capa_url
+    ? supabase.storage.from("cursos").getPublicUrl(curso.capa_url).data.publicUrl
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -26,13 +30,14 @@ export default async function EditarCursoPage({ params }: { params: Promise<{ id
         <p className="text-muted-foreground text-sm">{curso.nome}</p>
       </div>
       <CursoForm
-        action={updateCurso.bind(null, curso.id)}
+        action={updateCurso.bind(null, curso.id, curso.capa_url)}
         defaultValues={{
           nome: curso.nome,
           descricao: curso.descricao ?? undefined,
           tipo: curso.tipo,
           status: curso.status,
         }}
+        capaAtualUrl={capaAtualUrl}
         submitLabel="Salvar alterações"
       />
 

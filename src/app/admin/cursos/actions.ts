@@ -2,16 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomUUID } from "node:crypto";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { cursoFormSchema } from "@/lib/cursos/schema";
 import { cursoResgateFormSchema } from "@/lib/cursos/resgate-schema";
 
+const CURSOS_BUCKET = "cursos";
+
 type CursoFormValuesEcho = { nome: string; descricao: string; tipo: string; status: string };
 
 export type CursoFormState =
   | {
-      errors?: Partial<Record<"nome" | "descricao" | "tipo" | "status", string[]>>;
+      errors?: Partial<Record<"nome" | "descricao" | "tipo" | "status" | "capa", string[]>>;
       error?: string;
       values?: CursoFormValuesEcho;
     }
@@ -35,6 +38,35 @@ function parseCursoForm(formData: FormData) {
   });
 }
 
+const TIPOS_IMAGEM_ACEITOS = ["image/jpeg", "image/png", "image/webp"];
+const TAMANHO_MAXIMO_CAPA = 5 * 1024 * 1024; // 5MB
+
+async function uploadCapa(supabase: Awaited<ReturnType<typeof createClient>>, arquivo: File) {
+  const extensao = arquivo.name.split(".").pop() || "jpg";
+  const path = `${randomUUID()}.${extensao}`;
+  const { error } = await supabase.storage
+    .from(CURSOS_BUCKET)
+    .upload(path, arquivo, { contentType: arquivo.type });
+  return { path: error ? null : path, error };
+}
+
+// Valida o arquivo de capa (se algum foi enviado). Não valida proporção
+// — a exibição sempre recorta em 2:3 via CSS (object-cover), então uma
+// imagem "quase 2:3" ainda fica com aparência consistente; a prévia no
+// formulário já mostra o recorte real antes de confirmar.
+function validarCapa(arquivo: FormDataEntryValue | null): { erro?: string; arquivo?: File } {
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return {};
+  }
+  if (!TIPOS_IMAGEM_ACEITOS.includes(arquivo.type)) {
+    return { erro: "A capa precisa ser uma imagem (JPEG, PNG ou WebP)." };
+  }
+  if (arquivo.size > TAMANHO_MAXIMO_CAPA) {
+    return { erro: "A capa pode ter no máximo 5MB." };
+  }
+  return { arquivo };
+}
+
 export async function createCurso(
   _prevState: CursoFormState,
   formData: FormData,
@@ -46,15 +78,35 @@ export async function createCurso(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
+  const { erro: erroCapa, arquivo: arquivoCapa } = validarCapa(formData.get("capa"));
+  if (erroCapa) {
+    return { errors: { capa: [erroCapa] }, values: echoValues(formData) };
+  }
+
   const supabase = await createClient();
+
+  let capaPath: string | null = null;
+  if (arquivoCapa) {
+    const { path, error: uploadError } = await uploadCapa(supabase, arquivoCapa);
+    if (uploadError || !path) {
+      return {
+        error: "Não foi possível enviar a capa. Tente novamente.",
+        values: echoValues(formData),
+      };
+    }
+    capaPath = path;
+  }
+
   const { error } = await supabase.from("cursos").insert({
     nome: parsed.data.nome,
     descricao: parsed.data.descricao ?? null,
     tipo: parsed.data.tipo,
     status: parsed.data.status,
+    capa_url: capaPath,
   });
 
   if (error) {
+    if (capaPath) await supabase.storage.from(CURSOS_BUCKET).remove([capaPath]);
     return {
       error: "Não foi possível criar o curso. Tente novamente.",
       values: echoValues(formData),
@@ -67,6 +119,7 @@ export async function createCurso(
 
 export async function updateCurso(
   id: string,
+  capaAtual: string | null,
   _prevState: CursoFormState,
   formData: FormData,
 ): Promise<CursoFormState> {
@@ -77,7 +130,27 @@ export async function updateCurso(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
+  const { erro: erroCapa, arquivo: arquivoCapa } = validarCapa(formData.get("capa"));
+  if (erroCapa) {
+    return { errors: { capa: [erroCapa] }, values: echoValues(formData) };
+  }
+
   const supabase = await createClient();
+
+  let capaPath = capaAtual;
+  let novoPath: string | null = null;
+  if (arquivoCapa) {
+    const { path, error: uploadError } = await uploadCapa(supabase, arquivoCapa);
+    if (uploadError || !path) {
+      return {
+        error: "Não foi possível enviar a capa. Tente novamente.",
+        values: echoValues(formData),
+      };
+    }
+    novoPath = path;
+    capaPath = path;
+  }
+
   const { error } = await supabase
     .from("cursos")
     .update({
@@ -85,14 +158,22 @@ export async function updateCurso(
       descricao: parsed.data.descricao ?? null,
       tipo: parsed.data.tipo,
       status: parsed.data.status,
+      capa_url: capaPath,
     })
     .eq("id", id);
 
   if (error) {
+    if (novoPath) await supabase.storage.from(CURSOS_BUCKET).remove([novoPath]);
     return {
       error: "Não foi possível salvar as alterações. Tente novamente.",
       values: echoValues(formData),
     };
+  }
+
+  // Só remove a capa antiga depois que a nova já está salva — evita
+  // ficar sem capa nenhuma se o remove() falhar no meio do caminho.
+  if (novoPath && capaAtual && capaAtual !== novoPath) {
+    await supabase.storage.from(CURSOS_BUCKET).remove([capaAtual]);
   }
 
   revalidatePath("/admin/cursos");

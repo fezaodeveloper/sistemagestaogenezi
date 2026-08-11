@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,22 +34,29 @@ function SubmitButton({ label }: { label: string }) {
 export function CursoForm({
   action,
   defaultValues,
+  capaAtualUrl,
   submitLabel,
 }: {
   action: (state: CursoFormState, formData: FormData) => Promise<CursoFormState>;
   defaultValues?: Partial<CursoFormValues>;
+  capaAtualUrl?: string | null;
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState<CursoFormState, FormData>(action, undefined);
-  // Se a validação falhar, o formulário reaparece com defaultValue do mount
-  // original — sem isso, o usuário perde tudo que digitou. Trocar a key força
-  // o React a remontar os inputs não controlados com os valores ecoados.
   const values = state?.values ?? defaultValues;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(capaAtualUrl ?? null);
+
+  function handleCapaChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const arquivo = e.target.files?.[0];
+    if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(arquivo ? URL.createObjectURL(arquivo) : (capaAtualUrl ?? null));
+  }
 
   return (
     <form
       key={JSON.stringify(state?.values)}
       action={formAction}
+      encType="multipart/form-data"
       className="flex max-w-xl flex-col gap-4"
     >
       <div className="flex flex-col gap-2">
@@ -110,6 +117,37 @@ export function CursoForm({
         {state?.errors?.status && (
           <p role="alert" className="text-destructive text-sm">
             {state.errors.status[0]}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="capa">Capa (pôster, proporção 2:3)</Label>
+        <div className="flex items-start gap-4">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- prévia local (blob:) ou foto já enviada em bucket público
+            <img
+              src={previewUrl}
+              alt="Prévia da capa"
+              className="aspect-2/3 w-24 rounded-lg border object-cover"
+            />
+          ) : (
+            <div className="bg-muted text-muted-foreground flex aspect-2/3 w-24 items-center justify-center rounded-lg border text-xs">
+              Sem capa
+            </div>
+          )}
+          <div className="flex flex-1 flex-col gap-2">
+            <Input id="capa" name="capa" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCapaChange} />
+            <p className="text-muted-foreground text-xs">
+              JPEG, PNG ou WebP, até 5MB. A imagem é recortada automaticamente em 2:3 — a prévia
+              ao lado já mostra o enquadramento final.
+              {capaAtualUrl && " Envie um novo arquivo pra substituir a capa atual."}
+            </p>
+          </div>
+        </div>
+        {state?.errors?.capa && (
+          <p role="alert" className="text-destructive text-sm">
+            {state.errors.capa[0]}
           </p>
         )}
       </div>

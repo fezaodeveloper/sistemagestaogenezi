@@ -8,8 +8,9 @@ import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
+import { CursoCapa } from "@/components/aluno/curso-capa";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 type CursoTipo = (typeof CURSO_TIPOS)[number];
@@ -17,13 +18,14 @@ type CursoTipo = (typeof CURSO_TIPOS)[number];
 type MatriculaCursoRow = {
   status: (typeof MATRICULA_STATUSES)[number];
   data_expiracao: string;
-  turmas: { cursos: { id: string; nome: string; tipo: CursoTipo } | null } | null;
+  turmas: { cursos: { id: string; nome: string; tipo: CursoTipo; capa_url: string | null } | null } | null;
 };
 
 type CursoAluno = {
   id: string;
   nome: string;
   tipo: CursoTipo;
+  capaUrl: string | null;
   emAndamento: boolean;
   dataExpiracao: string;
   expirada: boolean;
@@ -60,6 +62,7 @@ function agruparPorCurso(rows: MatriculaCursoRow[]): CursoAluno[] {
         id: curso.id,
         nome: curso.nome,
         tipo: curso.tipo,
+        capaUrl: curso.capa_url,
         emAndamento,
         dataExpiracao: row.data_expiracao,
         expirada: row.data_expiracao < hoje,
@@ -79,14 +82,21 @@ export default async function AlunoDashboardPage() {
   const [{ data, error }, meusPontos] = await Promise.all([
     supabase
       .from("matriculas")
-      .select("status, data_expiracao, turmas(cursos(id, nome, tipo))")
+      .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url))")
       .eq("aluno_id", user.id)
       .in("status", ["ativa", "concluida"])
       .order("created_at", { ascending: false }),
     getMeusPontos(supabase, user.id),
   ]);
 
-  const cursos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
+  const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
+
+  // Capa fica em bucket público — a URL é montada aqui (não precisa de
+  // signed URL, mesma lógica já usada pra foto de prêmio).
+  const cursos = cursosBrutos?.map((curso) => ({
+    ...curso,
+    capaUrl: curso.capaUrl ? supabase.storage.from("cursos").getPublicUrl(curso.capaUrl).data.publicUrl : null,
+  }));
 
   const progressos: Record<string, CursoProgresso> = {};
   if (cursos && cursos.length > 0) {
@@ -136,7 +146,7 @@ export default async function AlunoDashboardPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {cursos.map((curso) => {
             const progresso = progressos[curso.id];
             const percentual =
@@ -146,17 +156,24 @@ export default async function AlunoDashboardPage() {
 
             return (
               <Link key={curso.id} href={`/aluno/cursos/${curso.id}`}>
-                <Card className="hover:bg-accent/50 transition-colors">
-                  <CardHeader>
-                    <CardTitle>{curso.nome}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
+                <Card className="group hover:bg-accent/50 hover:shadow-lg hover:shadow-foreground/10 gap-0 overflow-hidden py-0 transition duration-300">
+                  <CursoCapa
+                    capaUrl={curso.capaUrl}
+                    nome={curso.nome}
+                    className="w-full rounded-none transition-transform duration-300 ease-out group-hover:scale-105"
+                  />
+                  <CardContent className="flex flex-col gap-2 p-3">
+                    <h3 className="line-clamp-2 text-sm font-medium">{curso.nome}</h3>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {CURSO_TIPO_LABELS[curso.tipo]}
+                      </Badge>
                       {curso.expirada ? (
-                        <Badge variant="destructive">Expirado</Badge>
+                        <Badge variant="destructive" className="text-xs">
+                          Expirado
+                        </Badge>
                       ) : (
-                        <Badge variant={curso.emAndamento ? "default" : "outline"}>
+                        <Badge variant={curso.emAndamento ? "default" : "outline"} className="text-xs">
                           {curso.emAndamento ? "Em andamento" : "Concluído"}
                         </Badge>
                       )}
