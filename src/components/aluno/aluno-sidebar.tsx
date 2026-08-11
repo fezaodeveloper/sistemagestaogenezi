@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, Trophy, User } from "lucide-react";
+import { Coins, GraduationCap, Trophy, User } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
 import {
@@ -52,6 +52,16 @@ export function AlunoSidebar({ user }: { user: CurrentUser }) {
                     <Link href="/aluno/perfil">
                       <User />
                       <span>Meu Perfil</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/aluno/creditos">
+                      <Coins />
+                      <span>Créditos</span>
                     </Link>
                   }
                 />

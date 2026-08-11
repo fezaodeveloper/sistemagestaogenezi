@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { CursoForm } from "@/components/admin/curso-form";
-import { updateCurso } from "@/app/admin/cursos/actions";
+import { CursoResgateForm } from "@/components/admin/curso-resgate-form";
+import { updateCurso, updateCursoResgate } from "@/app/admin/cursos/actions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Curso } from "@/lib/cursos/schema";
 
 export default async function EditarCursoPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +35,19 @@ export default async function EditarCursoPage({ params }: { params: Promise<{ id
         }}
         submitLabel="Salvar alterações"
       />
+
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Resgate com créditos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CursoResgateForm
+            action={updateCursoResgate.bind(null, curso.id)}
+            disponivelInicial={curso.disponivel_para_resgate}
+            custoInicial={curso.custo_creditos}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

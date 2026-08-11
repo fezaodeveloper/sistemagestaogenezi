@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { cursoFormSchema } from "@/lib/cursos/schema";
+import { cursoResgateFormSchema } from "@/lib/cursos/resgate-schema";
 
 type CursoFormValuesEcho = { nome: string; descricao: string; tipo: string; status: string };
 
@@ -111,6 +112,49 @@ export async function deleteCurso(id: string): Promise<{ error?: string }> {
     return { error: "Não foi possível excluir o curso." };
   }
 
+  revalidatePath("/admin/cursos");
+  return {};
+}
+
+export type CursoResgateFormState =
+  | {
+      errors?: Partial<Record<"disponivel_para_resgate" | "custo_creditos", string[]>>;
+      error?: string;
+    }
+  | undefined;
+
+// Formulário separado do CursoForm principal — resgatabilidade só é
+// configurada depois de o curso já existir (ver lib/cursos/resgate-schema).
+export async function updateCursoResgate(
+  id: string,
+  _prevState: CursoResgateFormState,
+  formData: FormData,
+): Promise<CursoResgateFormState> {
+  await requireRole("admin");
+
+  const parsed = cursoResgateFormSchema.safeParse({
+    disponivel_para_resgate: formData.get("disponivel_para_resgate") === "on",
+    custo_creditos: formData.get("custo_creditos"),
+  });
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("cursos")
+    .update({
+      disponivel_para_resgate: parsed.data.disponivel_para_resgate,
+      custo_creditos: parsed.data.disponivel_para_resgate ? parsed.data.custo_creditos : null,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações. Tente novamente." };
+  }
+
+  revalidatePath(`/admin/cursos/${id}/editar`);
   revalidatePath("/admin/cursos");
   return {};
 }

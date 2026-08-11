@@ -37,6 +37,8 @@ export type Curso = {
   descricao: string | null;
   tipo: (typeof CURSO_TIPOS)[number];
   status: (typeof CURSO_STATUSES)[number];
+  disponivel_para_resgate: boolean;
+  custo_creditos: number | null;
   created_by: string;
   created_at: string;
   updated_at: string;
