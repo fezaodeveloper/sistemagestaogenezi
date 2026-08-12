@@ -10,11 +10,19 @@ import { uploadImagem, validarImagem } from "@/lib/storage/validar-imagem";
 
 const CURSOS_BUCKET = "cursos";
 
-type CursoFormValuesEcho = { nome: string; descricao: string; tipo: string; status: string };
+type CursoFormValuesEcho = {
+  nome: string;
+  descricao: string;
+  tipo: string;
+  status: string;
+  carga_horaria_horas: string;
+};
 
 export type CursoFormState =
   | {
-      errors?: Partial<Record<"nome" | "descricao" | "tipo" | "status" | "capa", string[]>>;
+      errors?: Partial<
+        Record<"nome" | "descricao" | "tipo" | "status" | "capa" | "carga_horaria_horas", string[]>
+      >;
       error?: string;
       values?: CursoFormValuesEcho;
     }
@@ -26,6 +34,7 @@ function echoValues(formData: FormData): CursoFormValuesEcho {
     descricao: String(formData.get("descricao") ?? ""),
     tipo: String(formData.get("tipo") ?? ""),
     status: String(formData.get("status") ?? ""),
+    carga_horaria_horas: String(formData.get("carga_horaria_horas") ?? ""),
   };
 }
 
@@ -35,6 +44,7 @@ function parseCursoForm(formData: FormData) {
     descricao: formData.get("descricao") || undefined,
     tipo: formData.get("tipo"),
     status: formData.get("status"),
+    carga_horaria_horas: formData.get("carga_horaria_horas") || undefined,
   });
 }
 
@@ -73,6 +83,7 @@ export async function createCurso(
     descricao: parsed.data.descricao ?? null,
     tipo: parsed.data.tipo,
     status: parsed.data.status,
+    carga_horaria_horas: parsed.data.carga_horaria_horas ?? null,
     capa_url: capaPath,
   });
 
@@ -129,6 +140,7 @@ export async function updateCurso(
       descricao: parsed.data.descricao ?? null,
       tipo: parsed.data.tipo,
       status: parsed.data.status,
+      carga_horaria_horas: parsed.data.carga_horaria_horas ?? null,
       capa_url: capaPath,
     })
     .eq("id", id);

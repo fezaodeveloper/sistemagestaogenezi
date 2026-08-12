@@ -2,6 +2,7 @@ import { Users, GraduationCap, School } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getNotificacaoResgatesPendentes } from "@/lib/creditos/resgates";
+import { getNotificacaoCertificadosPendentes } from "@/lib/certificados/certificados";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import { DashboardBalao } from "@/components/admin/dashboard-balao";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,20 +40,23 @@ export default async function AdminDashboardPage() {
     { count: cursosAtivos },
     { count: turmasEmAndamento },
     notificacaoResgates,
+    notificacaoCertificados,
   ] = await Promise.all([
     supabase.from("alunos").select("*", { count: "exact", head: true }),
     supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
     supabase.from("turmas").select("*", { count: "exact", head: true }).eq("status", "ativa"),
     getNotificacaoResgatesPendentes(supabase),
+    getNotificacaoCertificadosPendentes(supabase),
   ]);
 
-  // Cada domínio (resgates hoje; certificados/mensagens no futuro)
-  // devolve null quando não há nada pendente — só entra aqui quem tem
-  // algo pra mostrar. Adicionar um balão novo é só empilhar mais uma
-  // function nesse array, sem mexer em mais nada nesta página.
-  const notificacoes: DashboardNotificacao[] = [notificacaoResgates].filter(
-    (n): n is DashboardNotificacao => n !== null,
-  );
+  // Cada domínio (resgates, certificados; mensagens no futuro) devolve
+  // null quando não há nada pendente — só entra aqui quem tem algo pra
+  // mostrar. Adicionar um balão novo é só empilhar mais uma function
+  // nesse array, sem mexer em mais nada nesta página.
+  const notificacoes: DashboardNotificacao[] = [
+    notificacaoResgates,
+    notificacaoCertificados,
+  ].filter((n): n is DashboardNotificacao => n !== null);
 
   return (
     <div className="flex flex-col gap-6">

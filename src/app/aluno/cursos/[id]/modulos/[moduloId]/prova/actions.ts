@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getExpiracaoMatricula, getMatriculaIdAtivaParaCurso } from "@/lib/matriculas/access";
+import { verificarEmissaoAutomaticaEad } from "@/lib/certificados/emitir";
 
 export type SubmeterProvaState = { error?: string } | undefined;
 
@@ -97,6 +98,11 @@ export async function submeterTentativaProva(
   if (error) {
     return { error: "Não foi possível enviar suas respostas. Tente novamente." };
   }
+
+  // Mesma lógica da conclusão de aula: se essa tentativa completou os
+  // critérios de um curso EAD, emite o certificado agora, sem ação do
+  // admin (ver aulas/[aulaId]/actions.ts).
+  await verificarEmissaoAutomaticaEad(matriculaId);
 
   redirect(`/aluno/cursos/${cursoId}/modulos/${moduloId}/prova`);
 }

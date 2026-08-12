@@ -4,7 +4,17 @@ import type { createClient } from "@/lib/supabase/server";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export const TIPOS_IMAGEM_ACEITOS = ["image/jpeg", "image/png", "image/webp"];
+// Certificado precisa ser embutido num PDF via pdf-lib, que só sabe ler
+// JPEG e PNG (sem suporte a WebP) — por isso o upload de fundo/logo do
+// template usa esse subconjunto em vez do padrão.
+export const TIPOS_IMAGEM_ACEITOS_PDF = ["image/jpeg", "image/png"];
 const TAMANHO_MAXIMO_PADRAO = 5 * 1024 * 1024; // 5MB
+
+const LABEL_POR_TIPO: Record<string, string> = {
+  "image/jpeg": "JPEG",
+  "image/png": "PNG",
+  "image/webp": "WebP",
+};
 
 // Compartilhado entre cursos/premios/módulos — antes cada action tinha
 // sua própria cópia (a de prêmios nem validava tipo/tamanho de fato, só
@@ -15,12 +25,14 @@ const TAMANHO_MAXIMO_PADRAO = 5 * 1024 * 1024; // 5MB
 export function validarImagem(
   entry: FormDataEntryValue | null,
   maxBytes: number = TAMANHO_MAXIMO_PADRAO,
+  tiposAceitos: string[] = TIPOS_IMAGEM_ACEITOS,
 ): { erro?: string; arquivo?: File } {
   if (!(entry instanceof File) || entry.size === 0) {
     return {};
   }
-  if (!TIPOS_IMAGEM_ACEITOS.includes(entry.type)) {
-    return { erro: "O arquivo precisa ser uma imagem (JPEG, PNG ou WebP)." };
+  if (!tiposAceitos.includes(entry.type)) {
+    const labels = tiposAceitos.map((tipo) => LABEL_POR_TIPO[tipo] ?? tipo).join(", ");
+    return { erro: `O arquivo precisa ser uma imagem (${labels}).` };
   }
   if (entry.size > maxBytes) {
     return { erro: `A imagem pode ter no máximo ${Math.round(maxBytes / (1024 * 1024))}MB.` };

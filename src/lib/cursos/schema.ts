@@ -27,6 +27,11 @@ export const cursoFormSchema = z.object({
     .optional(),
   tipo: z.enum(CURSO_TIPOS, { error: "Selecione o tipo do curso." }),
   status: z.enum(CURSO_STATUSES, { error: "Selecione o status do curso." }),
+  carga_horaria_horas: z.coerce
+    .number({ error: "Informe um número válido." })
+    .int({ error: "A carga horária deve ser um número inteiro." })
+    .positive({ error: "A carga horária deve ser maior que zero." })
+    .optional(),
 });
 
 export type CursoFormValues = z.infer<typeof cursoFormSchema>;
@@ -40,6 +45,7 @@ export type Curso = {
   disponivel_para_resgate: boolean;
   custo_creditos: number | null;
   capa_url: string | null;
+  carga_horaria_horas: number | null;
   created_by: string;
   created_at: string;
   updated_at: string;

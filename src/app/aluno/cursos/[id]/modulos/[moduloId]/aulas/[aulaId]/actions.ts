@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getExpiracaoMatricula, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
+import { verificarEmissaoAutomaticaEad } from "@/lib/certificados/emitir";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -97,6 +98,13 @@ export async function toggleAulaConcluida(
     if (error) {
       return { error: "Não foi possível marcar a aula como concluída. Tente novamente." };
     }
+
+    // Se essa foi a última aula do curso e o curso é EAD, o trigger
+    // avaliar_certificado (disparado pelo insert acima) já deixou um
+    // certificado pendente_emissao pronto — emite na hora, sem o admin
+    // precisar fazer nada. Cursos presenciais/híbridos ficam pendentes
+    // mesmo, esperando emissão manual na fila do admin.
+    await verificarEmissaoAutomaticaEad(matricula.id);
   }
 
   // Revalida a própria página da aula (o pill da prova, no AulaAcoesBar de

@@ -101,6 +101,26 @@ export function CursoForm({
       </div>
 
       <div className="flex flex-col gap-2">
+        <Label htmlFor="carga_horaria_horas">Carga horária (horas)</Label>
+        <Input
+          id="carga_horaria_horas"
+          name="carga_horaria_horas"
+          type="number"
+          min={1}
+          defaultValue={values?.carga_horaria_horas}
+          className="max-w-32"
+        />
+        <p className="text-muted-foreground text-xs">
+          Opcional — usada na variável {"{carga_horaria}"} do certificado de conclusão.
+        </p>
+        {state?.errors?.carga_horaria_horas && (
+          <p role="alert" className="text-destructive text-sm">
+            {state.errors.carga_horaria_horas[0]}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Label htmlFor="status">Status</Label>
         <Select name="status" items={CURSO_STATUS_LABELS} defaultValue={values?.status || "ativo"}>
           <SelectTrigger id="status" className="w-full">

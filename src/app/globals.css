@@ -128,3 +128,13 @@
     @apply font-sans;
   }
 }
+
+/* Editor de texto do certificado (src/components/admin/editor-texto-certificado.tsx):
+   o admin escolhe um tamanho de fonte que vai pro PDF/prévia, mas dentro
+   da própria caixa de edição o texto sempre fica pequeno e legível — o
+   mark de tamanho do Tiptap grava font-size inline por trecho, então só
+   !important sobrepõe. */
+.certificado-editor-texto .ProseMirror,
+.certificado-editor-texto .ProseMirror * {
+  font-size: 13px !important;
+}
