@@ -39,6 +39,7 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
           capacidade_maxima: turma.capacidade_maxima,
           status: turma.status,
           cadencia_dias_semana: turma.cadencia_dias_semana ?? [],
+          horario_aula: turma.horario_aula?.slice(0, 5) ?? "",
         }}
         submitLabel="Salvar alterações"
       />

@@ -14,6 +14,7 @@ type TurmaFormValuesEcho = {
   capacidade_maxima: string;
   status: string;
   cadencia_dias_semana: string[];
+  horario_aula: string;
 };
 
 export type TurmaFormState =
@@ -44,6 +45,7 @@ function echoValues(formData: FormData): TurmaFormValuesEcho {
     capacidade_maxima: String(formData.get("capacidade_maxima") ?? ""),
     status: String(formData.get("status") ?? ""),
     cadencia_dias_semana: formData.getAll("cadencia_dias_semana").map(String),
+    horario_aula: String(formData.get("horario_aula") ?? ""),
   };
 }
 
@@ -56,6 +58,7 @@ function parseTurmaForm(formData: FormData) {
     capacidade_maxima: formData.get("capacidade_maxima"),
     status: formData.get("status"),
     cadencia_dias_semana: formData.getAll("cadencia_dias_semana"),
+    horario_aula: formData.get("horario_aula"),
   });
 }
 
@@ -121,6 +124,7 @@ export async function createTurma(
     capacidade_maxima: parsed.data.capacidade_maxima,
     status: parsed.data.status,
     cadencia_dias_semana: cadencia.cadenciaDiasSemana,
+    horario_aula: parsed.data.horario_aula ?? null,
   });
 
   if (error) {
@@ -171,6 +175,7 @@ export async function updateTurma(
       capacidade_maxima: parsed.data.capacidade_maxima,
       status: parsed.data.status,
       cadencia_dias_semana: cadencia.cadenciaDiasSemana,
+      horario_aula: parsed.data.horario_aula ?? null,
     })
     .eq("id", id);
 

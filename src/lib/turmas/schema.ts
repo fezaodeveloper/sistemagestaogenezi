@@ -49,6 +49,15 @@ export const turmaFormSchema = z
     // curso a partir só do curso_id. Essa regra fica na Server Action, que
     // busca cursos.tipo depois de parsear.
     cadencia_dias_semana: z.array(z.enum(DIAS_SEMANA)).optional(),
+    // Horário único da aula pra essa turma (ex.: "toda terça e quinta às
+    // 19h") — opcional, usado só pra compor {horario_aula} nas mensagens
+    // de WhatsApp (Fase 13). Sem validação de obrigatoriedade condicional
+    // por tipo de curso — mesmo curso EAD pode ter um horário de encontro
+    // ao vivo, por exemplo.
+    horario_aula: z
+      .string()
+      .optional()
+      .transform((v) => (v ? v : undefined)),
   })
   .refine((data) => data.data_fim >= data.data_inicio, {
     error: "A data de término deve ser igual ou posterior à data de início.",
@@ -66,6 +75,7 @@ export type Turma = {
   capacidade_maxima: number;
   status: (typeof TURMA_STATUSES)[number];
   cadencia_dias_semana: (typeof DIAS_SEMANA)[number][] | null;
+  horario_aula: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;

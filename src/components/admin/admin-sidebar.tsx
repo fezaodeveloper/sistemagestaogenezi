@@ -6,6 +6,7 @@ import {
   GraduationCap,
   IdCard,
   LayoutDashboard,
+  MessageCircle,
   Settings,
   Users,
 } from "lucide-react";
@@ -101,6 +102,16 @@ export function AdminSidebar({ user }: { user: CurrentUser }) {
                     <Link href="/admin/certificados">
                       <FileBadge />
                       <span>Certificados</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/admin/mensagens">
+                      <MessageCircle />
+                      <span>Mensagens</span>
                     </Link>
                   }
                 />

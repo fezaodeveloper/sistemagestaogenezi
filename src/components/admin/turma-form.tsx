@@ -138,6 +138,20 @@ export function TurmaForm({
       </div>
 
       <div className="flex flex-col gap-2">
+        <Label htmlFor="horario_aula">Horário da aula</Label>
+        <Input
+          id="horario_aula"
+          name="horario_aula"
+          type="time"
+          defaultValue={values?.horario_aula ?? ""}
+          className="w-32"
+        />
+        <p className="text-muted-foreground text-sm">
+          Opcional. Usado nas mensagens automáticas de WhatsApp (matrícula criada e lembrete de aula).
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Label htmlFor="capacidade_maxima">Capacidade máxima</Label>
         <Input
           id="capacidade_maxima"

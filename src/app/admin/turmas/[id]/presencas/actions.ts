@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { presencaRowSchema } from "@/lib/presencas/schema";
+import { enviarMensagemFalta } from "@/lib/mensagens/mensagens";
 
 export type RegistrarPresencasState = { error?: string } | undefined;
 
@@ -20,7 +21,7 @@ export async function registrarPresencas(
   _prevState: RegistrarPresencasState,
   formData: FormData,
 ): Promise<RegistrarPresencasState> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
 
   if (!data) {
     return { error: "Informe a data da chamada." };
@@ -30,15 +31,20 @@ export async function registrarPresencas(
 
   // Revalida aula + a consistência aula (via módulo) .curso_id = turma.curso_id
   // — decisão de produto: só na aplicação, sem trigger no banco (ver CLAUDE.md).
-  const [{ data: turma }, { data: aulaData }, { data: matriculasData }] = await Promise.all([
-    supabase.from("turmas").select("id, curso_id").eq("id", turmaId).single(),
-    supabase.from("aulas").select("id, modulos(curso_id)").eq("id", aulaId).single(),
-    supabase
-      .from("matriculas")
-      .select("id, alunos(email, profiles!alunos_id_fkey(full_name))")
-      .eq("turma_id", turmaId)
-      .eq("status", "ativa"),
-  ]);
+  const [{ data: turma }, { data: aulaData }, { data: matriculasData }, { data: presencasAtuais }] =
+    await Promise.all([
+      supabase.from("turmas").select("id, curso_id").eq("id", turmaId).single(),
+      supabase.from("aulas").select("id, modulos(curso_id)").eq("id", aulaId).single(),
+      supabase
+        .from("matriculas")
+        .select("id, alunos(email, profiles!alunos_id_fkey(full_name))")
+        .eq("turma_id", turmaId)
+        .eq("status", "ativa"),
+      // Estado ANTES desta gravação, pra depois só disparar "sentimos sua
+      // falta" quando for uma falta nova — sem isso, reabrir a chamada de um
+      // dia e salvar de novo reenviaria a mensagem toda vez.
+      supabase.from("presencas").select("matricula_id, status").eq("aula_id", aulaId).eq("data", data),
+    ]);
   const aula = aulaData as unknown as { id: string; modulos: { curso_id: string } | null } | null;
 
   if (!turma || !aula || aula.modulos?.curso_id !== turma.curso_id) {
@@ -101,6 +107,13 @@ export async function registrarPresencas(
   if (error) {
     return { error: "Não foi possível salvar a chamada. Tente novamente." };
   }
+
+  const statusAnterior = new Map((presencasAtuais ?? []).map((p) => [p.matricula_id, p.status]));
+  const faltasNovas = matriculaIds.filter(
+    (matriculaId, i) => statuses[i] === "falta" && statusAnterior.get(matriculaId) !== "falta",
+  );
+  // Best-effort, nunca bloqueia a chamada (já salva com sucesso acima).
+  await Promise.all(faltasNovas.map((matriculaId) => enviarMensagemFalta(matriculaId, aulaId, data, user.id)));
 
   revalidatePath(`/admin/turmas/${turmaId}/presencas`);
   redirect(`/admin/turmas/${turmaId}/presencas`);
