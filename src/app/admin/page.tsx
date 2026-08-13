@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getNotificacaoResgatesPendentes } from "@/lib/creditos/resgates";
 import { getNotificacaoCertificadosPendentes } from "@/lib/certificados/certificados";
 import { getNotificacaoMensagensFalha } from "@/lib/mensagens/mensagens";
+import { getNotificacaoLeadsNovos } from "@/lib/leads/leads";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import { DashboardBalao } from "@/components/admin/dashboard-balao";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +44,7 @@ export default async function AdminDashboardPage() {
     notificacaoResgates,
     notificacaoCertificados,
     notificacaoMensagens,
+    notificacaoLeads,
   ] = await Promise.all([
     supabase.from("alunos").select("*", { count: "exact", head: true }),
     supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
@@ -50,16 +52,18 @@ export default async function AdminDashboardPage() {
     getNotificacaoResgatesPendentes(supabase),
     getNotificacaoCertificadosPendentes(supabase),
     getNotificacaoMensagensFalha(supabase),
+    getNotificacaoLeadsNovos(supabase),
   ]);
 
-  // Cada domínio (resgates, certificados, mensagens) devolve null quando
-  // não há nada pendente — só entra aqui quem tem algo pra mostrar.
+  // Cada domínio (resgates, certificados, mensagens, leads) devolve null
+  // quando não há nada pendente — só entra aqui quem tem algo pra mostrar.
   // Adicionar um balão novo é só empilhar mais uma function nesse array,
   // sem mexer em mais nada nesta página.
   const notificacoes: DashboardNotificacao[] = [
     notificacaoResgates,
     notificacaoCertificados,
     notificacaoMensagens,
+    notificacaoLeads,
   ].filter((n): n is DashboardNotificacao => n !== null);
 
   return (

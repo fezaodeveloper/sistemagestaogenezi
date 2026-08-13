@@ -13,7 +13,7 @@ export default async function WhatsappConfiguracaoPage() {
     supabase
       .from("whatsapp_config")
       .select(
-        "evolution_api_url, evolution_instance_name, ativo, template_matricula_criada, template_lembrete_aula, template_falta",
+        "evolution_api_url, evolution_instance_name, ativo, template_matricula_criada, template_lembrete_aula, template_falta, template_lead_recontato",
       )
       .eq("id", true)
       .single(),
@@ -26,7 +26,7 @@ export default async function WhatsappConfiguracaoPage() {
       <div>
         <h1 className="text-2xl font-semibold">Configuração do WhatsApp</h1>
         <p className="text-muted-foreground text-sm">
-          Conexão com a Evolution API e os modelos das 3 mensagens automáticas.
+          Conexão com a Evolution API e os modelos das mensagens automáticas.
         </p>
       </div>
       <WhatsappConfigForm
@@ -38,6 +38,7 @@ export default async function WhatsappConfiguracaoPage() {
           template_matricula_criada: config?.template_matricula_criada ?? "",
           template_lembrete_aula: config?.template_lembrete_aula ?? "",
           template_falta: config?.template_falta ?? "",
+          template_lead_recontato: config?.template_lead_recontato ?? "",
         }}
         chaveConfigurada={chaveConfigurada}
       />

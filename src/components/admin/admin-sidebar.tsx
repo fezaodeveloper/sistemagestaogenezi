@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   MessageCircle,
   Settings,
+  UserPlus,
   Users,
 } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
@@ -102,6 +103,16 @@ export function AdminSidebar({ user }: { user: CurrentUser }) {
                     <Link href="/admin/certificados">
                       <FileBadge />
                       <span>Certificados</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/admin/leads">
+                      <UserPlus />
+                      <span>Leads</span>
                     </Link>
                   }
                 />

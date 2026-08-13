@@ -54,7 +54,7 @@ export function TabelaMensagensEnviadas({ itens }: { itens: MensagemEnviadaComCo
             <TableRow>
               <TableHead>Data</TableHead>
               <TableHead>Tipo</TableHead>
-              <TableHead>Aluno</TableHead>
+              <TableHead>Destinatário</TableHead>
               <TableHead>Curso</TableHead>
               <TableHead>Telefone</TableHead>
               <TableHead>Status</TableHead>
@@ -67,7 +67,7 @@ export function TabelaMensagensEnviadas({ itens }: { itens: MensagemEnviadaComCo
               <TableRow key={m.id}>
                 <TableCell className="whitespace-nowrap">{formatDateTimeBR(m.created_at)}</TableCell>
                 <TableCell>{MENSAGEM_TIPO_LABELS[m.tipo]}</TableCell>
-                <TableCell className="font-medium">{m.alunoNome ?? "—"}</TableCell>
+                <TableCell className="font-medium">{m.destinatarioNome ?? "—"}</TableCell>
                 <TableCell>{m.nomeCurso ?? "—"}</TableCell>
                 <TableCell>{m.telefone_destino}</TableCell>
                 <TableCell>

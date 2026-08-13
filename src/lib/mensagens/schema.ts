@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-export const MENSAGEM_TIPOS = ["matricula_criada", "lembrete_aula", "falta"] as const;
+export const MENSAGEM_TIPOS = ["matricula_criada", "lembrete_aula", "falta", "lead_recontato"] as const;
 export type MensagemTipo = (typeof MENSAGEM_TIPOS)[number];
 
 export const MENSAGEM_TIPO_LABELS: Record<MensagemTipo, string> = {
   matricula_criada: "Matrícula criada",
   lembrete_aula: "Lembrete de aula",
   falta: "Sentimos sua falta",
+  lead_recontato: "Recontato de lead",
 };
 
 export const MENSAGEM_STATUSES = ["pendente", "enviado", "falha"] as const;
@@ -29,14 +30,19 @@ export type WhatsappConfig = {
   template_matricula_criada: string;
   template_lembrete_aula: string;
   template_falta: string;
+  template_lead_recontato: string;
   updated_by: string | null;
   updated_at: string;
 };
 
+// matricula_id e lead_id são mutuamente exclusivos (ver constraint na
+// migration) — os 3 tipos originais da Fase 13 sempre têm matricula_id;
+// lead_recontato sempre tem lead_id.
 export type MensagemEnviada = {
   id: string;
   tipo: MensagemTipo;
-  matricula_id: string;
+  matricula_id: string | null;
+  lead_id: string | null;
   aula_id: string | null;
   telefone_destino: string;
   mensagem_texto: string;
@@ -81,6 +87,11 @@ export const whatsappConfigFormSchema = z.object({
     .string({ error: "Informe o texto da mensagem de falta." })
     .trim()
     .min(1, { error: "Informe o texto da mensagem de falta." })
+    .max(1000),
+  template_lead_recontato: z
+    .string({ error: "Informe o texto da mensagem de recontato." })
+    .trim()
+    .min(1, { error: "Informe o texto da mensagem de recontato." })
     .max(1000),
 });
 

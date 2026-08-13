@@ -31,6 +31,7 @@ export function WhatsappConfigForm({
     template_matricula_criada: string;
     template_lembrete_aula: string;
     template_falta: string;
+    template_lead_recontato: string;
   };
   chaveConfigurada: boolean;
 }) {
@@ -98,6 +99,11 @@ export function WhatsappConfigForm({
           Variáveis disponíveis: {"{nome_aluno}"}, {"{nome_curso}"}, {"{nome_turma}"}, {"{data_aula}"},{" "}
           {"{horario_aula}"} (nome_turma só na mensagem de matrícula criada).
         </p>
+        <p className="text-muted-foreground text-sm">
+          Recontato de lead usa variáveis próprias: {"{nome_lead}"}, {"{nome_curso}"}, {"{nome_turma}"},{" "}
+          {"{data_inicio_turma}"} (as duas últimas só têm valor real quando disparado por uma turma nova —
+          no envio manual, aparecem como &quot;a definir&quot;).
+        </p>
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="template_matricula_criada">Matrícula criada</Label>
@@ -135,6 +141,21 @@ export function WhatsappConfigForm({
           {state?.errors?.template_falta && (
             <p role="alert" className="text-destructive text-sm">
               {state.errors.template_falta[0]}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="template_lead_recontato">Recontato de lead</Label>
+          <Textarea
+            id="template_lead_recontato"
+            name="template_lead_recontato"
+            rows={3}
+            defaultValue={values.template_lead_recontato}
+          />
+          {state?.errors?.template_lead_recontato && (
+            <p role="alert" className="text-destructive text-sm">
+              {state.errors.template_lead_recontato[0]}
             </p>
           )}
         </div>

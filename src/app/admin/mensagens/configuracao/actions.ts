@@ -12,6 +12,7 @@ type ConfigFormValuesEcho = {
   template_matricula_criada: string;
   template_lembrete_aula: string;
   template_falta: string;
+  template_lead_recontato: string;
 };
 
 export type WhatsappConfigFormState =
@@ -22,7 +23,8 @@ export type WhatsappConfigFormState =
           | "evolution_instance_name"
           | "template_matricula_criada"
           | "template_lembrete_aula"
-          | "template_falta",
+          | "template_falta"
+          | "template_lead_recontato",
           string[]
         >
       >;
@@ -40,6 +42,7 @@ function echoValues(formData: FormData): ConfigFormValuesEcho {
     template_matricula_criada: String(formData.get("template_matricula_criada") ?? ""),
     template_lembrete_aula: String(formData.get("template_lembrete_aula") ?? ""),
     template_falta: String(formData.get("template_falta") ?? ""),
+    template_lead_recontato: String(formData.get("template_lead_recontato") ?? ""),
   };
 }
 
@@ -57,6 +60,7 @@ export async function updateWhatsappConfig(
     template_matricula_criada: formData.get("template_matricula_criada"),
     template_lembrete_aula: formData.get("template_lembrete_aula"),
     template_falta: formData.get("template_falta"),
+    template_lead_recontato: formData.get("template_lead_recontato"),
   });
 
   if (!parsed.success) {
@@ -79,6 +83,7 @@ export async function updateWhatsappConfig(
     template_matricula_criada: parsed.data.template_matricula_criada,
     template_lembrete_aula: parsed.data.template_lembrete_aula,
     template_falta: parsed.data.template_falta,
+    template_lead_recontato: parsed.data.template_lead_recontato,
     updated_by: user.id,
   };
   // Campo vazio = "não alterar a chave atual" (a tela nunca mostra o valor

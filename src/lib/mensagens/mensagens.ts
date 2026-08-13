@@ -30,7 +30,8 @@ type ContextoAluno = {
 // aprovado). Chamado só pelas três funções públicas abaixo.
 async function enviarMensagem(params: {
   tipo: MensagemTipo;
-  matriculaId: string;
+  matriculaId: string | null;
+  leadId: string | null;
   aulaId: string | null;
   telefoneAlunoBruto: string;
   variaveis: Record<string, string>;
@@ -42,7 +43,7 @@ async function enviarMensagem(params: {
     const { data: config } = await admin
       .from("whatsapp_config")
       .select(
-        "ativo, evolution_api_url, evolution_instance_name, evolution_api_key, template_matricula_criada, template_lembrete_aula, template_falta",
+        "ativo, evolution_api_url, evolution_instance_name, evolution_api_key, template_matricula_criada, template_lembrete_aula, template_falta, template_lead_recontato",
       )
       .eq("id", true)
       .single();
@@ -54,6 +55,7 @@ async function enviarMensagem(params: {
       matricula_criada: config.template_matricula_criada,
       lembrete_aula: config.template_lembrete_aula,
       falta: config.template_falta,
+      lead_recontato: config.template_lead_recontato,
     }[params.tipo];
     const mensagemTexto = substituirVariaveis(template, params.variaveis);
 
@@ -61,6 +63,7 @@ async function enviarMensagem(params: {
       admin.from("mensagens_enviadas").insert({
         tipo: params.tipo,
         matricula_id: params.matriculaId,
+        lead_id: params.leadId,
         aula_id: params.aulaId,
         telefone_destino: telefoneDestino,
         mensagem_texto: mensagemTexto,
@@ -132,6 +135,7 @@ export async function enviarMensagemMatriculaCriada(
     await enviarMensagem({
       tipo: "matricula_criada",
       matriculaId,
+      leadId: null,
       aulaId: null,
       telefoneAlunoBruto: matricula.alunos.telefone,
       criadoPor,
@@ -175,6 +179,7 @@ export async function enviarMensagemFalta(
     await enviarMensagem({
       tipo: "falta",
       matriculaId,
+      leadId: null,
       aulaId,
       telefoneAlunoBruto: matricula.alunos.telefone,
       criadoPor,
@@ -216,6 +221,7 @@ export async function enviarMensagemLembreteAula(
     await enviarMensagem({
       tipo: "lembrete_aula",
       matriculaId,
+      leadId: null,
       aulaId,
       telefoneAlunoBruto: matricula.alunos.telefone,
       criadoPor: null,
@@ -228,6 +234,48 @@ export async function enviarMensagemLembreteAula(
     });
   } catch {
     // idem.
+  }
+}
+
+// Disparada tanto pelo envio manual (admin seleciona leads em /admin/leads
+// e clica "Enviar recontato") quanto pelo automático (createTurma, pra
+// leads novo/contatado do curso da turma recém-criada) — em ambos os
+// casos o disparo em si é sempre uma decisão explícita do admin (criar a
+// turma, ou clicar o botão), nunca um job agendado.
+export async function enviarMensagemLeadRecontato(
+  leadId: string,
+  criadoPor: string | null,
+  contexto?: { nomeTurma: string; dataInicioTurma: string },
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+
+    const { data } = await admin
+      .from("leads")
+      .select("nome, telefone, cursos(nome)")
+      .eq("id", leadId)
+      .single();
+
+    const lead = data as unknown as { nome: string; telefone: string; cursos: { nome: string } | null } | null;
+    if (!lead) return;
+
+    await enviarMensagem({
+      tipo: "lead_recontato",
+      matriculaId: null,
+      leadId,
+      aulaId: null,
+      telefoneAlunoBruto: lead.telefone,
+      criadoPor,
+      variaveis: {
+        nome_lead: lead.nome,
+        nome_curso: lead.cursos?.nome ?? "",
+        nome_turma: contexto?.nomeTurma ?? "a definir",
+        data_inicio_turma: contexto?.dataInicioTurma ? formatarDataBR(contexto.dataInicioTurma) : "a definir",
+      },
+    });
+  } catch {
+    // idem: a criação da turma ou o clique do admin já foram bem-sucedidos
+    // antes desta chamada, nunca devem ser desfeitos por causa disso.
   }
 }
 
@@ -287,8 +335,11 @@ export async function getChaveEvolutionConfigurada(): Promise<boolean> {
   return !!data?.evolution_api_key;
 }
 
+// destinatarioNome: nome do aluno (via matricula_id) ou do lead (via
+// lead_id) — os dois tipos de destinatário aparecem juntos na mesma
+// tela/histórico, já que compartilham a mesma tabela de log.
 export type MensagemEnviadaComContexto = MensagemEnviada & {
-  alunoNome: string | null;
+  destinatarioNome: string | null;
   nomeCurso: string | null;
 };
 
@@ -298,7 +349,7 @@ export async function getMensagensEnviadas(
   const { data } = await supabase
     .from("mensagens_enviadas")
     .select(
-      "id, tipo, matricula_id, aula_id, telefone_destino, mensagem_texto, status, erro_detalhe, created_at, matriculas(alunos(profiles!alunos_id_fkey(full_name)), turmas(cursos(nome)))",
+      "id, tipo, matricula_id, lead_id, aula_id, telefone_destino, mensagem_texto, status, erro_detalhe, created_at, matriculas(alunos(profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))), leads(nome, cursos(nome))",
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -309,11 +360,12 @@ export async function getMensagensEnviadas(
         alunos: { profiles: { full_name: string | null } | null } | null;
         turmas: { cursos: { nome: string } | null } | null;
       } | null;
+      leads: { nome: string; cursos: { nome: string } | null } | null;
     }
   >).map((m) => ({
     ...m,
-    alunoNome: m.matriculas?.alunos?.profiles?.full_name ?? null,
-    nomeCurso: m.matriculas?.turmas?.cursos?.nome ?? null,
+    destinatarioNome: m.matriculas?.alunos?.profiles?.full_name ?? m.leads?.nome ?? null,
+    nomeCurso: m.matriculas?.turmas?.cursos?.nome ?? m.leads?.cursos?.nome ?? null,
   }));
 }
 

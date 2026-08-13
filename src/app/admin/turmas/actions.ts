@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { turmaFormSchema } from "@/lib/turmas/schema";
+import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
 
 type TurmaFormValuesEcho = {
   curso_id: string;
@@ -94,7 +95,7 @@ export async function createTurma(
   _prevState: TurmaFormState,
   formData: FormData,
 ): Promise<TurmaFormState> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
 
   const parsed = parseTurmaForm(formData);
   if (!parsed.success) {
@@ -133,6 +134,24 @@ export async function createTurma(
       values: echoValues(formData),
     };
   }
+
+  // Campanha automática de recontato: leads em aberto (novo/contatado)
+  // interessados nesse curso são avisados que uma turma nova abriu.
+  // Best-effort, nunca bloqueia a criação da turma (já concluída acima).
+  const { data: leadsInteressados } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("curso_id", parsed.data.curso_id)
+    .in("status", ["novo", "contatado"]);
+
+  await Promise.all(
+    (leadsInteressados ?? []).map((lead) =>
+      enviarMensagemLeadRecontato(lead.id, user.id, {
+        nomeTurma: parsed.data.nome,
+        dataInicioTurma: parsed.data.data_inicio,
+      }),
+    ),
+  );
 
   revalidatePath("/admin/turmas");
   redirect("/admin/turmas");
