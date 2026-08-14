@@ -68,6 +68,23 @@ export async function getMatriculaAtivaComTurma(
   return data ? { id: data.id, turmaId: data.turma_id } : null;
 }
 
+// Presencial/híbrido = tipo <> 'ead' — mesmo critério usado pro streak de
+// gamificação e agora pro chat interno (Fase 11). Movida de
+// lib/gamificacao/streak.ts pra cá, lugar mais neutro já que passou a ter
+// mais de um consumidor fora do domínio de gamificação.
+export async function alunoTemCursoPresencialOuHibrido(
+  supabase: SupabaseServerClient,
+  alunoId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("matriculas")
+    .select("turmas(cursos(tipo))")
+    .eq("aluno_id", alunoId);
+
+  const rows = (data ?? []) as unknown as { turmas: { cursos: { tipo: string } | null } | null }[];
+  return rows.some((row) => row.turmas?.cursos && row.turmas.cursos.tipo !== "ead");
+}
+
 export type ExpiracaoMatricula = { expirada: boolean; dataExpiracao: string };
 
 // O booleano vem de uma function SQL (matricula_expirada), não de comparar

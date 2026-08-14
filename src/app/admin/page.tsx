@@ -5,6 +5,7 @@ import { getNotificacaoResgatesPendentes } from "@/lib/creditos/resgates";
 import { getNotificacaoCertificadosPendentes } from "@/lib/certificados/certificados";
 import { getNotificacaoMensagensFalha } from "@/lib/mensagens/mensagens";
 import { getNotificacaoLeadsNovos } from "@/lib/leads/leads";
+import { getNotificacaoConversasNaoLidas } from "@/lib/chat/chat";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import { DashboardBalao } from "@/components/admin/dashboard-balao";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +46,7 @@ export default async function AdminDashboardPage() {
     notificacaoCertificados,
     notificacaoMensagens,
     notificacaoLeads,
+    notificacaoConversas,
   ] = await Promise.all([
     supabase.from("alunos").select("*", { count: "exact", head: true }),
     supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
@@ -53,17 +55,19 @@ export default async function AdminDashboardPage() {
     getNotificacaoCertificadosPendentes(supabase),
     getNotificacaoMensagensFalha(supabase),
     getNotificacaoLeadsNovos(supabase),
+    getNotificacaoConversasNaoLidas(supabase),
   ]);
 
-  // Cada domínio (resgates, certificados, mensagens, leads) devolve null
-  // quando não há nada pendente — só entra aqui quem tem algo pra mostrar.
-  // Adicionar um balão novo é só empilhar mais uma function nesse array,
-  // sem mexer em mais nada nesta página.
+  // Cada domínio (resgates, certificados, mensagens, leads, chat) devolve
+  // null quando não há nada pendente — só entra aqui quem tem algo pra
+  // mostrar. Adicionar um balão novo é só empilhar mais uma function
+  // nesse array, sem mexer em mais nada nesta página.
   const notificacoes: DashboardNotificacao[] = [
     notificacaoResgates,
     notificacaoCertificados,
     notificacaoMensagens,
     notificacaoLeads,
+    notificacaoConversas,
   ].filter((n): n is DashboardNotificacao => n !== null);
 
   return (

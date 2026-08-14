@@ -7,12 +7,16 @@ import {
   IdCard,
   LayoutDashboard,
   MessageCircle,
+  MessagesSquare,
+  Presentation,
   Settings,
   UserPlus,
   Users,
 } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
+import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
+import { getContagemNaoLidasAdminAction } from "@/lib/chat/badge-actions";
 import {
   Sidebar,
   SidebarContent,
@@ -26,7 +30,13 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AdminSidebar({ user }: { user: CurrentUser }) {
+export function AdminSidebar({
+  user,
+  conversasNaoLidas,
+}: {
+  user: CurrentUser;
+  conversasNaoLidas: number;
+}) {
   return (
     <Sidebar>
       <SidebarHeader>
@@ -113,6 +123,31 @@ export function AdminSidebar({ user }: { user: CurrentUser }) {
                     <Link href="/admin/leads">
                       <UserPlus />
                       <span>Leads</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/admin/chat">
+                      <MessagesSquare />
+                      <span>Chat</span>
+                    </Link>
+                  }
+                />
+                <BadgeChatNaoLidas
+                  key={conversasNaoLidas}
+                  initialCount={conversasNaoLidas}
+                  refetchAction={getContagemNaoLidasAdminAction}
+                />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/admin/professor">
+                      <Presentation />
+                      <span>Painel do Professor</span>
                     </Link>
                   }
                 />

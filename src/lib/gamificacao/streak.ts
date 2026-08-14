@@ -12,18 +12,3 @@ export async function getStreakAluno(
   const { data } = await supabase.rpc("calcular_streak_aluno", { p_aluno_id: alunoId });
   return (data as number | null) ?? 0;
 }
-
-// Streak só se aplica a curso presencial/híbrido — usado pra decidir se
-// o card de streak aparece na tela do aluno.
-export async function alunoTemCursoPresencialOuHibrido(
-  supabase: SupabaseServerClient,
-  alunoId: string,
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("matriculas")
-    .select("turmas(cursos(tipo))")
-    .eq("aluno_id", alunoId);
-
-  const rows = (data ?? []) as unknown as { turmas: { cursos: { tipo: string } | null } | null }[];
-  return rows.some((row) => row.turmas?.cursos && row.turmas.cursos.tipo !== "ead");
-}

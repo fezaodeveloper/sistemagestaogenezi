@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
+import { getContagemConversasNaoLidasAdmin } from "@/lib/chat/chat";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -8,11 +10,13 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 // (decisão de produto — ver CLAUDE.md).
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("admin");
+  const supabase = await createClient();
+  const conversasNaoLidas = await getContagemConversasNaoLidasAdmin(supabase);
 
   return (
     <div className="bg-background text-foreground min-h-svh">
       <SidebarProvider>
-        <AdminSidebar user={user} />
+        <AdminSidebar user={user} conversasNaoLidas={conversasNaoLidas} />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger />

@@ -1,7 +1,8 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getCatalogoBadges, getMeusBadges } from "@/lib/gamificacao/badges";
-import { alunoTemCursoPresencialOuHibrido, getStreakAluno } from "@/lib/gamificacao/streak";
+import { getStreakAluno } from "@/lib/gamificacao/streak";
+import { alunoTemCursoPresencialOuHibrido } from "@/lib/matriculas/access";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AvatarPicker } from "@/components/aluno/avatar-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

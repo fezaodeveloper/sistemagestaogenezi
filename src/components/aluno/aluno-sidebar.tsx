@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { Coins, FileBadge, GraduationCap, Trophy, User } from "lucide-react";
+import { Coins, FileBadge, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
+import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
+import { getContagemNaoLidasAlunoAction } from "@/lib/chat/badge-actions";
 import {
   Sidebar,
   SidebarContent,
@@ -15,7 +17,15 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AlunoSidebar({ user }: { user: CurrentUser }) {
+export function AlunoSidebar({
+  user,
+  conversaId,
+  mensagensNaoLidas,
+}: {
+  user: CurrentUser;
+  conversaId: string | null;
+  mensagensNaoLidas: number;
+}) {
   return (
     <Sidebar>
       <SidebarHeader>
@@ -35,6 +45,24 @@ export function AlunoSidebar({ user }: { user: CurrentUser }) {
                     </Link>
                   }
                 />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/aluno/mensagens">
+                      <MessagesSquare />
+                      <span>Mensagens</span>
+                    </Link>
+                  }
+                />
+                {conversaId && (
+                  <BadgeChatNaoLidas
+                    key={mensagensNaoLidas}
+                    initialCount={mensagensNaoLidas}
+                    realtimeFilter={`conversa_id=eq.${conversaId}`}
+                    refetchAction={getContagemNaoLidasAlunoAction.bind(null, conversaId)}
+                  />
+                )}
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
