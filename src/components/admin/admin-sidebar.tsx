@@ -157,7 +157,7 @@ export function AdminSidebar({
                   render={
                     <Link href="/admin/mensagens">
                       <MessageCircle />
-                      <span>Mensagens</span>
+                      <span>Mensagens Automáticas</span>
                     </Link>
                   }
                 />
