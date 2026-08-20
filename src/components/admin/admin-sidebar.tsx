@@ -1,33 +1,12 @@
-import Link from "next/link";
-import {
-  Award,
-  FileBadge,
-  Gift,
-  GraduationCap,
-  IdCard,
-  LayoutDashboard,
-  MessageCircle,
-  MessagesSquare,
-  Presentation,
-  Settings,
-  UserPlus,
-  Users,
-} from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
-import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 import { getContagemNaoLidasAdminAction } from "@/lib/chat/badge-actions";
+import { AdminNavGroups } from "@/components/admin/admin-nav-groups";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
 export function AdminSidebar({
@@ -40,141 +19,28 @@ export function AdminSidebar({
   return (
     <Sidebar>
       <SidebarHeader>
-        <span className="px-2 py-1 text-sm font-semibold">Genezi — Gestão</span>
+        <div className="flex items-center gap-2.5 px-2 py-1.5">
+          <div
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg font-mono text-[17px] font-bold text-white"
+            style={{ background: "linear-gradient(135deg, #22D3EE, #1565C0)" }}
+          >
+            G
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold tracking-wide text-[#7DD3FC]">
+              GÊNEZI
+            </div>
+            <div className="truncate text-[10.5px] text-sidebar-foreground/60">
+              Educação Profissional
+            </div>
+          </div>
+        </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Geral</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin">
-                      <LayoutDashboard />
-                      <span>Painel</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/cursos">
-                      <GraduationCap />
-                      <span>Cursos</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/turmas">
-                      <Users />
-                      <span>Turmas</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/alunos">
-                      <IdCard />
-                      <span>Alunos</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/premios">
-                      <Gift />
-                      <span>Prêmios</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/resgates">
-                      <Award />
-                      <span>Resgates</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/certificados">
-                      <FileBadge />
-                      <span>Certificados</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/leads">
-                      <UserPlus />
-                      <span>Leads</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/chat">
-                      <MessagesSquare />
-                      <span>Chat</span>
-                    </Link>
-                  }
-                />
-                <BadgeChatNaoLidas
-                  key={conversasNaoLidas}
-                  initialCount={conversasNaoLidas}
-                  refetchAction={getContagemNaoLidasAdminAction}
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/professor">
-                      <Presentation />
-                      <span>Painel do Professor</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/mensagens">
-                      <MessageCircle />
-                      <span>Mensagens Automáticas</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/admin/configuracoes">
-                      <Settings />
-                      <span>Configurações</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <AdminNavGroups
+          conversasNaoLidas={conversasNaoLidas}
+          refetchAction={getContagemNaoLidasAdminAction}
+        />
       </SidebarContent>
       <SidebarFooter>
         <UserMenu user={user} />

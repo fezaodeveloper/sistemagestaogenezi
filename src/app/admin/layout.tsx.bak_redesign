@@ -6,7 +6,7 @@ import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
-// Área do gestor: tema dark Genezi (redesign aprovado - design-reference v3)
+// Área do gestor: tema claro forçado, independente de preferência do sistema
 // (decisão de produto — ver CLAUDE.md).
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("admin");
@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const conversasNaoLidas = await getContagemConversasNaoLidasAdmin(supabase);
 
   return (
-    <div className="admin-dark bg-background text-foreground min-h-svh">
+    <div className="bg-background text-foreground min-h-svh">
       <SidebarProvider>
         <AdminSidebar user={user} conversasNaoLidas={conversasNaoLidas} />
         <SidebarInset>
