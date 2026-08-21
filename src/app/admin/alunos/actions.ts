@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
@@ -12,6 +11,7 @@ type AlunoFieldErrors = Partial<
   Record<
     | "full_name"
     | "email"
+    | "senha_temporaria"
     | "cpf"
     | "telefone"
     | "endereco"
@@ -35,7 +35,6 @@ type AlunoFieldErrors = Partial<
 
 type AlunoFormValuesEcho = {
   full_name: string;
-  email: string;
   cpf: string;
   telefone: string;
   endereco: string;
@@ -55,20 +54,25 @@ type AlunoFormValuesEcho = {
   responsavel_complemento: string;
 };
 
+type AlunoCreateValuesEcho = AlunoFormValuesEcho & { email: string; senha_temporaria: string };
+
 export type AlunoFormState =
-  | { errors?: AlunoFieldErrors; error?: string; values?: AlunoFormValuesEcho; success?: false }
-  | { success: true; tempPassword: string; alunoId: string }
+  | { errors?: AlunoFieldErrors; error?: string; values?: AlunoCreateValuesEcho }
   | undefined;
 
 export type AlunoEditFormState =
-  | { errors?: AlunoFieldErrors; error?: string; values?: Omit<AlunoFormValuesEcho, "email"> }
+  | { errors?: AlunoFieldErrors; error?: string; values?: AlunoFormValuesEcho }
   | undefined;
 
-function echoValues(formData: FormData): AlunoFormValuesEcho {
-  return { email: String(formData.get("email") ?? ""), ...echoEditValues(formData) };
+function echoValues(formData: FormData): AlunoCreateValuesEcho {
+  return {
+    email: String(formData.get("email") ?? ""),
+    senha_temporaria: String(formData.get("senha_temporaria") ?? ""),
+    ...echoEditValues(formData),
+  };
 }
 
-function echoEditValues(formData: FormData): Omit<AlunoFormValuesEcho, "email"> {
+function echoEditValues(formData: FormData): AlunoFormValuesEcho {
   return {
     full_name: String(formData.get("full_name") ?? ""),
     cpf: String(formData.get("cpf") ?? ""),
@@ -119,12 +123,6 @@ function parseCommonFields(formData: FormData) {
   };
 }
 
-// 12 caracteres, alfanumérico + símbolos url-safe — uso único e descartável,
-// repassada ao aluno fora do sistema (ex.: WhatsApp) pelo admin.
-function generateTempPassword() {
-  return randomBytes(9).toString("base64url");
-}
-
 export async function createAluno(
   _prevState: AlunoFormState,
   formData: FormData,
@@ -134,23 +132,24 @@ export async function createAluno(
   const parsed = alunoFormSchema.safeParse({
     ...parseCommonFields(formData),
     email: formData.get("email"),
+    senha_temporaria: formData.get("senha_temporaria"),
   });
 
   if (!parsed.success) {
     return {
       errors: parsed.error.flatten().fieldErrors,
       values: echoValues(formData),
-      success: false,
     };
   }
 
   const data = parsed.data;
   const admin = createAdminClient();
-  const tempPassword = generateTempPassword();
 
+  // Senha gerada no cliente (crypto.getRandomValues) e mostrada só pro
+  // admin copiar — nunca é exibida em outro lugar depois disso.
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: data.email,
-    password: tempPassword,
+    password: data.senha_temporaria,
     email_confirm: true,
     user_metadata: {
       full_name: data.full_name,
@@ -163,7 +162,7 @@ export async function createAluno(
       createError?.code === "email_exists"
         ? "Já existe uma conta com esse e-mail."
         : "Não foi possível criar a conta do aluno. Tente novamente.";
-    return { error: message, values: echoValues(formData), success: false };
+    return { error: message, values: echoValues(formData) };
   }
 
   const userId = created.user.id;
@@ -197,7 +196,7 @@ export async function createAluno(
       alunoError.code === "23505"
         ? "Já existe um aluno cadastrado com esse CPF."
         : "Não foi possível salvar os dados do aluno. Tente novamente.";
-    return { error: message, values: echoValues(formData), success: false };
+    return { error: message, values: echoValues(formData) };
   }
 
   if (isMinor(data.data_nascimento)) {
@@ -216,13 +215,14 @@ export async function createAluno(
       return {
         error: "Não foi possível salvar os dados do responsável. Tente novamente.",
         values: echoValues(formData),
-        success: false,
       };
     }
   }
 
+  // Sem tela de sucesso separada: a senha já foi mostrada (e copiada) pelo
+  // admin no próprio formulário, antes do envio — aqui só redireciona.
   revalidatePath("/admin/alunos");
-  return { success: true, tempPassword, alunoId: userId };
+  redirect("/admin/alunos?criado=1");
 }
 
 export async function updateAluno(

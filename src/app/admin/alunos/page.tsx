@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlunosTable, type AlunoListItem } from "@/components/admin/alunos-table";
 
-export default async function AlunosPage() {
+export default async function AlunosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ criado?: string }>;
+}) {
   await requireRole("admin");
+  const { criado } = await searchParams;
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -28,6 +33,10 @@ export default async function AlunosPage() {
           Novo aluno
         </Button>
       </div>
+
+      {criado === "1" && (
+        <p className="text-muted-foreground text-sm">Aluno cadastrado com sucesso.</p>
+      )}
 
       {error ? (
         <Card>

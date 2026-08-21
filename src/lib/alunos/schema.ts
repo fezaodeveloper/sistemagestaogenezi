@@ -152,9 +152,17 @@ function validateResponsavelIfMinor(
   }
 }
 
-// Criação: inclui e-mail (usado só uma vez, pra criar a conta).
+// Criação: inclui e-mail (usado só uma vez, pra criar a conta) e a senha
+// temporária, gerada no cliente (crypto.getRandomValues) e só validada aqui
+// quanto a presença/tamanho — a força da senha em si é garantida na geração.
 export const alunoFormSchema = z
-  .object({ ...commonAlunoFields, email: z.email({ error: "Informe um e-mail válido." }) })
+  .object({
+    ...commonAlunoFields,
+    email: z.email({ error: "Informe um e-mail válido." }),
+    senha_temporaria: z
+      .string({ error: "Gere uma senha temporária antes de cadastrar." })
+      .min(8, { error: "Gere uma senha temporária antes de cadastrar." }),
+  })
   .superRefine(validateResponsavelIfMinor);
 
 // Edição: sem e-mail — mudar e-mail exige sincronizar com auth.users via

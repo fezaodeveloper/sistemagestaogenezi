@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   formatCep,
   formatCpf,
@@ -41,9 +39,40 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 // Resposta do ViaCEP — só os campos que a gente usa (bairro/cidade/estado).
 type ViaCepResponse = { bairro?: string; localidade?: string; uf?: string; erro?: boolean };
 
+// 10 caracteres, sem ambiguidade de leitura evitada só pela mistura de
+// maiúsculas/minúsculas/números — sem caracteres especiais, pra facilitar
+// digitar no primeiro acesso. Garante pelo menos 1 de cada tipo (embaralhado
+// com crypto), em vez de confiar só na uniformidade da amostragem aleatória.
+function gerarSenhaTemporaria(): string {
+  const MAIUSCULAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const MINUSCULAS = "abcdefghijklmnopqrstuvwxyz";
+  const NUMEROS = "0123456789";
+  const TODOS = MAIUSCULAS + MINUSCULAS + NUMEROS;
+
+  function charAleatorio(charset: string) {
+    const [n] = crypto.getRandomValues(new Uint32Array(1));
+    return charset[n % charset.length];
+  }
+
+  const caracteres = [
+    charAleatorio(MAIUSCULAS),
+    charAleatorio(MINUSCULAS),
+    charAleatorio(NUMEROS),
+    ...Array.from({ length: 7 }, () => charAleatorio(TODOS)),
+  ];
+
+  for (let i = caracteres.length - 1; i > 0; i--) {
+    const [r] = crypto.getRandomValues(new Uint32Array(1));
+    const j = r % (i + 1);
+    [caracteres[i], caracteres[j]] = [caracteres[j], caracteres[i]];
+  }
+
+  return caracteres.join("");
+}
+
 export function AlunoCreateForm() {
   const [state, formAction] = useActionState<AlunoFormState, FormData>(createAluno, undefined);
-  const values = state && !state.success ? state.values : undefined;
+  const values = state?.values;
 
   const [dataNascimento, setDataNascimento] = useState(values?.data_nascimento ?? "");
   const [cpf, setCpf] = useState(values?.cpf ? formatCpf(values.cpf) : "");
@@ -60,8 +89,13 @@ export function AlunoCreateForm() {
   );
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState<string | null>(null);
+  const [senhaTemporaria, setSenhaTemporaria] = useState(values?.senha_temporaria ?? "");
+  const [copiado, setCopiado] = useState(false);
+  const [erroSenha, setErroSenha] = useState<string | null>(null);
 
   const menorDeIdade = dataNascimento ? isMinor(dataNascimento) : false;
+  const errors = state?.errors;
+  const generalError = state?.error;
 
   // Dispara a busca assim que o CEP tiver 8 dígitos. Os campos continuam
   // editáveis depois de preenchidos — é só um ponto de partida, não um
@@ -101,38 +135,36 @@ export function AlunoCreateForm() {
     };
   }, [cep]);
 
-  if (state?.success) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Aluno criado com sucesso</CardTitle>
-          <CardDescription>
-            Copie a senha temporária agora — ela não será exibida novamente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="bg-muted rounded-md p-4 font-mono text-lg">{state.tempPassword}</div>
-          <p className="text-muted-foreground text-sm">
-            Para matricular o aluno em uma turma, use a ação &quot;Nova matrícula&quot; na tela
-            dele.
-          </p>
-          <div>
-            <Button render={<Link href="/admin/alunos" />} nativeButton={false}>
-              Ir para a lista de alunos
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
+  function handleGerarSenha() {
+    setSenhaTemporaria(gerarSenhaTemporaria());
+    setCopiado(false);
+    setErroSenha(null);
   }
 
-  const errors = state && !state.success ? state.errors : undefined;
-  const generalError = state && !state.success ? state.error : undefined;
+  async function handleCopiarSenha() {
+    if (!senhaTemporaria) return;
+    try {
+      await navigator.clipboard.writeText(senhaTemporaria);
+      setCopiado(true);
+      window.setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // Clipboard indisponível (ex.: contexto não seguro) — sem feedback,
+      // mas a senha continua visível no campo pra copiar manualmente.
+    }
+  }
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (!senhaTemporaria) {
+      event.preventDefault();
+      setErroSenha("Gere uma senha temporária antes de cadastrar.");
+    }
+  }
 
   return (
     <form
       key={JSON.stringify(values)}
       action={formAction}
+      onSubmit={handleSubmit}
       className="flex max-w-2xl flex-col gap-6"
     >
       <div className="flex flex-col gap-4">
@@ -141,13 +173,45 @@ export function AlunoCreateForm() {
         <div className="flex flex-col gap-2">
           <Label htmlFor="email">E-mail</Label>
           <Input id="email" name="email" type="email" defaultValue={values?.email} required />
-          <p className="text-muted-foreground text-xs">
-            Após o cadastro, uma senha temporária será exibida na tela para você repassar ao
-            aluno.
-          </p>
           {errors?.email && (
             <p role="alert" className="text-destructive text-sm">
               {errors.email[0]}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="senha_temporaria_display">Senha temporária</Label>
+          <div className="flex gap-2">
+            <Input
+              id="senha_temporaria_display"
+              readOnly
+              value={senhaTemporaria}
+              placeholder='Clique em "Gerar senha"'
+              className="font-mono"
+            />
+            <Button type="button" variant="outline" onClick={handleGerarSenha}>
+              Gerar senha
+            </Button>
+            {senhaTemporaria && (
+              <Button type="button" variant="outline" onClick={handleCopiarSenha}>
+                {copiado ? "Copiado!" : "Copiar"}
+              </Button>
+            )}
+          </div>
+          <input type="hidden" name="senha_temporaria" value={senhaTemporaria} />
+          <p className="text-muted-foreground text-xs">
+            Gere uma senha, copie e repasse ao aluno. Ele usará o e-mail e esta senha para o
+            primeiro acesso.
+          </p>
+          {erroSenha && (
+            <p role="alert" className="text-destructive text-sm">
+              {erroSenha}
+            </p>
+          )}
+          {errors?.senha_temporaria && (
+            <p role="alert" className="text-destructive text-sm">
+              {errors.senha_temporaria[0]}
             </p>
           )}
         </div>
