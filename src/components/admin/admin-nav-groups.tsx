@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Award, ChevronRight, ClipboardCheck, FileBadge, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MessageCircle, MessagesSquare, Presentation,
+  Award, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
+  LayoutDashboard, MessageCircle, MessagesSquare, PlusCircle, Presentation,
   Settings, Target, UserPlus, Users,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -19,7 +19,10 @@ const GROUPS: NavGroup[] = [
   ]},
   { id: "comercial", label: "Comercial", icon: Target, items: [
     { href: "/admin/leads", label: "Leads / CRM", icon: UserPlus },
-    { href: "/admin/matriculas", label: "Matrículas", icon: ClipboardCheck },
+  ]},
+  { id: "matriculas", label: "Matrículas", icon: ClipboardCheck, items: [
+    { href: "/admin/matriculas", label: "Lista de matrículas", icon: ClipboardList },
+    { href: "/admin/matriculas/nova", label: "Nova matrícula", icon: PlusCircle },
   ]},
   { id: "academico", label: "Acad\u00eamico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
