@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Award, ChevronRight, FileBadge, Gift, GraduationCap, IdCard,
+  Award, ChevronRight, ClipboardCheck, FileBadge, Gift, GraduationCap, IdCard,
   LayoutDashboard, MessageCircle, MessagesSquare, Presentation,
   Settings, Target, UserPlus, Users,
 } from "lucide-react";
@@ -19,6 +19,7 @@ const GROUPS: NavGroup[] = [
   ]},
   { id: "comercial", label: "Comercial", icon: Target, items: [
     { href: "/admin/leads", label: "Leads / CRM", icon: UserPlus },
+    { href: "/admin/matriculas", label: "Matrículas", icon: ClipboardCheck },
   ]},
   { id: "academico", label: "Acad\u00eamico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
