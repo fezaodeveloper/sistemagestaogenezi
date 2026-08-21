@@ -14,6 +14,14 @@ export const CURSO_STATUS_LABELS: Record<(typeof CURSO_STATUSES)[number], string
   inativo: "Inativo",
 };
 
+// Mesmo padrão de cores fixas via className usado em STATUS_ALUNO_BADGE_CLASS
+// (src/lib/alunos/schema.ts) — os variants padrão do Badge não cobrem
+// verde/vermelho.
+export const CURSO_STATUS_BADGE_CLASS: Record<(typeof CURSO_STATUSES)[number], string> = {
+  ativo: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  inativo: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+};
+
 export const cursoFormSchema = z.object({
   nome: z
     .string({ error: "Informe o nome do curso." })
@@ -32,6 +40,7 @@ export const cursoFormSchema = z.object({
     .int({ error: "A carga horária deve ser um número inteiro." })
     .positive({ error: "A carga horária deve ser maior que zero." })
     .optional(),
+  valor: z.coerce.number().min(0, "Valor não pode ser negativo").optional(),
 });
 
 export type CursoFormValues = z.infer<typeof cursoFormSchema>;
@@ -46,6 +55,7 @@ export type Curso = {
   custo_creditos: number | null;
   capa_url: string | null;
   carga_horaria_horas: number | null;
+  valor: number | null;
   created_by: string;
   created_at: string;
   updated_at: string;

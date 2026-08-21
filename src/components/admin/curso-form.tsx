@@ -121,6 +121,25 @@ export function CursoForm({
       </div>
 
       <div className="flex flex-col gap-2">
+        <Label htmlFor="valor">Valor (R$)</Label>
+        <Input
+          id="valor"
+          name="valor"
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="0,00"
+          defaultValue={values?.valor}
+          className="max-w-32"
+        />
+        {state?.errors?.valor && (
+          <p role="alert" className="text-destructive text-sm">
+            {state.errors.valor[0]}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Label htmlFor="status">Status</Label>
         <Select name="status" items={CURSO_STATUS_LABELS} defaultValue={values?.status || "ativo"}>
           <SelectTrigger id="status" className="w-full">

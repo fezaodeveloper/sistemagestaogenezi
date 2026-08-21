@@ -16,12 +16,16 @@ type CursoFormValuesEcho = {
   tipo: string;
   status: string;
   carga_horaria_horas: string;
+  valor: string;
 };
 
 export type CursoFormState =
   | {
       errors?: Partial<
-        Record<"nome" | "descricao" | "tipo" | "status" | "capa" | "carga_horaria_horas", string[]>
+        Record<
+          "nome" | "descricao" | "tipo" | "status" | "capa" | "carga_horaria_horas" | "valor",
+          string[]
+        >
       >;
       error?: string;
       values?: CursoFormValuesEcho;
@@ -35,6 +39,7 @@ function echoValues(formData: FormData): CursoFormValuesEcho {
     tipo: String(formData.get("tipo") ?? ""),
     status: String(formData.get("status") ?? ""),
     carga_horaria_horas: String(formData.get("carga_horaria_horas") ?? ""),
+    valor: String(formData.get("valor") ?? ""),
   };
 }
 
@@ -45,6 +50,7 @@ function parseCursoForm(formData: FormData) {
     tipo: formData.get("tipo"),
     status: formData.get("status"),
     carga_horaria_horas: formData.get("carga_horaria_horas") || undefined,
+    valor: formData.get("valor") || undefined,
   });
 }
 
@@ -84,6 +90,7 @@ export async function createCurso(
     tipo: parsed.data.tipo,
     status: parsed.data.status,
     carga_horaria_horas: parsed.data.carga_horaria_horas ?? null,
+    valor: parsed.data.valor ?? null,
     capa_url: capaPath,
   });
 
@@ -141,6 +148,7 @@ export async function updateCurso(
       tipo: parsed.data.tipo,
       status: parsed.data.status,
       carga_horaria_horas: parsed.data.carga_horaria_horas ?? null,
+      valor: parsed.data.valor ?? null,
       capa_url: capaPath,
     })
     .eq("id", id);
