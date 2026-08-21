@@ -15,16 +15,46 @@ export function formatCpf(value: string): string {
     .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 }
 
+// Celular (DDD + 9 dígitos, 11 no total): (XX) XXXXX-XXXX.
+// Fixo (DDD + 8 dígitos, 10 no total): (XX) XXXX-XXXX.
+// Com DDI 55 na frente (12 ou 13 dígitos): remove o 55 e aplica o mesmo
+// formato acima sobre o restante. Qualquer outra quantidade de dígitos
+// (menos de 10, ou 12/13 sem prefixo 55 reconhecível, ou mais de 13) não é
+// um telefone brasileiro válido reconhecido aqui — mostra os dígitos puros
+// em vez de arriscar uma máscara errada.
 export function formatTelefone(value: string): string {
-  const digits = onlyDigits(value).slice(0, 11);
-  if (digits.length <= 10) {
-    return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)$/, "$1-$2");
+  let digits = onlyDigits(value).slice(0, 13);
+
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
+    digits = digits.slice(2);
   }
-  return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)$/, "$1-$2");
+
+  if (digits.length === 11) {
+    return digits.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3");
+  }
+  if (digits.length === 10) {
+    return digits.replace(/^(\d{2})(\d{4})(\d{4})$/, "($1) $2-$3");
+  }
+
+  return digits;
 }
 
 export function formatCep(value: string): string {
   return onlyDigits(value).slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
+}
+
+// "21/08/2026 às 14:32", sempre no fuso de exibição do sistema (o Genezi é
+// uma escola brasileira — não há necessidade de detectar o fuso do
+// navegador do admin).
+export function formatDataHora(isoString: string): string {
+  const date = new Date(isoString);
+  const data = date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const hora = date.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${data} às ${hora}`;
 }
 
 export function calculateAge(dataNascimento: string): number {
