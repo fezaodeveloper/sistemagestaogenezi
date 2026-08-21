@@ -44,6 +44,7 @@ const STATUS_BADGE_VARIANT = {
   concluida: "secondary",
   cancelada: "destructive",
   inativa: "outline",
+  transferida: "outline",
 } as const;
 
 function formatDateBR(isoDate: string) {
