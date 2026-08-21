@@ -16,9 +16,19 @@ type AlunoFieldErrors = Partial<
     | "telefone"
     | "endereco"
     | "data_nascimento"
+    | "cep"
+    | "numero"
+    | "complemento"
+    | "bairro"
+    | "cidade"
+    | "estado"
+    | "observacoes"
+    | "status_aluno"
     | "responsavel_nome"
     | "responsavel_cpf"
-    | "responsavel_telefone",
+    | "responsavel_telefone"
+    | "responsavel_email"
+    | "responsavel_complemento",
     string[]
   >
 >;
@@ -30,9 +40,19 @@ type AlunoFormValuesEcho = {
   telefone: string;
   endereco: string;
   data_nascimento: string;
+  cep: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  observacoes: string;
+  status_aluno: string;
   responsavel_nome: string;
   responsavel_cpf: string;
   responsavel_telefone: string;
+  responsavel_email: string;
+  responsavel_complemento: string;
 };
 
 export type AlunoFormState =
@@ -55,9 +75,47 @@ function echoEditValues(formData: FormData): Omit<AlunoFormValuesEcho, "email"> 
     telefone: String(formData.get("telefone") ?? ""),
     endereco: String(formData.get("endereco") ?? ""),
     data_nascimento: String(formData.get("data_nascimento") ?? ""),
+    cep: String(formData.get("cep") ?? ""),
+    numero: String(formData.get("numero") ?? ""),
+    complemento: String(formData.get("complemento") ?? ""),
+    bairro: String(formData.get("bairro") ?? ""),
+    cidade: String(formData.get("cidade") ?? ""),
+    estado: String(formData.get("estado") ?? ""),
+    observacoes: String(formData.get("observacoes") ?? ""),
+    status_aluno: String(formData.get("status_aluno") ?? "ativo"),
     responsavel_nome: String(formData.get("responsavel_nome") ?? ""),
     responsavel_cpf: String(formData.get("responsavel_cpf") ?? ""),
     responsavel_telefone: String(formData.get("responsavel_telefone") ?? ""),
+    responsavel_email: String(formData.get("responsavel_email") ?? ""),
+    responsavel_complemento: String(formData.get("responsavel_complemento") ?? ""),
+  };
+}
+
+// Campos opcionais do formulário: parse compartilhado entre create/update.
+// FormData vazio vira "" (nunca null), então sem o `|| undefined` os campos
+// optional() do Zod receberiam string vazia em vez de undefined — e um CEP
+// "" cairia na validação de 8 dígitos em vez de ser tratado como "não
+// informado".
+function parseCommonFields(formData: FormData) {
+  return {
+    full_name: formData.get("full_name"),
+    cpf: formData.get("cpf"),
+    telefone: formData.get("telefone"),
+    endereco: formData.get("endereco") || undefined,
+    data_nascimento: formData.get("data_nascimento"),
+    cep: formData.get("cep") || undefined,
+    numero: formData.get("numero") || undefined,
+    complemento: formData.get("complemento") || undefined,
+    bairro: formData.get("bairro") || undefined,
+    cidade: formData.get("cidade") || undefined,
+    estado: formData.get("estado") || undefined,
+    observacoes: formData.get("observacoes") || undefined,
+    status_aluno: formData.get("status_aluno") || undefined,
+    responsavel_nome: formData.get("responsavel_nome") || undefined,
+    responsavel_cpf: formData.get("responsavel_cpf") || undefined,
+    responsavel_telefone: formData.get("responsavel_telefone") || undefined,
+    responsavel_email: formData.get("responsavel_email") || undefined,
+    responsavel_complemento: formData.get("responsavel_complemento") || undefined,
   };
 }
 
@@ -74,15 +132,8 @@ export async function createAluno(
   await requireRole("admin");
 
   const parsed = alunoFormSchema.safeParse({
-    full_name: formData.get("full_name"),
+    ...parseCommonFields(formData),
     email: formData.get("email"),
-    cpf: formData.get("cpf"),
-    telefone: formData.get("telefone"),
-    endereco: formData.get("endereco") || undefined,
-    data_nascimento: formData.get("data_nascimento"),
-    responsavel_nome: formData.get("responsavel_nome") || undefined,
-    responsavel_cpf: formData.get("responsavel_cpf") || undefined,
-    responsavel_telefone: formData.get("responsavel_telefone") || undefined,
   });
 
   if (!parsed.success) {
@@ -125,6 +176,19 @@ export async function createAluno(
     telefone: data.telefone,
     endereco: data.endereco ?? null,
     data_nascimento: data.data_nascimento,
+    full_name: data.full_name,
+    cep: data.cep ?? null,
+    numero: data.numero ?? null,
+    complemento: data.complemento ?? null,
+    bairro: data.bairro ?? null,
+    cidade: data.cidade ?? null,
+    estado: data.estado ?? null,
+    observacoes: data.observacoes ?? null,
+    status_aluno: data.status_aluno,
+    // user_id é redundante com o próprio id (ambos apontam pro mesmo usuário
+    // Auth recém-criado) — a coluna existe pra permitir, futuramente, um
+    // aluno cujo cadastro não tenha (ainda) uma conta vinculada.
+    user_id: userId,
   });
 
   if (alunoError) {
@@ -142,6 +206,8 @@ export async function createAluno(
       nome: data.responsavel_nome!,
       cpf: data.responsavel_cpf!,
       telefone: data.responsavel_telefone!,
+      email: data.responsavel_email ?? null,
+      complemento: data.responsavel_complemento ?? null,
     });
 
     if (responsavelError) {
@@ -166,16 +232,7 @@ export async function updateAluno(
 ): Promise<AlunoEditFormState> {
   await requireRole("admin");
 
-  const parsed = alunoEditFormSchema.safeParse({
-    full_name: formData.get("full_name"),
-    cpf: formData.get("cpf"),
-    telefone: formData.get("telefone"),
-    endereco: formData.get("endereco") || undefined,
-    data_nascimento: formData.get("data_nascimento"),
-    responsavel_nome: formData.get("responsavel_nome") || undefined,
-    responsavel_cpf: formData.get("responsavel_cpf") || undefined,
-    responsavel_telefone: formData.get("responsavel_telefone") || undefined,
-  });
+  const parsed = alunoEditFormSchema.safeParse(parseCommonFields(formData));
 
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors, values: echoEditValues(formData) };
@@ -205,6 +262,15 @@ export async function updateAluno(
       telefone: data.telefone,
       endereco: data.endereco ?? null,
       data_nascimento: data.data_nascimento,
+      full_name: data.full_name,
+      cep: data.cep ?? null,
+      numero: data.numero ?? null,
+      complemento: data.complemento ?? null,
+      bairro: data.bairro ?? null,
+      cidade: data.cidade ?? null,
+      estado: data.estado ?? null,
+      observacoes: data.observacoes ?? null,
+      status_aluno: data.status_aluno,
     })
     .eq("id", id);
 
@@ -227,6 +293,8 @@ export async function updateAluno(
       nome: data.responsavel_nome!,
       cpf: data.responsavel_cpf!,
       telefone: data.responsavel_telefone!,
+      email: data.responsavel_email ?? null,
+      complemento: data.responsavel_complemento ?? null,
     };
 
     const { error: responsavelError } = existing

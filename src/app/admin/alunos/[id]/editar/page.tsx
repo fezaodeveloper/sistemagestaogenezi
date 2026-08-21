@@ -129,15 +129,26 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
       </div>
       <AlunoEditForm
         id={aluno.id}
+        email={aluno.email}
         defaultValues={{
           full_name: aluno.profiles?.full_name ?? "",
           cpf: aluno.cpf,
           telefone: aluno.telefone,
           endereco: aluno.endereco ?? "",
           data_nascimento: aluno.data_nascimento,
+          cep: aluno.cep ?? "",
+          numero: aluno.numero ?? "",
+          complemento: aluno.complemento ?? "",
+          bairro: aluno.bairro ?? "",
+          cidade: aluno.cidade ?? "",
+          estado: aluno.estado ?? "",
+          observacoes: aluno.observacoes ?? "",
+          status_aluno: aluno.status_aluno,
           responsavel_nome: responsavel?.nome,
           responsavel_cpf: responsavel?.cpf,
           responsavel_telefone: responsavel?.telefone,
+          responsavel_email: responsavel?.email ?? undefined,
+          responsavel_complemento: responsavel?.complemento ?? undefined,
         }}
       />
       <MatriculasSection

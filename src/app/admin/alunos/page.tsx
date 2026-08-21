@@ -2,32 +2,9 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { isMinor, type AlunoWithRelations } from "@/lib/alunos/schema";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { DeleteAlunoButton } from "@/components/admin/delete-aluno-button";
-
-type AlunoListItem = AlunoWithRelations & {
-  matriculas: { status: string; turmas: { nome: string } | null }[];
-};
-
-function turmasAtivasLabel(aluno: AlunoListItem) {
-  const nomes = aluno.matriculas
-    .filter((matricula) => matricula.status === "ativa")
-    .map((matricula) => matricula.turmas?.nome)
-    .filter((nome): nome is string => Boolean(nome));
-
-  return nomes.length > 0 ? nomes.join(", ") : "—";
-}
+import { AlunosTable, type AlunoListItem } from "@/components/admin/alunos-table";
 
 export default async function AlunosPage() {
   await requireRole("admin");
@@ -73,48 +50,8 @@ export default async function AlunosPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>Turmas ativas</TableHead>
-                <TableHead>Idade</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {alunos.map((aluno) => (
-                <TableRow key={aluno.id}>
-                  <TableCell className="font-medium">{aluno.profiles?.full_name ?? "—"}</TableCell>
-                  <TableCell>{aluno.email}</TableCell>
-                  <TableCell>{turmasAtivasLabel(aluno)}</TableCell>
-                  <TableCell>
-                    {isMinor(aluno.data_nascimento) ? (
-                      <Badge variant="secondary">Menor de idade</Badge>
-                    ) : (
-                      "Maior de idade"
-                    )}
-                  </TableCell>
-                  <TableCell className="flex justify-end gap-1">
-                    <Button
-                      render={<Link href={`/admin/alunos/${aluno.id}/editar`} />}
-                      nativeButton={false}
-                      variant="ghost"
-                      size="sm"
-                    >
-                      Editar
-                    </Button>
-                    <DeleteAlunoButton
-                      id={aluno.id}
-                      nome={aluno.profiles?.full_name ?? aluno.email}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <Card className="p-4">
+          <AlunosTable alunos={alunos} />
         </Card>
       )}
     </div>

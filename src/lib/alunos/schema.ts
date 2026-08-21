@@ -1,7 +1,30 @@
 import { z } from "zod";
 
-function onlyDigits(value: string) {
+export function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
+}
+
+// Máscaras são só visuais (usadas nos formulários) — o schema abaixo sempre
+// transforma pra dígitos antes de validar/salvar, então o valor que chega ao
+// banco nunca tem pontuação, mesmo que o campo submetido venha mascarado.
+export function formatCpf(value: string): string {
+  return onlyDigits(value)
+    .slice(0, 11)
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+export function formatTelefone(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 10) {
+    return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)$/, "$1-$2");
+  }
+  return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)$/, "$1-$2");
+}
+
+export function formatCep(value: string): string {
+  return onlyDigits(value).slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
 }
 
 export function calculateAge(dataNascimento: string): number {
@@ -25,17 +48,49 @@ const cpfSchema = z
   .transform(onlyDigits)
   .refine((value) => value.length === 11, { error: "CPF deve ter 11 dígitos." });
 
+const telefoneSchema = z
+  .string({ error: "Informe o telefone." })
+  .trim()
+  .transform(onlyDigits)
+  .refine((value) => value.length === 10 || value.length === 11, {
+    error: "Telefone deve ter 10 ou 11 dígitos (com DDD).",
+  });
+
+// CEP também transforma pra dígitos antes de validar o tamanho — se
+// validássemos o length no valor bruto (com máscara "00000-000", 9
+// caracteres), o campo mascarado nunca passaria na validação.
+const cepSchema = z
+  .string()
+  .trim()
+  .transform(onlyDigits)
+  .refine((value) => value.length === 8, { error: "CEP deve ter 8 dígitos." });
+
+export const STATUS_ALUNO_VALUES = ["ativo", "inativo", "trancado", "formado"] as const;
+export type StatusAluno = (typeof STATUS_ALUNO_VALUES)[number];
+export const STATUS_ALUNO_LABELS: Record<StatusAluno, string> = {
+  ativo: "Ativo",
+  inativo: "Inativo",
+  trancado: "Trancado",
+  formado: "Formado",
+};
+// Cores fixas pedidas para a listagem (verde/amarelo/vermelho/azul) — os
+// variants padrão do Badge (default/secondary/destructive/outline) não cobrem
+// essa paleta, por isso sobrescrevemos bg/text diretamente via className.
+export const STATUS_ALUNO_BADGE_CLASS: Record<StatusAluno, string> = {
+  ativo: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  inativo: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+  trancado: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  formado: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+};
+
 const commonAlunoFields = {
   full_name: z
     .string({ error: "Informe o nome completo." })
     .trim()
-    .min(1, { error: "Informe o nome completo." })
+    .min(3, "Nome completo obrigatório")
     .max(200, { error: "O nome pode ter no máximo 200 caracteres." }),
   cpf: cpfSchema,
-  telefone: z
-    .string({ error: "Informe o telefone." })
-    .trim()
-    .min(1, { error: "Informe o telefone." }),
+  telefone: telefoneSchema,
   endereco: z.string().trim().max(500, { error: "Endereço muito longo." }).optional(),
   data_nascimento: z
     .string({ error: "Informe a data de nascimento." })
@@ -43,9 +98,19 @@ const commonAlunoFields = {
     .refine((value) => new Date(`${value}T00:00:00`) <= new Date(), {
       error: "A data de nascimento não pode ser no futuro.",
     }),
+  cep: cepSchema.optional(),
+  numero: z.string().trim().max(20, { error: "Número muito longo." }).optional(),
+  complemento: z.string().trim().max(200, { error: "Complemento muito longo." }).optional(),
+  bairro: z.string().trim().max(200, { error: "Bairro muito longo." }).optional(),
+  cidade: z.string().trim().max(200, { error: "Cidade muito longa." }).optional(),
+  estado: z.string().trim().max(2, { error: "Use a sigla do estado (2 letras)." }).optional(),
+  observacoes: z.string().trim().max(2000, { error: "Observações muito longas." }).optional(),
+  status_aluno: z.enum(STATUS_ALUNO_VALUES).default("ativo"),
   responsavel_nome: z.string().trim().optional(),
   responsavel_cpf: z.string().trim().optional(),
   responsavel_telefone: z.string().trim().optional(),
+  responsavel_email: z.email({ error: "E-mail do responsável inválido." }).optional(),
+  responsavel_complemento: z.string().trim().optional(),
 };
 
 // Compartilhada entre criação e edição: campos do responsável só são
@@ -108,6 +173,16 @@ export type Aluno = {
   telefone: string;
   endereco: string | null;
   data_nascimento: string;
+  full_name: string | null;
+  cep: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+  observacoes: string | null;
+  status_aluno: StatusAluno;
+  user_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -123,6 +198,8 @@ export type Responsavel = {
   nome: string;
   cpf: string;
   telefone: string;
+  email: string | null;
+  complemento: string | null;
   created_at: string;
   updated_at: string;
 };
