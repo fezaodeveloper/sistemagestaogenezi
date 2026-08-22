@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import {
   Award, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
   LayoutDashboard, MessageCircle, MessagesSquare, PlusCircle, Presentation,
@@ -68,6 +68,14 @@ export function AdminNavGroups({
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
+      // Leitura de localStorage tem que ficar num efeito pós-montagem, não
+      // num inicializador de useState: o componente é renderizado no
+      // servidor (sem localStorage, sempre cairia em DEFAULT_OPEN) e depois
+      // hidratado no cliente — se o cliente lesse localStorage já na
+      // primeira passada, o estado divergiria do HTML gerado no servidor e
+      // causaria hydration mismatch. Setar aqui, depois de montado, evita
+      // isso de propósito.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved) setOpen(JSON.parse(saved));
     } catch {}
     setHydrated(true);
@@ -76,7 +84,9 @@ export function AdminNavGroups({
   useEffect(() => {
     const active = GROUPS.find((g) => g.items.some((i) => isItemActive(pathname, i.href)));
     if (active) {
-      setOpen((prev) => (prev.includes(active.id) ? prev : [...prev, active.id]));
+      startTransition(() => {
+        setOpen((prev) => (prev.includes(active.id) ? prev : [...prev, active.id]));
+      });
     }
   }, [pathname]);
 
