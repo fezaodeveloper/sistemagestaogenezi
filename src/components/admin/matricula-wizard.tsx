@@ -293,6 +293,7 @@ export function MatriculaWizard({
 
   // Etapa 4 — Datas
   const [dataInicio, setDataInicio] = useState("");
+  const [previsaoConclusao, setPrevisaoConclusao] = useState<string | null>(null);
 
   // Etapa 5 — Materiais
   const [apostilaEntregue, setApostilaEntregue] = useState(false);
@@ -339,13 +340,6 @@ export function MatriculaWizard({
     return valorComTaxa / numParcelas;
   }, [valorComTaxa, numParcelas]);
 
-  // turmas.data_fim já é uma data concreta definida na criação da turma —
-  // usada direto como previsão de conclusão. A "estimativa pela carga
-  // horária" citada na especificação não tem regra de negócio definida e
-  // data_fim nunca é nula no schema atual, então esse fallback nunca chega
-  // a ser exercitado na prática.
-  const previsaoConclusao = turma?.data_fim ?? null;
-
   function podeAvancar(): boolean {
     switch (step) {
       case 1:
@@ -384,6 +378,7 @@ export function MatriculaWizard({
     setFormaPagamento(null);
     setTaxaCartaoInput("");
     setDataInicio("");
+    setPrevisaoConclusao(null);
     setApostilaEntregue(false);
     setFardaEntregue(false);
     setKitEntregue(false);
@@ -514,6 +509,9 @@ export function MatriculaWizard({
             )}
             <p className="text-muted-foreground">Valor final: {formatValor(valorFinal)}</p>
             <p className="text-muted-foreground">Parcelamento: {formatParcelas(numParcelas, valorParcela)}</p>
+            <p className="text-muted-foreground text-xs">
+              Demais parcelas vencem mensalmente na mesma data.
+            </p>
             <p className="text-muted-foreground">Pagamento: {FORMA_PAGAMENTO_LABELS[formaPagamento]}</p>
             <p className="text-muted-foreground">
               1ª mensalidade: {formatDataBR(dataPrimeiraMensalidade)}
@@ -675,6 +673,9 @@ export function MatriculaWizard({
                       onClick={() => {
                         setTurma(candidata);
                         setDataInicio(candidata.data_inicio);
+                        // Padrão pré-preenchido a partir de turmas.data_fim —
+                        // continua editável na Etapa 4, o admin pode ajustar.
+                        setPrevisaoConclusao(candidata.data_fim);
                       }}
                       className={cn(
                         "hover:bg-muted flex items-center justify-between gap-2 border-b border-l-4 border-l-transparent p-3 text-left text-sm last:border-b-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
@@ -918,9 +919,13 @@ export function MatriculaWizard({
             <Label htmlFor="previsao_conclusao">Previsão de Conclusão</Label>
             <Input
               id="previsao_conclusao"
-              readOnly
-              value={previsaoConclusao ? formatDataBR(previsaoConclusao) : "—"}
+              type="date"
+              value={previsaoConclusao ?? ""}
+              onChange={(event) => setPrevisaoConclusao(event.target.value || null)}
             />
+            <p className="text-muted-foreground text-xs">
+              Você pode ajustar a previsão se necessário
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">

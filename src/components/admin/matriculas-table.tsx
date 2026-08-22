@@ -67,6 +67,20 @@ function formatParcelas(numParcelas: number | null, valorParcela: number | null)
   return `${numParcelas}x de ${formatValor(valorParcela)}`;
 }
 
+function formatDesconto(matricula: MatriculaListItem): string {
+  if (
+    matricula.desconto_tipo === "sem_bolsa" ||
+    matricula.desconto_formato === null ||
+    matricula.desconto_valor === null
+  ) {
+    return "—";
+  }
+  if (matricula.desconto_formato === "porcentagem") {
+    return `${matricula.desconto_valor}%`;
+  }
+  return formatValor(matricula.desconto_valor);
+}
+
 // dd/mm/aaaa a partir de uma data "yyyy-mm-dd" (sem componente de hora) —
 // evita o desvio de fuso de usar `new Date(...)` direto numa string de
 // data pura, que o JS interpreta como UTC meia-noite.
@@ -336,6 +350,7 @@ export function MatriculasTable({ matriculas }: { matriculas: MatriculaListItem[
               <TableHead>Curso</TableHead>
               <TableHead>Turma</TableHead>
               <TableHead>Valor Final</TableHead>
+              <TableHead>Desconto</TableHead>
               <TableHead>Parcelas</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Data matrícula</TableHead>
@@ -356,6 +371,7 @@ export function MatriculasTable({ matriculas }: { matriculas: MatriculaListItem[
                 <TableCell>{matricula.turmas?.cursos?.nome ?? "—"}</TableCell>
                 <TableCell>{matricula.turmas?.nome ?? "—"}</TableCell>
                 <TableCell>{formatValor(matricula.valor_final)}</TableCell>
+                <TableCell>{formatDesconto(matricula)}</TableCell>
                 <TableCell>{formatParcelas(matricula.num_parcelas, matricula.valor_parcela)}</TableCell>
                 <TableCell>
                   <Badge className={MATRICULA_STATUS_BADGE_CLASS[matricula.status]}>
