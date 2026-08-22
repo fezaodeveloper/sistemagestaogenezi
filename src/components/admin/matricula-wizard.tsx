@@ -595,45 +595,59 @@ export function MatriculaWizard({
   function renderEtapaCursoTurma() {
     return (
       <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-base font-semibold">Curso e Turma</h2>
+          <p className="text-muted-foreground text-xs">
+            1. Selecione o curso&nbsp;&nbsp;→&nbsp;&nbsp;2. Selecione a turma disponível
+          </p>
+        </div>
+
         <div className="flex flex-col gap-2">
           <Label>Curso</Label>
           <div className="flex flex-col rounded-md border">
-            {cursos.map((candidato) => (
-              <button
-                key={candidato.id}
-                type="button"
-                onClick={() => {
-                  setCurso(candidato);
-                  setTurma(null);
-                }}
-                className={cn(
-                  "hover:bg-muted flex flex-col gap-0.5 border-b p-3 text-left text-sm last:border-b-0",
-                  curso?.id === candidato.id && "bg-muted",
-                )}
-              >
-                <span className="font-medium">{candidato.nome}</span>
-                <span className="text-muted-foreground text-xs">
-                  {CURSO_TIPO_LABELS[candidato.tipo]}
-                  {candidato.carga_horaria_horas ? ` · ${candidato.carga_horaria_horas}h` : ""}
-                  {candidato.valor !== null ? ` · ${formatValor(candidato.valor)}` : ""}
-                </span>
-              </button>
-            ))}
+            {cursos.map((candidato) => {
+              const selecionado = curso?.id === candidato.id;
+              return (
+                <button
+                  key={candidato.id}
+                  type="button"
+                  onClick={() => {
+                    setCurso(candidato);
+                    setTurma(null);
+                  }}
+                  className={cn(
+                    "hover:bg-muted flex items-center justify-between gap-2 border-b border-l-4 border-l-transparent p-3 text-left text-sm last:border-b-0",
+                    selecionado && "border-l-blue-500 bg-blue-500/10 hover:bg-blue-500/10",
+                  )}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">{candidato.nome}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {CURSO_TIPO_LABELS[candidato.tipo]}
+                      {candidato.carga_horaria_horas ? ` · ${candidato.carga_horaria_horas}h` : ""}
+                      {candidato.valor !== null ? ` · ${formatValor(candidato.valor)}` : ""}
+                    </span>
+                  </div>
+                  {selecionado && <Check className="size-4 shrink-0 text-blue-500" />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {curso && (
-          <div className="flex flex-col gap-2">
-            <Label>Turma</Label>
+          <div className="animate-in fade-in slide-in-from-top-2 flex flex-col gap-2 duration-300">
+            <Label>2. Agora selecione uma turma:</Label>
             {curso.turmas.length === 0 ? (
               <p className="text-muted-foreground text-sm">
-                Esse curso não tem nenhuma turma ativa no momento.
+                Nenhuma turma disponível para este curso no momento.
               </p>
             ) : (
               <div className="flex flex-col rounded-md border">
                 {curso.turmas.map((candidata) => {
                   const vagasDisponiveis = candidata.vagas_total - candidata.vagas_ocupadas;
                   const semVagas = vagasDisponiveis <= 0;
+                  const selecionada = turma?.id === candidata.id;
                   return (
                     <button
                       key={candidata.id}
@@ -644,16 +658,19 @@ export function MatriculaWizard({
                         setDataInicio(candidata.data_inicio);
                       }}
                       className={cn(
-                        "hover:bg-muted flex flex-col gap-0.5 border-b p-3 text-left text-sm last:border-b-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
-                        turma?.id === candidata.id && "bg-muted",
+                        "hover:bg-muted flex items-center justify-between gap-2 border-b border-l-4 border-l-transparent p-3 text-left text-sm last:border-b-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
+                        selecionada && "border-l-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/10",
                       )}
                     >
-                      <span className="font-medium">{candidata.nome}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {formatDiasSemana(candidata.cadencia_dias_semana)}
-                        {candidata.horario_aula ? ` · ${candidata.horario_aula}` : ""} ·{" "}
-                        {semVagas ? "Sem vagas" : `${vagasDisponiveis} vaga(s) disponível(is)`}
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{candidata.nome}</span>
+                        <span className="text-muted-foreground text-xs">
+                          {formatDiasSemana(candidata.cadencia_dias_semana)}
+                          {candidata.horario_aula ? ` · ${candidata.horario_aula}` : ""} ·{" "}
+                          {semVagas ? "Sem vagas" : `${vagasDisponiveis} vaga(s) disponível(is)`}
+                        </span>
+                      </div>
+                      {selecionada && <Check className="size-4 shrink-0 text-cyan-500" />}
                     </button>
                   );
                 })}
@@ -662,18 +679,31 @@ export function MatriculaWizard({
           </div>
         )}
 
+        {!curso ? (
+          <p className="text-muted-foreground text-sm">Selecione um curso para começar</p>
+        ) : !turma ? (
+          <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+            ✓ Curso selecionado — agora escolha uma turma
+          </p>
+        ) : (
+          <p className="text-sm font-medium text-green-600 dark:text-green-400">
+            ✓ Curso e turma selecionados — pode avançar!
+          </p>
+        )}
+
         {curso && turma && (
-          <Card className="border-primary">
+          <Card className="animate-in fade-in slide-in-from-top-2 border-primary duration-300">
             <CardContent className="flex flex-col gap-1 py-4 text-sm">
-              <span className="font-medium">
-                {curso.nome} — {turma.nome}
+              <span className="font-medium">Você selecionou:</span>
+              <span className="text-muted-foreground">
+                📚 {curso.nome} — {CURSO_TIPO_LABELS[curso.tipo]}
+                {curso.carga_horaria_horas ? ` · ${curso.carga_horaria_horas}h` : ""}
+                {curso.valor !== null ? ` · ${formatValor(curso.valor)}` : ""}
               </span>
               <span className="text-muted-foreground">
-                {formatDiasSemana(turma.cadencia_dias_semana)}
-                {turma.horario_aula ? ` · ${turma.horario_aula}` : ""}
-              </span>
-              <span className="text-muted-foreground">
-                {turma.vagas_total - turma.vagas_ocupadas} vaga(s) de {turma.vagas_total} disponível(is)
+                👥 {turma.nome} · {formatDiasSemana(turma.cadencia_dias_semana)}
+                {turma.horario_aula ? ` · ${turma.horario_aula}` : ""} ·{" "}
+                {turma.vagas_total - turma.vagas_ocupadas} vaga(s) disponível(is)
               </span>
             </CardContent>
           </Card>
