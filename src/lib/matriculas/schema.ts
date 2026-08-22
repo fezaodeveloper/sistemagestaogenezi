@@ -91,6 +91,7 @@ export const matriculaWizardSchema = z.object({
   num_parcelas: z.number().int().min(1).max(12),
   valor_parcela: z.number().min(0).nullable(),
   forma_pagamento: z.enum(FORMAS_PAGAMENTO, { error: "Selecione a forma de pagamento." }),
+  taxa_cartao: z.number().min(0).max(10).nullable(),
   data_primeira_mensalidade: z
     .string()
     .min(1, { error: "Informe a data da primeira mensalidade." }),
@@ -124,6 +125,7 @@ export type Matricula = {
   num_parcelas: number | null;
   valor_parcela: number | null;
   forma_pagamento: FormaPagamento | null;
+  taxa_cartao: number | null;
   data_primeira_mensalidade: string | null;
   data_inicio: string | null;
   previsao_conclusao: string | null;

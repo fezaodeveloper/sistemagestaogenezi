@@ -289,6 +289,7 @@ export function MatriculaWizard({
   const [numParcelas, setNumParcelas] = useState(1);
   const [dataPrimeiraMensalidade, setDataPrimeiraMensalidade] = useState("");
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(null);
+  const [taxaCartaoInput, setTaxaCartaoInput] = useState("");
 
   // Etapa 4 — Datas
   const [dataInicio, setDataInicio] = useState("");
@@ -317,10 +318,26 @@ export function MatriculaWizard({
     return valorOriginal;
   }, [valorOriginal, descontoTipo, descontoFormato, descontoValor]);
 
+  // null quando a forma de pagamento não é cartão, ou quando o campo (opcional)
+  // está vazio — nesses casos nenhuma taxa é aplicada.
+  const taxaCartao = useMemo(() => {
+    if (formaPagamento !== "cartao") return null;
+    const bruto = taxaCartaoInput.trim();
+    if (bruto === "") return null;
+    const numero = Number(bruto.replace(",", "."));
+    return Number.isFinite(numero) ? numero : null;
+  }, [formaPagamento, taxaCartaoInput]);
+
+  const valorComTaxa = useMemo(() => {
+    if (valorFinal === null) return null;
+    if (taxaCartao !== null && taxaCartao > 0) return valorFinal * (1 + taxaCartao / 100);
+    return valorFinal;
+  }, [valorFinal, taxaCartao]);
+
   const valorParcela = useMemo(() => {
-    if (valorFinal === null || numParcelas <= 0) return null;
-    return valorFinal / numParcelas;
-  }, [valorFinal, numParcelas]);
+    if (valorComTaxa === null || numParcelas <= 0) return null;
+    return valorComTaxa / numParcelas;
+  }, [valorComTaxa, numParcelas]);
 
   // turmas.data_fim já é uma data concreta definida na criação da turma —
   // usada direto como previsão de conclusão. A "estimativa pela carga
@@ -365,6 +382,7 @@ export function MatriculaWizard({
     setNumParcelas(1);
     setDataPrimeiraMensalidade("");
     setFormaPagamento(null);
+    setTaxaCartaoInput("");
     setDataInicio("");
     setApostilaEntregue(false);
     setFardaEntregue(false);
@@ -390,6 +408,7 @@ export function MatriculaWizard({
       num_parcelas: numParcelas,
       valor_parcela: valorParcela,
       forma_pagamento: formaPagamento,
+      taxa_cartao: taxaCartao,
       data_primeira_mensalidade: dataPrimeiraMensalidade,
       data_inicio: dataInicio,
       previsao_conclusao: previsaoConclusao,
@@ -811,27 +830,14 @@ export function MatriculaWizard({
             </Select>
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="valor_parcela">Valor por Parcela</Label>
-            <Input id="valor_parcela" readOnly value={formatValor(valorParcela)} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="data_primeira_mensalidade">Data da Primeira Mensalidade</Label>
-            <Input
-              id="data_primeira_mensalidade"
-              type="date"
-              value={dataPrimeiraMensalidade}
-              onChange={(event) => setDataPrimeiraMensalidade(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
             <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
             <Select
               items={FORMA_PAGAMENTO_LABELS}
               value={formaPagamento ?? undefined}
-              onValueChange={(value) => setFormaPagamento(value as FormaPagamento)}
+              onValueChange={(value) => {
+                setFormaPagamento(value as FormaPagamento);
+                if (value !== "cartao") setTaxaCartaoInput("");
+              }}
             >
               <SelectTrigger id="forma_pagamento" className="w-full">
                 <SelectValue placeholder="Selecione" />
@@ -844,6 +850,48 @@ export function MatriculaWizard({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        {formaPagamento === "cartao" && (
+          <div className="flex flex-col gap-3 rounded-md border p-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="taxa_cartao">Taxa do cartão (%)</Label>
+              <Input
+                id="taxa_cartao"
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                placeholder="ex: 2,99"
+                value={taxaCartaoInput}
+                onChange={(event) => setTaxaCartaoInput(event.target.value)}
+                className="max-w-40"
+              />
+              <p className="text-muted-foreground text-xs">
+                A taxa será embutida automaticamente no valor das parcelas.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="valor_com_taxa">Valor total com taxa</Label>
+              <Input id="valor_com_taxa" readOnly value={formatValor(valorComTaxa)} className="max-w-40" />
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="valor_parcela">Valor por Parcela</Label>
+            <Input id="valor_parcela" readOnly value={formatValor(valorParcela)} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="data_primeira_mensalidade">Data da Primeira Mensalidade</Label>
+            <Input
+              id="data_primeira_mensalidade"
+              type="date"
+              value={dataPrimeiraMensalidade}
+              onChange={(event) => setDataPrimeiraMensalidade(event.target.value)}
+            />
           </div>
         </div>
       </div>

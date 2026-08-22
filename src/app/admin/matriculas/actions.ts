@@ -132,6 +132,7 @@ export async function createMatricula(
       num_parcelas: data.num_parcelas,
       valor_parcela: data.valor_parcela,
       forma_pagamento: data.forma_pagamento,
+      taxa_cartao: data.taxa_cartao,
       data_primeira_mensalidade: data.data_primeira_mensalidade,
       data_inicio: data.data_inicio,
       previsao_conclusao: data.previsao_conclusao,
