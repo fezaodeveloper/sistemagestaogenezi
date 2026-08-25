@@ -12,6 +12,8 @@ export const MATRICULA_STATUSES = [
   "transferida",
 ] as const;
 
+export type MatriculaStatus = (typeof MATRICULA_STATUSES)[number];
+
 export const MATRICULA_STATUS_LABELS: Record<(typeof MATRICULA_STATUSES)[number], string> = {
   ativa: "Ativa",
   inativa: "Inativa",
@@ -109,6 +111,26 @@ export const matriculaWizardSchema = z.object({
 });
 
 export type MatriculaWizardInput = z.infer<typeof matriculaWizardSchema>;
+
+// Campos editáveis na tela de detalhes da matrícula (/admin/matriculas/[id]) —
+// um subconjunto de matriculaWizardSchema: os dados de aluno/curso/turma/
+// financeiro nascem no wizard e não são reeditáveis depois, só o ciclo de
+// vida (status, datas, materiais, observações).
+export const matriculaDetalhesFormSchema = z.object({
+  status: z.enum(MATRICULA_STATUSES, { error: "Selecione o status." }),
+  data_inicio: z.string().min(1, { error: "Informe a data de início." }),
+  previsao_conclusao: z.string().nullable(),
+  farda_entregue: z.boolean(),
+  apostila_entregue: z.boolean(),
+  kit_entregue: z.boolean(),
+  observacoes: z
+    .string()
+    .trim()
+    .max(2000, { error: "Observações muito longas." })
+    .optional(),
+});
+
+export type MatriculaDetalhesFormValues = z.infer<typeof matriculaDetalhesFormSchema>;
 
 export type Matricula = {
   id: string;

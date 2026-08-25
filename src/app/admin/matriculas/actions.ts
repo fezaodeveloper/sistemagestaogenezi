@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
+  matriculaDetalhesFormSchema,
   matriculaWizardSchema,
   type Matricula,
   type MatriculaWizardInput,
@@ -162,4 +163,83 @@ export async function createMatricula(
 
   revalidatePath("/admin/matriculas");
   return { success: true, data: matricula as Matricula };
+}
+
+export type MatriculaDetalhada = Matricula & {
+  alunos: { full_name: string | null; email: string; cpf: string; telefone: string } | null;
+  turmas: {
+    nome: string;
+    cadencia_dias_semana: (typeof DIAS_SEMANA)[number][] | null;
+    horario_aula: string | null;
+    data_inicio: string;
+    data_fim: string;
+    cursos: {
+      nome: string;
+      tipo: (typeof CURSO_TIPOS)[number];
+      carga_horaria_horas: number | null;
+    } | null;
+  } | null;
+};
+
+export async function getMatricula(id: string): Promise<MatriculaDetalhada | null> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("matriculas")
+    .select(
+      "*, alunos(full_name, email, cpf, telefone), turmas(nome, cadencia_dias_semana, horario_aula, data_inicio, data_fim, cursos(nome, tipo, carga_horaria_horas))",
+    )
+    .eq("id", id)
+    .single();
+
+  return (data as MatriculaDetalhada | null) ?? null;
+}
+
+export type UpdateMatriculaDetalhesResult = { success: true } | { error: string };
+
+export async function updateMatriculaDetalhes(
+  id: string,
+  formData: FormData,
+): Promise<UpdateMatriculaDetalhesResult> {
+  await requireRole("admin");
+
+  const previsaoConclusaoRaw = String(formData.get("previsao_conclusao") ?? "");
+  const observacoesRaw = String(formData.get("observacoes") ?? "");
+
+  const parsed = matriculaDetalhesFormSchema.safeParse({
+    status: formData.get("status"),
+    data_inicio: formData.get("data_inicio"),
+    previsao_conclusao: previsaoConclusaoRaw || null,
+    farda_entregue: formData.get("farda_entregue") === "true",
+    apostila_entregue: formData.get("apostila_entregue") === "true",
+    kit_entregue: formData.get("kit_entregue") === "true",
+    observacoes: observacoesRaw || undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("matriculas")
+    .update({
+      status: data.status,
+      data_inicio: data.data_inicio,
+      previsao_conclusao: data.previsao_conclusao,
+      farda_entregue: data.farda_entregue,
+      apostila_entregue: data.apostila_entregue,
+      kit_entregue: data.kit_entregue,
+      observacoes: data.observacoes ?? null,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações. Tente novamente." };
+  }
+
+  revalidatePath("/admin/matriculas");
+  return { success: true };
 }

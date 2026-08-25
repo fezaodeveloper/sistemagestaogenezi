@@ -380,7 +380,12 @@ export function MatriculasTable({ matriculas }: { matriculas: MatriculaListItem[
                 </TableCell>
                 <TableCell>{formatDataBR(matricula.data_matricula)}</TableCell>
                 <TableCell className="flex justify-end gap-1">
-                  <Button variant="ghost" size="sm" disabled>
+                  <Button
+                    render={<Link href={`/admin/matriculas/${matricula.id}`} />}
+                    nativeButton={false}
+                    variant="ghost"
+                    size="sm"
+                  >
                     Ver
                   </Button>
                   <CancelarMatriculaButton matricula={matricula} />

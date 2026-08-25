@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { Check, ChevronLeft, ChevronRight, Loader2, Printer } from "lucide-react";
-import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { pdf } from "@react-pdf/renderer";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ import {
   type CursoParaMatricula,
   type TurmaParaMatricula,
 } from "@/app/admin/matriculas/actions";
+import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
 
 const ETAPAS = ["Aluno", "Curso e Turma", "Valores", "Datas", "Materiais", "Confirmação"] as const;
 
@@ -125,141 +126,6 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
         );
       })}
     </div>
-  );
-}
-
-// --- PDF do comprovante ---
-
-type ResumoMatricula = {
-  aluno: AlunoParaMatricula;
-  curso: CursoParaMatricula;
-  turma: TurmaParaMatricula;
-  valorOriginal: number | null;
-  descontoTipo: DescontoTipo;
-  descontoFormato: DescontoFormato | null;
-  descontoValor: number;
-  valorFinal: number | null;
-  numParcelas: number;
-  valorParcela: number | null;
-  formaPagamento: FormaPagamento;
-  dataPrimeiraMensalidade: string;
-  dataInicio: string;
-  previsaoConclusao: string | null;
-  apostilaEntregue: boolean;
-  fardaEntregue: boolean;
-  kitEntregue: boolean;
-  observacoes: string;
-};
-
-const pdfStyles = StyleSheet.create({
-  page: { padding: 36, fontSize: 10, fontFamily: "Helvetica" },
-  header: { marginBottom: 18, borderBottomWidth: 2, borderBottomColor: "#000000", paddingBottom: 10 },
-  title: { fontSize: 16, fontFamily: "Helvetica-Bold" },
-  subtitle: { fontSize: 12, marginTop: 2 },
-  meta: { fontSize: 9, color: "#555555", marginTop: 4 },
-  section: { marginBottom: 12 },
-  sectionTitle: {
-    fontSize: 11,
-    fontFamily: "Helvetica-Bold",
-    marginBottom: 4,
-    backgroundColor: "#f0f0f0",
-    padding: 4,
-  },
-  row: { flexDirection: "row", marginBottom: 2 },
-  label: { width: "40%", color: "#555555" },
-  value: { width: "60%", fontFamily: "Helvetica-Bold" },
-  footer: { marginTop: 24, fontSize: 9, textAlign: "center", color: "#555555" },
-});
-
-function LinhaPdf({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={pdfStyles.row}>
-      <Text style={pdfStyles.label}>{label}</Text>
-      <Text style={pdfStyles.value}>{value}</Text>
-    </View>
-  );
-}
-
-function ComprovanteDocument({ resumo, geradoEm }: { resumo: ResumoMatricula; geradoEm: string }) {
-  const descontoTexto =
-    resumo.descontoTipo === "sem_bolsa"
-      ? "Sem desconto"
-      : `${DESCONTO_TIPO_LABELS[resumo.descontoTipo]}${
-          resumo.descontoFormato === "porcentagem"
-            ? ` (${resumo.descontoValor}%)`
-            : resumo.descontoFormato === "reais"
-              ? ` (${formatValor(resumo.descontoValor)})`
-              : ""
-        }`;
-
-  return (
-    <Document>
-      <Page size="A4" style={pdfStyles.page}>
-        <View style={pdfStyles.header}>
-          <Text style={pdfStyles.title}>GÊNEZI — Educação Profissional</Text>
-          <Text style={pdfStyles.subtitle}>Comprovante de Matrícula</Text>
-          <Text style={pdfStyles.meta}>Emitido em {geradoEm}</Text>
-        </View>
-
-        <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Aluno</Text>
-          <LinhaPdf label="Nome" value={resumo.aluno.full_name ?? "—"} />
-          <LinhaPdf label="E-mail" value={resumo.aluno.email} />
-          <LinhaPdf label="CPF" value={formatCpf(resumo.aluno.cpf)} />
-          <LinhaPdf label="Telefone" value={formatTelefone(resumo.aluno.telefone)} />
-        </View>
-
-        <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Curso e Turma</Text>
-          <LinhaPdf label="Curso" value={resumo.curso.nome} />
-          <LinhaPdf label="Modalidade" value={CURSO_TIPO_LABELS[resumo.curso.tipo]} />
-          <LinhaPdf
-            label="Carga horária"
-            value={resumo.curso.carga_horaria_horas ? `${resumo.curso.carga_horaria_horas}h` : "—"}
-          />
-          <LinhaPdf label="Turma" value={resumo.turma.nome} />
-          <LinhaPdf label="Dias da semana" value={formatDiasSemana(resumo.turma.cadencia_dias_semana)} />
-          <LinhaPdf label="Horário" value={resumo.turma.horario_aula ?? "—"} />
-        </View>
-
-        <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Financeiro</Text>
-          <LinhaPdf label="Valor original" value={formatValor(resumo.valorOriginal)} />
-          <LinhaPdf label="Desconto" value={descontoTexto} />
-          <LinhaPdf label="Valor final" value={formatValor(resumo.valorFinal)} />
-          <LinhaPdf label="Parcelamento" value={formatParcelas(resumo.numParcelas, resumo.valorParcela)} />
-          <LinhaPdf label="Forma de pagamento" value={FORMA_PAGAMENTO_LABELS[resumo.formaPagamento]} />
-          <LinhaPdf label="1ª mensalidade" value={formatDataBR(resumo.dataPrimeiraMensalidade)} />
-        </View>
-
-        <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Datas</Text>
-          <LinhaPdf label="Início" value={formatDataBR(resumo.dataInicio)} />
-          <LinhaPdf
-            label="Previsão de conclusão"
-            value={resumo.previsaoConclusao ? formatDataBR(resumo.previsaoConclusao) : "—"}
-          />
-        </View>
-
-        <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Materiais entregues</Text>
-          <LinhaPdf label="Apostila" value={resumo.apostilaEntregue ? "Sim" : "Não"} />
-          <LinhaPdf label="Farda" value={resumo.fardaEntregue ? "Sim" : "Não"} />
-          <LinhaPdf label="Kit" value={resumo.kitEntregue ? "Sim" : "Não"} />
-        </View>
-
-        {resumo.observacoes && (
-          <View style={pdfStyles.section}>
-            <Text style={pdfStyles.sectionTitle}>Observações</Text>
-            <Text>{resumo.observacoes}</Text>
-          </View>
-        )}
-
-        <Text style={pdfStyles.footer}>
-          Este comprovante confirma a matrícula do aluno acima.
-        </Text>
-      </Page>
-    </Document>
   );
 }
 
@@ -434,7 +300,7 @@ export function MatriculaWizard({
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
       const blob = await pdf(
-        <ComprovanteDocument
+        <MatriculaComprovantePdf
           resumo={{
             aluno,
             curso,
