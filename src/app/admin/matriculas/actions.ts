@@ -107,14 +107,14 @@ export async function createMatricula(
   if (data.status === "ativa") {
     const { data: turma, error: turmaError } = await supabase
       .from("turmas")
-      .select("vagas_total, vagas_ocupadas")
+      .select("capacidade_maxima, vagas_ocupadas")
       .eq("id", data.turma_id)
       .single();
 
     if (turmaError || !turma) {
       return { success: false, error: "Não foi possível verificar as vagas da turma." };
     }
-    if (turma.vagas_ocupadas >= turma.vagas_total) {
+    if (turma.vagas_ocupadas >= turma.capacidade_maxima) {
       return { success: false, error: "Essa turma não tem mais vagas disponíveis." };
     }
   }

@@ -9,6 +9,15 @@ export const TURMA_STATUS_LABELS: Record<(typeof TURMA_STATUSES)[number], string
   cancelada: "Cancelada",
 };
 
+// Mesmo padrão de cores fixas via className usado em MATRICULA_STATUS_BADGE_CLASS
+// (src/lib/matriculas/schema.ts) e afins.
+export const TURMA_STATUS_BADGE_CLASS: Record<(typeof TURMA_STATUSES)[number], string> = {
+  planejada: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  ativa: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  encerrada: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  cancelada: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+};
+
 export const DIAS_SEMANA = [
   "domingo",
   "segunda",
@@ -27,6 +36,23 @@ export const DIA_SEMANA_LABELS: Record<(typeof DIAS_SEMANA)[number], string> = {
   quinta: "Quinta",
   sexta: "Sexta",
   sabado: "Sábado",
+};
+
+export const TURNOS = ["manha", "tarde", "noite"] as const;
+export type Turno = (typeof TURNOS)[number];
+export const TURNO_LABELS: Record<Turno, string> = {
+  manha: "Manhã",
+  tarde: "Tarde",
+  noite: "Noite",
+};
+
+// Cores fixas por turno (pedido: azul=manhã, verde=tarde, violeta=noite),
+// mesmo padrão de badge por className fixa usado em MATRICULA_STATUS_BADGE_CLASS
+// (src/lib/matriculas/schema.ts) e afins.
+export const TURNO_BADGE_CLASS: Record<Turno, string> = {
+  manha: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  tarde: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  noite: "bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400",
 };
 
 export const turmaFormSchema = z
@@ -58,6 +84,14 @@ export const turmaFormSchema = z
       .string()
       .optional()
       .transform((v) => (v ? v : undefined)),
+    turno: z.enum(TURNOS).optional(),
+    local_sala: z.string().trim().max(100, { error: "Máximo de 100 caracteres." }).optional(),
+    professor: z.string().trim().max(200, { error: "Máximo de 200 caracteres." }).optional(),
+    horario_fim: z
+      .string()
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+    observacoes: z.string().trim().max(2000, { error: "Máximo de 2000 caracteres." }).optional(),
   })
   .refine((data) => data.data_fim >= data.data_inicio, {
     error: "A data de término deve ser igual ou posterior à data de início.",
@@ -76,6 +110,13 @@ export type Turma = {
   status: (typeof TURMA_STATUSES)[number];
   cadencia_dias_semana: (typeof DIAS_SEMANA)[number][] | null;
   horario_aula: string | null;
+  turno: Turno | null;
+  local_sala: string | null;
+  professor: string | null;
+  horario_fim: string | null;
+  observacoes: string | null;
+  vagas_total: number;
+  vagas_ocupadas: number;
   created_by: string;
   created_at: string;
   updated_at: string;

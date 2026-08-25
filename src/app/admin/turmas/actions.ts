@@ -16,6 +16,11 @@ type TurmaFormValuesEcho = {
   status: string;
   cadencia_dias_semana: string[];
   horario_aula: string;
+  turno: string;
+  local_sala: string;
+  professor: string;
+  horario_fim: string;
+  observacoes: string;
 };
 
 export type TurmaFormState =
@@ -28,7 +33,10 @@ export type TurmaFormState =
           | "data_fim"
           | "capacidade_maxima"
           | "status"
-          | "cadencia_dias_semana",
+          | "cadencia_dias_semana"
+          | "local_sala"
+          | "professor"
+          | "observacoes",
           string[]
         >
       >;
@@ -47,6 +55,11 @@ function echoValues(formData: FormData): TurmaFormValuesEcho {
     status: String(formData.get("status") ?? ""),
     cadencia_dias_semana: formData.getAll("cadencia_dias_semana").map(String),
     horario_aula: String(formData.get("horario_aula") ?? ""),
+    turno: String(formData.get("turno") ?? ""),
+    local_sala: String(formData.get("local_sala") ?? ""),
+    professor: String(formData.get("professor") ?? ""),
+    horario_fim: String(formData.get("horario_fim") ?? ""),
+    observacoes: String(formData.get("observacoes") ?? ""),
   };
 }
 
@@ -60,6 +73,11 @@ function parseTurmaForm(formData: FormData) {
     status: formData.get("status"),
     cadencia_dias_semana: formData.getAll("cadencia_dias_semana"),
     horario_aula: formData.get("horario_aula"),
+    turno: formData.get("turno"),
+    local_sala: formData.get("local_sala"),
+    professor: formData.get("professor"),
+    horario_fim: formData.get("horario_fim"),
+    observacoes: formData.get("observacoes"),
   });
 }
 
@@ -126,6 +144,11 @@ export async function createTurma(
     status: parsed.data.status,
     cadencia_dias_semana: cadencia.cadenciaDiasSemana,
     horario_aula: parsed.data.horario_aula ?? null,
+    turno: parsed.data.turno ?? null,
+    local_sala: parsed.data.local_sala ?? null,
+    professor: parsed.data.professor ?? null,
+    horario_fim: parsed.data.horario_fim ?? null,
+    observacoes: parsed.data.observacoes ?? null,
   });
 
   if (error) {
@@ -195,6 +218,11 @@ export async function updateTurma(
       status: parsed.data.status,
       cadencia_dias_semana: cadencia.cadenciaDiasSemana,
       horario_aula: parsed.data.horario_aula ?? null,
+      turno: parsed.data.turno ?? null,
+      local_sala: parsed.data.local_sala ?? null,
+      professor: parsed.data.professor ?? null,
+      horario_fim: parsed.data.horario_fim ?? null,
+      observacoes: parsed.data.observacoes ?? null,
     })
     .eq("id", id);
 

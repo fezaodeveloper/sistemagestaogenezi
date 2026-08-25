@@ -40,6 +40,11 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
           status: turma.status,
           cadencia_dias_semana: turma.cadencia_dias_semana ?? [],
           horario_aula: turma.horario_aula?.slice(0, 5) ?? "",
+          turno: turma.turno ?? undefined,
+          local_sala: turma.local_sala ?? "",
+          professor: turma.professor ?? "",
+          horario_fim: turma.horario_fim ?? "",
+          observacoes: turma.observacoes ?? "",
         }}
         submitLabel="Salvar alterações"
       />
