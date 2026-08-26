@@ -18,7 +18,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatTelefone } from "@/lib/alunos/schema";
-import { PRESENCA_STATUSES } from "@/lib/presencas/schema";
+import {
+  FREQUENCIA_MINIMA_PERCENTUAL as FREQUENCIA_MINIMA,
+  FREQUENCIA_STATUS_BADGE_CLASS as FREQUENCIA_BADGE_CLASS,
+  PRESENCA_STATUSES,
+} from "@/lib/presencas/schema";
 import {
   MATRICULA_STATUS_BADGE_CLASS,
   MATRICULA_STATUS_LABELS,
@@ -42,17 +46,6 @@ type PresencaStatus = (typeof PRESENCA_STATUSES)[number];
 export type TurmaPresencaRow = {
   matricula_id: string;
   status: PresencaStatus;
-};
-
-// Frequência mínima pra aptidão ao certificado — mesmo percentual usado em
-// avaliar_certificado() no banco (certificado_frequencia_minima_percentual,
-// configurável em /admin/configuracoes), mas fixo aqui: este relatório é uma
-// visão rápida por turma, não recalcula a regra de emissão de certificado.
-const FREQUENCIA_MINIMA = 75;
-
-const FREQUENCIA_BADGE_CLASS = {
-  apto: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
-  inapto: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
 };
 
 type FrequenciaAluno = {
@@ -282,7 +275,15 @@ export function TurmaDetalhes({
                             {MATRICULA_STATUS_LABELS[matricula.status]}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="flex justify-end gap-1 text-right">
+                          <Button
+                            render={<Link href={`/admin/turmas/${turma.id}/alunos/${matricula.id}`} />}
+                            nativeButton={false}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            Histórico
+                          </Button>
                           <Button
                             render={<Link href={`/admin/matriculas/${matricula.id}`} />}
                             nativeButton={false}
