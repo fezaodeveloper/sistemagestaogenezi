@@ -161,6 +161,30 @@ export async function createMatricula(
     // pronto pro dia em que isso virar uma chamada de rede de verdade.
   }
 
+  // Parcelas geradas localmente (sem cobrança no Asaas) — o admin decide
+  // quando gerar cada cobrança na tela financeira (botão "Gerar cobrança").
+  if (data.num_parcelas && data.valor_parcela !== null && data.data_primeira_mensalidade) {
+    const [ano, mes, dia] = data.data_primeira_mensalidade.split("-").map(Number);
+    const parcelas = Array.from({ length: data.num_parcelas }, (_, indice) => {
+      const vencimento = new Date(ano, mes - 1 + indice, dia);
+      const dataVencimento = `${vencimento.getFullYear()}-${String(vencimento.getMonth() + 1).padStart(2, "0")}-${String(vencimento.getDate()).padStart(2, "0")}`;
+      return {
+        matricula_id: matricula.id,
+        aluno_id: data.aluno_id,
+        numero_parcela: indice + 1,
+        valor: data.valor_parcela!,
+        data_vencimento: dataVencimento,
+        status: "pendente" as const,
+        forma_pagamento: data.forma_pagamento,
+      };
+    });
+
+    // Best-effort: parcela é um registro de controle financeiro, não deve
+    // impedir a matrícula (já criada com sucesso acima) de existir se a
+    // geração falhar por algum motivo.
+    await supabase.from("parcelas").insert(parcelas);
+  }
+
   revalidatePath("/admin/matriculas");
   return { success: true, data: matricula as Matricula };
 }

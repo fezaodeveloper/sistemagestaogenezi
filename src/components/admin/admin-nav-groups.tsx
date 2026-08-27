@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
-  Award, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MessageCircle, MessagesSquare, PlusCircle, Presentation,
-  Settings, Target, UserPlus, Users,
+  Award, Banknote, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
+  LayoutDashboard, MessageCircle, MessagesSquare, PlusCircle, Presentation, Receipt,
+  Settings, Target, TrendingDown, UserPlus, Users,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 
@@ -23,6 +23,11 @@ const GROUPS: NavGroup[] = [
   { id: "matriculas", label: "Matrículas", icon: ClipboardCheck, items: [
     { href: "/admin/matriculas", label: "Lista de matrículas", icon: ClipboardList },
     { href: "/admin/matriculas/nova", label: "Nova matrícula", icon: PlusCircle },
+  ]},
+  { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
+    { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },
+    { href: "/admin/financeiro/avulsos", label: "Pagamentos avulsos", icon: Receipt },
+    { href: "/admin/financeiro/gastos", label: "Gastos", icon: TrendingDown },
   ]},
   { id: "academico", label: "Acad\u00eamico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
