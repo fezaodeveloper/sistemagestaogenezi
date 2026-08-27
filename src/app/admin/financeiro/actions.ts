@@ -9,9 +9,9 @@ import {
   buscarClienteAsaasPorCpf,
   criarCobrancaAsaas,
   cancelarCobrancaAsaas,
+  confirmarRecebimentoDinheiro,
 } from "@/lib/asaas/client";
 import { parcelaFormSchema, type Parcela } from "@/lib/financeiro/schema";
-import { FORMAS_PAGAMENTO, type FormaPagamento } from "@/lib/matriculas/schema";
 
 export type ParcelaComRelacoes = Parcela & {
   alunos: { full_name: string | null; cpf: string; email: string; telefone: string } | null;
@@ -159,14 +159,6 @@ export async function criarParcelaManual(formData: FormData): Promise<ParcelaAct
   return { success: true };
 }
 
-const BILLING_TYPE_MAP: Record<FormaPagamento, "BOLETO" | "PIX" | "CREDIT_CARD" | "UNDEFINED"> = {
-  boleto: "BOLETO",
-  pix: "PIX",
-  cartao: "CREDIT_CARD",
-  avista: "UNDEFINED",
-  outro: "UNDEFINED",
-};
-
 export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionResult> {
   await requireRole("admin");
   const supabase = await createClient();
@@ -174,7 +166,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
   const { data: parcelaData } = await supabase
     .from("parcelas")
     .select(
-      "id, matricula_id, valor, data_vencimento, numero_parcela, forma_pagamento, asaas_payment_id, alunos(full_name, cpf, email, telefone)",
+      "id, matricula_id, valor, data_vencimento, numero_parcela, forma_pagamento, asaas_payment_id, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
     )
     .eq("id", parcelaId)
     .single();
@@ -185,12 +177,25 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
         "id" | "matricula_id" | "valor" | "data_vencimento" | "numero_parcela" | "forma_pagamento" | "asaas_payment_id"
       > & {
         alunos: { full_name: string | null; cpf: string; email: string; telefone: string } | null;
+        matriculas: {
+          num_parcelas: number | null;
+          turmas: { cursos: { nome: string } | null } | null;
+        } | null;
       })
     | null;
 
   if (!parcela) return { error: "Parcela não encontrada." };
   if (parcela.asaas_payment_id) return { error: "Essa parcela já tem uma cobrança gerada." };
   if (!parcela.alunos) return { error: "Aluno da parcela não encontrado." };
+
+  // Cartão é processado na maquininha Infinipay, fora do Asaas — a baixa
+  // dessas parcelas é sempre manual (ver marcarComoPagoManual).
+  if (parcela.forma_pagamento === "cartao") {
+    return {
+      error:
+        'Cartão de crédito é processado na Infinipay. Use "Marcar como pago" após processar na máquina.',
+    };
+  }
 
   const aluno = parcela.alunos;
 
@@ -220,14 +225,20 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
       await supabase.from("matriculas").update({ asaas_customer_id: customerId }).eq("id", parcela.matricula_id);
     }
 
-    const billingType = parcela.forma_pagamento ? BILLING_TYPE_MAP[parcela.forma_pagamento] : "UNDEFINED";
+    // boleto, pix, à vista e outro geram o mesmo billingType ("BOLETO") no
+    // Asaas — o Pix vem embutido na própria fatura do boleto, com taxa
+    // menor do que um Pix cobrado separadamente. Cartão nunca chega aqui
+    // (barrado acima).
+    const nomeCurso = parcela.matriculas?.turmas?.cursos?.nome ?? "curso";
+    const totalParcelas = parcela.matriculas?.num_parcelas ?? "?";
+    const nomeAluno = aluno.full_name ?? aluno.email;
 
     const cobranca = await criarCobrancaAsaas({
       customer: customerId,
-      billingType,
+      billingType: "BOLETO",
       value: Number(parcela.valor),
       dueDate: parcela.data_vencimento,
-      description: `Parcela ${parcela.numero_parcela}`,
+      description: `Parcela ${parcela.numero_parcela}/${totalParcelas} - ${nomeCurso} - ${nomeAluno}`,
       externalReference: parcela.id,
     });
 
@@ -279,37 +290,51 @@ export async function cancelarParcela(parcelaId: string): Promise<ParcelaActionR
   return { success: true };
 }
 
-export async function registrarPagamentoManual(
+// Baixa manual (dinheiro, cartão na Infinipay, ou até um boleto/Pix do
+// Asaas pago presencialmente): quando a parcela já tem cobrança no Asaas,
+// dá baixa lá também (POST /receiveInCash) pra manter os dois lados
+// sincronizados — sem isso, o Asaas seguiria cobrando/marcando atraso numa
+// parcela que já foi paga por fora.
+export async function marcarComoPagoManual(
   parcelaId: string,
-  formData: FormData,
+  dataPagamento: string,
+  valor: number,
 ): Promise<ParcelaActionResult> {
   await requireRole("admin");
 
-  const dataPagamento = formData.get("data_pagamento");
-  const formaPagamentoRaw = formData.get("forma_pagamento");
+  const supabase = await createClient();
+  const { data: parcela } = await supabase
+    .from("parcelas")
+    .select("id, asaas_payment_id")
+    .eq("id", parcelaId)
+    .single();
 
-  if (typeof dataPagamento !== "string" || !dataPagamento) {
-    return { error: "Informe a data do pagamento." };
+  if (!parcela) return { error: "Parcela não encontrada." };
+
+  if (parcela.asaas_payment_id) {
+    try {
+      await confirmarRecebimentoDinheiro(parcela.asaas_payment_id, {
+        paymentDate: dataPagamento,
+        value: valor,
+        notifyCustomer: false,
+      });
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Não foi possível confirmar o recebimento no Asaas.",
+      };
+    }
   }
 
-  const formaPagamento =
-    typeof formaPagamentoRaw === "string" &&
-    (FORMAS_PAGAMENTO as readonly string[]).includes(formaPagamentoRaw)
-      ? (formaPagamentoRaw as FormaPagamento)
-      : null;
-
-  const supabase = await createClient();
-
-  // .is("asaas_payment_id", null): pagamento manual só é permitido pra
-  // parcela sem cobrança Asaas associada — com Asaas, o status vem do
-  // webhook (src/app/api/webhooks/asaas/route.ts), nunca marcado à mão.
   const { error } = await supabase
     .from("parcelas")
-    .update({ status: "pago", data_pagamento: dataPagamento, forma_pagamento: formaPagamento })
-    .eq("id", parcelaId)
-    .is("asaas_payment_id", null);
+    .update({
+      status: "pago",
+      data_pagamento: dataPagamento,
+      asaas_status: parcela.asaas_payment_id ? "RECEIVED_IN_CASH" : null,
+    })
+    .eq("id", parcelaId);
 
-  if (error) return { error: "Não foi possível registrar o pagamento." };
+  if (error) return { error: "Não foi possível marcar a parcela como paga." };
 
   revalidatePath("/admin/financeiro");
   return { success: true };

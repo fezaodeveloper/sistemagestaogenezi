@@ -67,6 +67,16 @@ export async function cancelarCobrancaAsaas(asaasPaymentId: string): Promise<voi
   await asaasRequest<unknown>(`/payments/${asaasPaymentId}`, "DELETE");
 }
 
+// Baixa manual (dinheiro na mão, cartão na maquininha Infinipay, etc.) —
+// dá baixa no Asaas pra manter o status lá sincronizado com o pagamento
+// registrado no sistema, mesmo sem ter sido o Asaas quem recebeu de fato.
+export async function confirmarRecebimentoDinheiro(
+  asaasPaymentId: string,
+  dados: { paymentDate: string; value: number; notifyCustomer?: boolean },
+): Promise<void> {
+  await asaasRequest<unknown>(`/payments/${asaasPaymentId}/receiveInCash`, "POST", dados);
+}
+
 export async function buscarCobrancaAsaas(asaasPaymentId: string): Promise<{
   id: string;
   status: string;

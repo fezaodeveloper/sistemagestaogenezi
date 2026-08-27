@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Plus, Printer } from "lucide-react";
+import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   cancelarParcela,
   criarParcelaManual,
   gerarCobranca,
   getFinanceiroDados,
-  registrarPagamentoManual,
+  marcarComoPagoManual,
   type FinanceiroDados,
   type MatriculaParaParcela,
   type ParcelaComRelacoes,
@@ -15,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -76,6 +78,50 @@ function formatDataBR(iso: string | null): string {
   if (!iso) return "—";
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+const carneStyles = StyleSheet.create({
+  page: { padding: 32, fontSize: 10, fontFamily: "Helvetica" },
+  header: { marginBottom: 16 },
+  title: { fontSize: 14, fontFamily: "Helvetica-Bold" },
+  item: {
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#dddddd",
+  },
+  linha: { marginBottom: 3 },
+  label: { fontFamily: "Helvetica-Bold" },
+  footer: { marginTop: 16, fontSize: 9, textAlign: "center", color: "#555555" },
+});
+
+function CarneDocument({ parcelas }: { parcelas: ParcelaComRelacoes[] }) {
+  return (
+    <Document>
+      <Page size="A4" orientation="portrait" style={carneStyles.page}>
+        <View style={carneStyles.header}>
+          <Text style={carneStyles.title}>GÊNEZI — Educação Profissional — Carnê de Pagamento</Text>
+        </View>
+
+        {parcelas.map((parcela) => (
+          <View key={parcela.id} style={carneStyles.item}>
+            <Text style={carneStyles.linha}>
+              <Text style={carneStyles.label}>Aluno: </Text>
+              {parcela.alunos?.full_name ?? "—"}
+            </Text>
+            <Text style={carneStyles.linha}>
+              Parcela nº {parcela.numero_parcela} de {parcela.matriculas?.num_parcelas ?? "?"}
+            </Text>
+            <Text style={carneStyles.linha}>Vencimento: {formatDataBR(parcela.data_vencimento)}</Text>
+            <Text style={carneStyles.linha}>Valor: {formatValor(Number(parcela.valor))}</Text>
+            <Text style={carneStyles.linha}>Link da fatura: {parcela.asaas_invoice_url}</Text>
+          </View>
+        ))}
+
+        <Text style={carneStyles.footer}>Pagamento via Pix ou Boleto — acesse o link acima</Text>
+      </Page>
+    </Document>
+  );
 }
 
 function KpiCard({
@@ -267,10 +313,12 @@ function AcoesParcela({
     });
   }
 
-  function handleRegistrarPagamento(formData: FormData) {
+  function handleMarcarComoPago(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const resultado = await registrarPagamentoManual(parcela.id, formData);
+      const dataPagamento = String(formData.get("data_pagamento") ?? "");
+      const valor = Number(formData.get("valor"));
+      const resultado = await marcarComoPagoManual(parcela.id, dataPagamento, valor);
       if ("error" in resultado) {
         setError(resultado.error);
         return;
@@ -281,8 +329,13 @@ function AcoesParcela({
   }
 
   const emAberto = parcela.status === "pendente" || parcela.status === "atrasado";
-  const podeGerarCobranca = emAberto && !parcela.asaas_payment_id;
-  const podeRegistrarManual = emAberto && !parcela.asaas_payment_id;
+  // Cartão é processado na maquininha Infinipay (fora do Asaas) — nunca gera
+  // cobrança, só permite baixa manual. Com asaas_payment_id já existente
+  // (boleto/Pix), "Marcar como pago" também fica disponível, pra cobrir
+  // pagamento presencial de uma fatura que já foi gerada.
+  const podeGerarCobranca = emAberto && !parcela.asaas_payment_id && parcela.forma_pagamento !== "cartao";
+  const podeMarcarComoPago =
+    emAberto && (parcela.forma_pagamento === "cartao" || Boolean(parcela.asaas_payment_id));
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -303,7 +356,7 @@ function AcoesParcela({
             Ver fatura
           </Button>
         )}
-        {podeRegistrarManual && (
+        {podeMarcarComoPago && (
           <Dialog
             open={pagamentoDialogOpen}
             onOpenChange={(nextOpen) => {
@@ -311,12 +364,12 @@ function AcoesParcela({
               if (nextOpen) setError(null);
             }}
           >
-            <DialogTrigger render={<Button variant="ghost" size="sm">Registrar pagamento</Button>} />
+            <DialogTrigger render={<Button variant="ghost" size="sm">Marcar como pago</Button>} />
             <DialogContent className="sm:max-w-sm">
               <DialogHeader>
-                <DialogTitle>Registrar pagamento manual</DialogTitle>
+                <DialogTitle>Marcar como pago</DialogTitle>
               </DialogHeader>
-              <form action={handleRegistrarPagamento} className="flex flex-col gap-4">
+              <form action={handleMarcarComoPago} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor={`data_pagamento_${parcela.id}`}>Data do pagamento</Label>
                   <Input
@@ -328,23 +381,16 @@ function AcoesParcela({
                   />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor={`forma_pagamento_${parcela.id}`}>Forma de pagamento</Label>
-                  <Select
-                    name="forma_pagamento"
-                    items={FORMA_PAGAMENTO_LABELS}
-                    defaultValue={parcela.forma_pagamento ?? undefined}
-                  >
-                    <SelectTrigger id={`forma_pagamento_${parcela.id}`} className="w-full">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FORMAS_PAGAMENTO.map((formaPagamento) => (
-                        <SelectItem key={formaPagamento} value={formaPagamento}>
-                          {FORMA_PAGAMENTO_LABELS[formaPagamento]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor={`valor_pago_${parcela.id}`}>Valor pago</Label>
+                  <Input
+                    id={`valor_pago_${parcela.id}`}
+                    name="valor"
+                    type="number"
+                    step="0.01"
+                    min={0.01}
+                    defaultValue={Number(parcela.valor)}
+                    required
+                  />
                 </div>
                 {error && (
                   <p role="alert" className="text-destructive text-sm">
@@ -353,7 +399,7 @@ function AcoesParcela({
                 )}
                 <DialogFooter>
                   <Button type="submit" disabled={isPending}>
-                    {isPending ? "Salvando..." : "Registrar"}
+                    {isPending ? "Confirmando..." : "Confirmar pagamento"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -405,6 +451,8 @@ export function FinanceiroView({
   const [isPending, startTransition] = useTransition();
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [gerandoCarne, setGerandoCarne] = useState(false);
 
   function irParaMes(novoAno: number, novoMes: number) {
     startTransition(async () => {
@@ -412,6 +460,7 @@ export function FinanceiroView({
       setAno(novoAno);
       setMes(novoMes);
       setDados(novosDados);
+      setSelecionadas(new Set());
     });
   }
 
@@ -419,6 +468,7 @@ export function FinanceiroView({
     startTransition(async () => {
       const novosDados = await getFinanceiroDados(ano, mes);
       setDados(novosDados);
+      setSelecionadas(new Set());
     });
   }
 
@@ -445,6 +495,50 @@ export function FinanceiroView({
     if (denominador === 0) return null;
     return (dados.kpis.totalRecebido / denominador) * 100;
   }, [dados.kpis]);
+
+  function toggleParcela(id: string) {
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTodasVisiveis() {
+    const idsVisiveis = parcelasFiltradas.map((parcela) => parcela.id);
+    const todasSelecionadas = idsVisiveis.length > 0 && idsVisiveis.every((id) => selecionadas.has(id));
+    setSelecionadas(todasSelecionadas ? new Set() : new Set(idsVisiveis));
+  }
+
+  const parcelasSelecionadas = useMemo(
+    () => dados.parcelas.filter((parcela) => selecionadas.has(parcela.id)),
+    [dados.parcelas, selecionadas],
+  );
+  const parcelasComFatura = useMemo(
+    () => parcelasSelecionadas.filter((parcela) => parcela.asaas_invoice_url),
+    [parcelasSelecionadas],
+  );
+  const quantidadeSemFatura = parcelasSelecionadas.length - parcelasComFatura.length;
+
+  async function handleGerarCarne() {
+    const novaAba = window.open("", "_blank");
+    setGerandoCarne(true);
+    try {
+      const blob = await pdf(<CarneDocument parcelas={parcelasComFatura} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      if (novaAba) {
+        novaAba.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+    } finally {
+      setGerandoCarne(false);
+    }
+  }
+
+  const todasVisiveisSelecionadas =
+    parcelasFiltradas.length > 0 && parcelasFiltradas.every((parcela) => selecionadas.has(parcela.id));
 
   return (
     <div className="flex flex-col gap-4">
@@ -517,6 +611,32 @@ export function FinanceiroView({
         </Select>
       </div>
 
+      {selecionadas.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-sm">
+              {selecionadas.size} parcela{selecionadas.size > 1 ? "s" : ""} selecionada
+              {selecionadas.size > 1 ? "s" : ""}
+            </span>
+            {quantidadeSemFatura > 0 && (
+              <span className="text-muted-foreground text-xs">
+                {quantidadeSemFatura} parcela{quantidadeSemFatura > 1 ? "s" : ""} não{" "}
+                {quantidadeSemFatura > 1 ? "têm" : "tem"} cobrança gerada no Asaas e não{" "}
+                {quantidadeSemFatura > 1 ? "serão incluídas" : "será incluída"} no carnê.
+              </span>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleGerarCarne}
+            disabled={gerandoCarne || parcelasComFatura.length === 0}
+          >
+            <Printer />
+            {gerandoCarne ? "Gerando..." : "Gerar carnê"}
+          </Button>
+        </div>
+      )}
+
       {parcelasFiltradas.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
           Nenhuma parcela encontrada para {NOMES_MES[mes - 1]} de {ano}.
@@ -525,6 +645,13 @@ export function FinanceiroView({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={todasVisiveisSelecionadas}
+                  onCheckedChange={toggleTodasVisiveis}
+                  aria-label="Selecionar todas as parcelas visíveis"
+                />
+              </TableHead>
               <TableHead>Aluno</TableHead>
               <TableHead>Curso/Turma</TableHead>
               <TableHead>Parcela</TableHead>
@@ -538,6 +665,13 @@ export function FinanceiroView({
           <TableBody>
             {parcelasFiltradas.map((parcela) => (
               <TableRow key={parcela.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selecionadas.has(parcela.id)}
+                    onCheckedChange={() => toggleParcela(parcela.id)}
+                    aria-label={`Selecionar parcela de ${parcela.alunos?.full_name ?? "aluno"}`}
+                  />
+                </TableCell>
                 <TableCell>{parcela.alunos?.full_name ?? "—"}</TableCell>
                 <TableCell>
                   <div className="flex flex-col">
