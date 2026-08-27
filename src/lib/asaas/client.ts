@@ -67,6 +67,72 @@ export async function cancelarCobrancaAsaas(asaasPaymentId: string): Promise<voi
   await asaasRequest<unknown>(`/payments/${asaasPaymentId}`, "DELETE");
 }
 
+// ===== PARCELAMENTO =====
+// Mesmo endpoint de criarCobrancaAsaas (POST /payments), mas com
+// installmentCount + totalValue — o Asaas cria todas as cobranças da vez e
+// devolve a primeira, com o campo installment identificando o parcelamento
+// inteiro (usado depois em buscarParcelasDoParcelamento e gerarCarneAsaas).
+
+export async function criarParcelamentoAsaas(dados: {
+  customer: string;
+  billingType: "BOLETO";
+  totalValue: number;
+  installmentCount: number;
+  dueDate: string;
+  description: string;
+  externalReference?: string;
+}): Promise<{
+  id: string;
+  installment: string;
+  invoiceUrl: string;
+  bankSlipUrl?: string;
+  status: string;
+}> {
+  return asaasRequest("/payments", "POST", dados);
+}
+
+export async function buscarParcelasDoParcelamento(installmentId: string): Promise<
+  Array<{
+    id: string;
+    installmentNumber: number;
+    value: number;
+    dueDate: string;
+    status: string;
+    invoiceUrl: string;
+    bankSlipUrl?: string;
+  }>
+> {
+  const resultado = await asaasRequest<{
+    data: Array<{
+      id: string;
+      installmentNumber: number;
+      value: number;
+      dueDate: string;
+      status: string;
+      invoiceUrl: string;
+      bankSlipUrl?: string;
+    }>;
+  }>(`/installments/${installmentId}/payments`);
+  return resultado.data;
+}
+
+// Carnê oficial do Asaas (boleto + QR Code Pix de todas as parcelas) — PDF
+// binário, não JSON, então não passa por asaasRequest.
+export async function gerarCarneAsaas(installmentId: string): Promise<ArrayBuffer> {
+  const response = await fetch(`${ASAAS_API_URL}/installments/${installmentId}/paymentBook`, {
+    headers: {
+      access_token: ASAAS_API_KEY,
+      Accept: "application/pdf",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Não foi possível gerar o carnê no Asaas (${response.status}).`);
+  }
+
+  return response.arrayBuffer();
+}
+
 // Baixa manual (dinheiro na mão, cartão na maquininha Infinipay, etc.) —
 // dá baixa no Asaas pra manter o status lá sincronizado com o pagamento
 // registrado no sistema, mesmo sem ter sido o Asaas quem recebeu de fato.

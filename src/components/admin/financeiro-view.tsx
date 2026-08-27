@@ -6,6 +6,7 @@ import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer
 import {
   cancelarParcela,
   criarParcelaManual,
+  gerarCarne,
   gerarCobranca,
   getFinanceiroDados,
   marcarComoPagoManual,
@@ -78,6 +79,13 @@ function formatDataBR(iso: string | null): string {
   if (!iso) return "—";
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+function base64ParaBlob(base64: string, tipo: string): Blob {
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return new Blob([bytes], { type: tipo });
 }
 
 const carneStyles = StyleSheet.create({
@@ -290,6 +298,35 @@ function AcoesParcela({
   const [error, setError] = useState<string | null>(null);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
   const [pagamentoDialogOpen, setPagamentoDialogOpen] = useState(false);
+  const [gerandoCarne, setGerandoCarne] = useState(false);
+
+  async function handleGerarCarne() {
+    const installmentId = parcela.matriculas?.asaas_installment_id;
+    if (!installmentId) return;
+
+    // Abre a aba em branco já no clique (síncrono), antes do await — mesmo
+    // motivo do handleGerarCarne em lote logo abaixo (bloqueio de pop-up).
+    const novaAba = window.open("", "_blank");
+    setError(null);
+    setGerandoCarne(true);
+    try {
+      const resultado = await gerarCarne(installmentId);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        novaAba?.close();
+        return;
+      }
+      const blob = base64ParaBlob(resultado.pdf, "application/pdf");
+      const url = URL.createObjectURL(blob);
+      if (novaAba) {
+        novaAba.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+    } finally {
+      setGerandoCarne(false);
+    }
+  }
 
   function handleGerarCobranca() {
     setError(null);
@@ -354,6 +391,12 @@ function AcoesParcela({
           >
             <ExternalLink />
             Ver fatura
+          </Button>
+        )}
+        {parcela.matriculas?.asaas_installment_id && (
+          <Button variant="ghost" size="sm" onClick={handleGerarCarne} disabled={gerandoCarne}>
+            <Printer />
+            {gerandoCarne ? "Gerando..." : "Carnê Asaas"}
           </Button>
         )}
         {podeMarcarComoPago && (

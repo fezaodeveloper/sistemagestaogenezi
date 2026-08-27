@@ -8,6 +8,9 @@ import {
   criarClienteAsaas,
   buscarClienteAsaasPorCpf,
   criarCobrancaAsaas,
+  criarParcelamentoAsaas,
+  buscarParcelasDoParcelamento,
+  gerarCarneAsaas,
   cancelarCobrancaAsaas,
   confirmarRecebimentoDinheiro,
 } from "@/lib/asaas/client";
@@ -17,6 +20,7 @@ export type ParcelaComRelacoes = Parcela & {
   alunos: { full_name: string | null; cpf: string; email: string; telefone: string } | null;
   matriculas: {
     num_parcelas: number | null;
+    asaas_installment_id: string | null;
     turmas: { nome: string; cursos: { nome: string } | null } | null;
   } | null;
 };
@@ -54,7 +58,7 @@ export async function getFinanceiroDados(ano: number, mes: number): Promise<Fina
       supabase
         .from("parcelas")
         .select(
-          "*, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, turmas(nome, cursos(nome)))",
+          "*, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, asaas_installment_id, turmas(nome, cursos(nome)))",
         )
         .gte("data_vencimento", inicio)
         .lte("data_vencimento", fim)
@@ -166,7 +170,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
   const { data: parcelaData } = await supabase
     .from("parcelas")
     .select(
-      "id, matricula_id, valor, data_vencimento, numero_parcela, forma_pagamento, asaas_payment_id, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
+      "id, matricula_id, valor, data_vencimento, numero_parcela, forma_pagamento, asaas_payment_id, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, valor_final, data_primeira_mensalidade, asaas_installment_id, turmas(cursos(nome)))",
     )
     .eq("id", parcelaId)
     .single();
@@ -179,6 +183,9 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
         alunos: { full_name: string | null; cpf: string; email: string; telefone: string } | null;
         matriculas: {
           num_parcelas: number | null;
+          valor_final: number | null;
+          data_primeira_mensalidade: string | null;
+          asaas_installment_id: string | null;
           turmas: { cursos: { nome: string } | null } | null;
         } | null;
       })
@@ -198,6 +205,9 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
   }
 
   const aluno = parcela.alunos;
+  const nomeCurso = parcela.matriculas?.turmas?.cursos?.nome ?? "curso";
+  const nomeAluno = aluno.full_name ?? aluno.email;
+  const numParcelas = parcela.matriculas?.num_parcelas ?? 1;
 
   const { data: matricula } = await supabase
     .from("matriculas")
@@ -229,16 +239,60 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
     // Asaas — o Pix vem embutido na própria fatura do boleto, com taxa
     // menor do que um Pix cobrado separadamente. Cartão nunca chega aqui
     // (barrado acima).
-    const nomeCurso = parcela.matriculas?.turmas?.cursos?.nome ?? "curso";
-    const totalParcelas = parcela.matriculas?.num_parcelas ?? "?";
-    const nomeAluno = aluno.full_name ?? aluno.email;
+    if (numParcelas > 1) {
+      if (parcela.matriculas?.asaas_installment_id) {
+        return { error: "Essa matrícula já tem um parcelamento gerado no Asaas." };
+      }
+      if (!parcela.matriculas?.valor_final || !parcela.matriculas?.data_primeira_mensalidade) {
+        return { error: "Matrícula sem valor final ou data da primeira mensalidade definidos." };
+      }
+
+      const parcelamento = await criarParcelamentoAsaas({
+        customer: customerId,
+        billingType: "BOLETO",
+        totalValue: Number(parcela.matriculas.valor_final),
+        installmentCount: numParcelas,
+        dueDate: parcela.matriculas.data_primeira_mensalidade,
+        description: `Curso ${nomeCurso} - ${nomeAluno} - ${numParcelas} parcelas`,
+        externalReference: parcela.matricula_id,
+      });
+
+      await supabase
+        .from("matriculas")
+        .update({ asaas_installment_id: parcelamento.installment })
+        .eq("id", parcela.matricula_id);
+
+      const parcelasAsaas = await buscarParcelasDoParcelamento(parcelamento.installment);
+
+      // Match por installmentNumber <-> numero_parcela. Best-effort: se
+      // alguma parcela local não tiver correspondente no Asaas (ex.: já
+      // cancelada antes de gerar o parcelamento), simplesmente não é
+      // atualizada — não interrompe as demais.
+      await Promise.all(
+        parcelasAsaas.map((parcelaAsaas) =>
+          supabase
+            .from("parcelas")
+            .update({
+              asaas_payment_id: parcelaAsaas.id,
+              asaas_invoice_url: parcelaAsaas.invoiceUrl,
+              asaas_bank_slip_url: parcelaAsaas.bankSlipUrl ?? null,
+              asaas_status: parcelaAsaas.status,
+            })
+            .eq("matricula_id", parcela.matricula_id)
+            .eq("numero_parcela", parcelaAsaas.installmentNumber),
+        ),
+      );
+
+      revalidatePath("/admin/financeiro");
+      return { success: true };
+    }
 
     const cobranca = await criarCobrancaAsaas({
       customer: customerId,
       billingType: "BOLETO",
       value: Number(parcela.valor),
       dueDate: parcela.data_vencimento,
-      description: `Parcela ${parcela.numero_parcela}/${totalParcelas} - ${nomeCurso} - ${nomeAluno}`,
+      description: `Parcela ${parcela.numero_parcela}/${numParcelas} - ${nomeCurso} - ${nomeAluno}`,
       externalReference: parcela.id,
     });
 
@@ -338,4 +392,20 @@ export async function marcarComoPagoManual(
 
   revalidatePath("/admin/financeiro");
   return { success: true };
+}
+
+export type GerarCarneResult = { pdf: string } | { error: string };
+
+// PDF binário do Asaas convertido pra base64 aqui no servidor — Server
+// Actions só serializam JSON-compatível de volta pro client, não Buffer/
+// ArrayBuffer bruto.
+export async function gerarCarne(installmentId: string): Promise<GerarCarneResult> {
+  await requireRole("admin");
+
+  try {
+    const buffer = await gerarCarneAsaas(installmentId);
+    return { pdf: Buffer.from(buffer).toString("base64") };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível gerar o carnê." };
+  }
 }
