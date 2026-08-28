@@ -10,6 +10,7 @@ import {
   type MatriculaWizardInput,
 } from "@/lib/matriculas/schema";
 import { notificarMatriculaWhatsApp } from "@/lib/matriculas/notificacoes";
+import { dispararEvento } from "@/lib/automacoes/motor";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
 import type { DIAS_SEMANA } from "@/lib/turmas/schema";
 
@@ -159,6 +160,32 @@ export async function createMatricula(
   } catch {
     // O stub atual só faz console.log e não lança — o try/catch já fica
     // pronto pro dia em que isso virar uma chamada de rede de verdade.
+  }
+
+  try {
+    const { data: detalhes } = await supabase
+      .from("matriculas")
+      .select("alunos(full_name), turmas(nome, cursos(nome))")
+      .eq("id", matricula.id)
+      .single();
+
+    const info = detalhes as unknown as {
+      alunos: { full_name: string | null } | null;
+      turmas: { nome: string; cursos: { nome: string } | null } | null;
+    } | null;
+
+    await dispararEvento(
+      "matricula.criada",
+      {
+        nome_aluno: info?.alunos?.full_name ?? "—",
+        nome_curso: info?.turmas?.cursos?.nome ?? "—",
+        nome_turma: info?.turmas?.nome ?? "—",
+        valor_final: matricula.valor_final,
+      },
+      `matricula-criada-${matricula.id}`,
+    );
+  } catch {
+    // Best-effort — a matrícula já foi criada com sucesso acima.
   }
 
   // Parcelas geradas localmente (sem cobrança no Asaas) — o admin decide

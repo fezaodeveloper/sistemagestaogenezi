@@ -6,7 +6,7 @@ import { startTransition, useEffect, useState } from "react";
 import {
   Award, Banknote, BarChart2, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
   LayoutDashboard, MessageCircle, MessagesSquare, PlayCircle, PlusCircle, Presentation, Receipt,
-  Settings, Target, TrendingDown, UserPlus, Users,
+  Settings, Target, TrendingDown, UserPlus, Users, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 
@@ -28,6 +28,9 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },
     { href: "/admin/financeiro/avulsos", label: "Pagamentos avulsos", icon: Receipt },
     { href: "/admin/financeiro/gastos", label: "Gastos", icon: TrendingDown },
+  ]},
+  { id: "automacoes-motor", label: "Log de Automa\u00e7\u00f5es", icon: Zap, items: [
+    { href: "/admin/automacoes", label: "Log de Automa\u00e7\u00f5es", icon: Zap },
   ]},
   { id: "relatorios", label: "Relat\u00f3rios", icon: BarChart2, items: [
     { href: "/admin/relatorios/academico", label: "Relat\u00f3rios Acad\u00eamicos", icon: GraduationCap },

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getConversaPorAluno, getContagemNaoLidasAluno } from "@/lib/chat/chat";
+import { dispararEvento } from "@/lib/automacoes/motor";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -10,6 +11,21 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 // (decisão de produto — ver CLAUDE.md).
 export default async function AlunoLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("aluno");
+
+  // Best-effort — idempotency_key com a data garante no máximo 1
+  // notificação por aluno por dia, mesmo que esse layout rode a cada
+  // navegação dentro de /aluno (não só no login em si).
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    await dispararEvento(
+      "aluno.login",
+      { nome_aluno: user.full_name ?? user.email, email: user.email },
+      `aluno-login-${user.id}-${hoje}`,
+    );
+  } catch {
+    // Nunca deve impedir o aluno de acessar a própria área.
+  }
+
   const supabase = await createClient();
   const [conversa, { count: parcelasAtrasadas }] = await Promise.all([
     getConversaPorAluno(supabase, user.id),

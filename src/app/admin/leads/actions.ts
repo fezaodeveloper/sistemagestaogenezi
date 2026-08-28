@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { leadFormSchema, leadStatusUpdateSchema, type LeadOrigem } from "@/lib/leads/schema";
 import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
+import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LeadFormState } from "@/components/admin/lead-form";
 
 function parseLeadForm(formData: FormData) {
@@ -40,16 +41,36 @@ export async function createLead(_prevState: LeadFormState, formData: FormData):
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("leads").insert({
-    nome: parsed.data.nome,
-    telefone: parsed.data.telefone,
-    curso_id: parsed.data.curso_id,
-    origem: parsed.data.origem,
-    observacoes: parsed.data.observacoes ?? null,
-  });
+  const { data: lead, error } = await supabase
+    .from("leads")
+    .insert({
+      nome: parsed.data.nome,
+      telefone: parsed.data.telefone,
+      curso_id: parsed.data.curso_id,
+      origem: parsed.data.origem,
+      observacoes: parsed.data.observacoes ?? null,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !lead) {
     return { error: "Não foi possível cadastrar o lead. Tente novamente.", values: echoValues(formData) };
+  }
+
+  try {
+    const { data: curso } = await supabase
+      .from("cursos")
+      .select("nome")
+      .eq("id", parsed.data.curso_id)
+      .single();
+
+    await dispararEvento(
+      "lead.novo",
+      { nome: parsed.data.nome, telefone: parsed.data.telefone, curso: curso?.nome ?? "—" },
+      `lead-novo-${lead.id}`,
+    );
+  } catch {
+    // Best-effort — o lead já foi cadastrado com sucesso acima.
   }
 
   revalidatePath("/admin/leads");

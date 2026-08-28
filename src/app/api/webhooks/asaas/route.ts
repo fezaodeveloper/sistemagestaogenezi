@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dispararEvento } from "@/lib/automacoes/motor";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 
@@ -48,6 +49,50 @@ async function processarEvento(
           asaas_status: payload.payment?.status ?? null,
         })
         .eq("asaas_payment_id", paymentId);
+
+      if (!error) {
+        // Best-effort: motor de automações nunca lança exceção, mas o
+        // try/catch aqui é uma segunda camada de proteção — o webhook
+        // precisa sempre responder 200 pro Asaas, mesmo se algo inesperado
+        // acontecer nessa notificação.
+        try {
+          const { data: parcela } = await supabase
+            .from("parcelas")
+            .select(
+              "valor, numero_parcela, matriculas(num_parcelas, alunos(full_name), turmas(cursos(nome)))",
+            )
+            .eq("asaas_payment_id", paymentId)
+            .single();
+
+          const detalhes = parcela as unknown as {
+            valor: number;
+            numero_parcela: number;
+            matriculas: {
+              num_parcelas: number | null;
+              alunos: { full_name: string | null } | null;
+              turmas: { cursos: { nome: string } | null } | null;
+            } | null;
+          } | null;
+
+          if (detalhes) {
+            await dispararEvento(
+              "pagamento.recebido",
+              {
+                valor: detalhes.valor,
+                nome_aluno: detalhes.matriculas?.alunos?.full_name ?? "—",
+                nome_curso: detalhes.matriculas?.turmas?.cursos?.nome ?? "—",
+                numero_parcela: detalhes.numero_parcela,
+                total_parcelas: detalhes.matriculas?.num_parcelas ?? "—",
+              },
+              `pagamento-recebido-${paymentId}`,
+            );
+          }
+        } catch {
+          // Notificação é secundária — a atualização da parcela já
+          // aconteceu com sucesso acima, é isso que importa pro webhook.
+        }
+      }
+
       return error ? "Não foi possível atualizar a parcela para paga." : null;
     }
     case "PAYMENT_OVERDUE": {
