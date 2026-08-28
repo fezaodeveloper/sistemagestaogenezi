@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
   Award, Banknote, BarChart2, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MessageCircle, MessagesSquare, PlusCircle, Presentation, Receipt,
+  LayoutDashboard, MessageCircle, MessagesSquare, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Target, TrendingDown, UserPlus, Users,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -52,6 +52,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/mensagens", label: "Mensagens Autom\u00e1ticas", icon: MessageCircle },
   ]},
   { id: "sistema", label: "Sistema", icon: Settings, items: [
+    { href: "/admin/treinamentos", label: "Treinamentos", icon: PlayCircle },
     { href: "/admin/configuracoes", label: "Configura\u00e7\u00f5es", icon: Settings },
   ]},
 ];
