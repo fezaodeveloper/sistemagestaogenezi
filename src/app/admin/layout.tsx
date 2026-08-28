@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getContagemConversasNaoLidasAdmin } from "@/lib/chat/chat";
+import { getContadoresNotificacoes } from "@/lib/admin/notificacoes";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { SinoNotificacoes } from "@/components/admin/sino-notificacoes";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -11,7 +13,21 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("admin");
   const supabase = await createClient();
-  const conversasNaoLidas = await getContagemConversasNaoLidasAdmin(supabase);
+  const [conversasNaoLidas, { data: config }] = await Promise.all([
+    getContagemConversasNaoLidasAdmin(supabase),
+    supabase
+      .from("configuracoes")
+      .select(
+        "notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha",
+      )
+      .single(),
+  ]);
+  const gruposNotificacao = await getContadoresNotificacoes(supabase, {
+    notif_financeiro_atrasado: config?.notif_financeiro_atrasado ?? true,
+    notif_certificados_pendentes: config?.notif_certificados_pendentes ?? true,
+    notif_eventos_hoje: config?.notif_eventos_hoje ?? true,
+    notif_eventos_amanha: config?.notif_eventos_amanha ?? true,
+  });
 
   return (
     <div className="admin-dark bg-background text-foreground min-h-svh">
@@ -22,6 +38,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-4" />
             <span className="text-sm font-medium">Painel administrativo</span>
+            <div className="ml-auto">
+              <SinoNotificacoes grupos={gruposNotificacao} />
+            </div>
           </header>
           <div className="flex-1 p-6">{children}</div>
         </SidebarInset>
