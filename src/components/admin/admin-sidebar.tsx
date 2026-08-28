@@ -12,9 +12,11 @@ import {
 export function AdminSidebar({
   user,
   conversasNaoLidas,
+  pendenciasCount,
 }: {
   user: CurrentUser;
   conversasNaoLidas: number;
+  pendenciasCount: number;
 }) {
   return (
     <Sidebar>
@@ -40,6 +42,7 @@ export function AdminSidebar({
         <AdminNavGroups
           conversasNaoLidas={conversasNaoLidas}
           refetchAction={getContagemNaoLidasAdminAction}
+          pendenciasCount={pendenciasCount}
         />
       </SidebarContent>
       <SidebarFooter>

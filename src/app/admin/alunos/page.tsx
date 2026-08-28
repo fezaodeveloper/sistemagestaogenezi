@@ -15,11 +15,27 @@ export default async function AlunosPage({
   const { criado } = await searchParams;
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("alunos")
-    .select("*, profiles!alunos_id_fkey(full_name), matriculas(status, turmas(nome))")
-    .order("created_at", { ascending: false });
-  const alunos = data as AlunoListItem[] | null;
+  const [{ data, error }, { data: indicesData }] = await Promise.all([
+    supabase
+      .from("alunos")
+      .select("*, profiles!alunos_id_fkey(full_name), matriculas(status, turmas(nome))")
+      .order("created_at", { ascending: false }),
+    supabase.from("indices_evasao").select("aluno_id, indice"),
+  ]);
+
+  // Um aluno pode ter mais de uma matrícula (logo mais de uma linha em
+  // indices_evasao) — a tabela mostra o pior caso (maior índice) entre
+  // elas, é o que mais importa pro admin decidir se precisa agir.
+  const indicePorAluno = new Map<string, number>();
+  for (const linha of (indicesData ?? []) as { aluno_id: string; indice: number }[]) {
+    const atual = indicePorAluno.get(linha.aluno_id) ?? -1;
+    if (linha.indice > atual) indicePorAluno.set(linha.aluno_id, linha.indice);
+  }
+
+  const alunos = (data as AlunoListItem[] | null)?.map((aluno) => ({
+    ...aluno,
+    indiceEvasao: indicePorAluno.get(aluno.id) ?? null,
+  }));
 
   return (
     <div className="flex flex-col gap-6">

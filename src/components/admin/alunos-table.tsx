@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Printer } from "lucide-react";
+import { AlertTriangle, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ import {
 
 export type AlunoListItem = AlunoWithRelations & {
   matriculas: { status: string; turmas: { nome: string } | null }[];
+  indiceEvasao: number | null;
 };
 
 const STATUS_FILTRO_TODOS = "todos";
@@ -54,6 +55,42 @@ const FAIXA_FILTRO_ITEMS: Record<string, string> = {
   [FAIXA_FILTRO_MAIOR]: "Maior de idade",
   [FAIXA_FILTRO_MENOR]: "Menor de idade",
 };
+
+const RISCO_FILTRO_TODOS = "todos";
+const RISCO_FILTRO_BAIXO = "baixo";
+const RISCO_FILTRO_MEDIO = "medio";
+const RISCO_FILTRO_ALTO = "alto";
+const RISCO_FILTRO_ITEMS: Record<string, string> = {
+  [RISCO_FILTRO_TODOS]: "Todos os riscos",
+  [RISCO_FILTRO_BAIXO]: "Baixo (< 40)",
+  [RISCO_FILTRO_MEDIO]: "Médio (40-69)",
+  [RISCO_FILTRO_ALTO]: "Alto (≥ 70)",
+};
+
+function RiscoEvasaoBadge({ indice }: { indice: number | null }) {
+  if (indice === null) return <span className="text-muted-foreground">—</span>;
+
+  if (indice >= 70) {
+    return (
+      <Badge className="flex w-fit items-center gap-1 bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400">
+        <AlertTriangle className="size-3" />
+        Alto
+      </Badge>
+    );
+  }
+  if (indice >= 40) {
+    return (
+      <Badge className="w-fit bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+        Médio
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="w-fit bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400">
+      Baixo
+    </Badge>
+  );
+}
 
 function turmasAtivasLabel(aluno: AlunoListItem) {
   const nomes = aluno.matriculas
@@ -148,6 +185,7 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [faixaFiltro, setFaixaFiltro] = useState<string>(FAIXA_FILTRO_TODAS);
+  const [riscoFiltro, setRiscoFiltro] = useState<string>(RISCO_FILTRO_TODOS);
   const [dataDe, setDataDe] = useState("");
   const [dataAte, setDataAte] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -179,6 +217,13 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
         if (dataAte && dataCadastro > dataAte) return false;
       }
 
+      if (riscoFiltro !== RISCO_FILTRO_TODOS) {
+        if (aluno.indiceEvasao === null) return false;
+        if (riscoFiltro === RISCO_FILTRO_BAIXO && aluno.indiceEvasao >= 40) return false;
+        if (riscoFiltro === RISCO_FILTRO_MEDIO && (aluno.indiceEvasao < 40 || aluno.indiceEvasao >= 70)) return false;
+        if (riscoFiltro === RISCO_FILTRO_ALTO && aluno.indiceEvasao < 70) return false;
+      }
+
       if (!termo) return true;
 
       const nome = (aluno.profiles?.full_name ?? "").toLowerCase();
@@ -186,7 +231,7 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
       if (termoDigits.length === 0) return false;
       return aluno.cpf.includes(termoDigits) || aluno.telefone.includes(termoDigits);
     });
-  }, [alunos, busca, statusFiltro, faixaFiltro, dataDe, dataAte]);
+  }, [alunos, busca, statusFiltro, faixaFiltro, riscoFiltro, dataDe, dataAte]);
 
   async function handleImprimir() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -265,6 +310,23 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
           </SelectContent>
         </Select>
 
+        <Select
+          items={RISCO_FILTRO_ITEMS}
+          value={riscoFiltro}
+          onValueChange={(value) => setRiscoFiltro(value as string)}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.keys(RISCO_FILTRO_ITEMS).map((risco) => (
+              <SelectItem key={risco} value={risco}>
+                {RISCO_FILTRO_ITEMS[risco]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <div className="flex flex-col gap-2">
           <Label htmlFor="filtro_data_de" className="text-muted-foreground text-xs">
             De:
@@ -306,6 +368,7 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
               <TableHead>Status</TableHead>
               <TableHead>Turmas ativas</TableHead>
               <TableHead>Idade</TableHead>
+              <TableHead>Risco</TableHead>
               <TableHead>Cadastrado em</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -340,6 +403,9 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
                   ) : (
                     "—"
                   )}
+                </TableCell>
+                <TableCell>
+                  <RiscoEvasaoBadge indice={aluno.indiceEvasao} />
                 </TableCell>
                 <TableCell>{aluno.created_at ? formatDataHora(aluno.created_at) : "—"}</TableCell>
                 <TableCell className="flex justify-end gap-1">

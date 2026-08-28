@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getContagemConversasNaoLidasAdmin } from "@/lib/chat/chat";
 import { getContadoresNotificacoes } from "@/lib/admin/notificacoes";
+import { getPendencias } from "@/app/admin/pendencias/actions";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { SinoNotificacoes } from "@/components/admin/sino-notificacoes";
 import { BuscaGlobal } from "@/components/admin/busca-global";
@@ -14,7 +15,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("admin");
   const supabase = await createClient();
-  const [conversasNaoLidas, { data: config }] = await Promise.all([
+  const [conversasNaoLidas, { data: config }, pendencias] = await Promise.all([
     getContagemConversasNaoLidasAdmin(supabase),
     supabase
       .from("configuracoes")
@@ -22,6 +23,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         "notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha",
       )
       .single(),
+    // requireRole() usa cache() do React — chamar de novo dentro de
+    // getPendencias() não duplica a query de sessão (ver comentário lá).
+    getPendencias(),
   ]);
   const gruposNotificacao = await getContadoresNotificacoes(supabase, {
     notif_financeiro_atrasado: config?.notif_financeiro_atrasado ?? true,
@@ -33,7 +37,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="admin-dark bg-background text-foreground min-h-svh">
       <SidebarProvider>
-        <AdminSidebar user={user} conversasNaoLidas={conversasNaoLidas} />
+        <AdminSidebar user={user} conversasNaoLidas={conversasNaoLidas} pendenciasCount={pendencias.length} />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger />

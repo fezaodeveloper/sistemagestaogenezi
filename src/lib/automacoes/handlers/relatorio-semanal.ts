@@ -69,6 +69,31 @@ export async function gerarRelatorioSemanal(): Promise<boolean> {
     calcularSaudeEscola(admin),
   ]);
 
+  // Snapshots atuais (não datados na semana) — mesmo racional de
+  // "inadimplência" acima: risco de evasão e pendências operacionais são
+  // fotografias do estado agora, não algo que "aconteceu" na janela de 7
+  // dias.
+  const [{ data: indicesRisco }, { data: itensEstoque }, { count: manutencaoAbertosCount }] =
+    await Promise.all([
+      admin.from("indices_evasao").select("indice").gte("indice", 40),
+      // Sem head:true de propósito: precisa dos valores pra comparar
+      // atual < mínimo em memória — não dá pra filtrar isso com .lt() entre
+      // duas colunas direto no PostgREST.
+      admin.from("estoque_itens").select("quantidade_atual, quantidade_minima"),
+      admin
+        .from("manutencao_chamados")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["aberto", "em_andamento"]),
+    ]);
+
+  const indices = (indicesRisco ?? []) as { indice: number }[];
+  const riscoAlto = indices.filter((i) => i.indice >= 70).length;
+  const riscoMedio = indices.filter((i) => i.indice >= 40 && i.indice < 70).length;
+
+  const itensEstoqueBaixo = ((itensEstoque ?? []) as { quantidade_atual: number; quantidade_minima: number }[]).filter(
+    (item) => item.quantidade_atual < item.quantidade_minima,
+  ).length;
+
   const receitaSemana = somarValores(parcelasPagasSemana) + somarValores(avulsosSemana);
   const valorAtrasado = somarValores(parcelasAtrasadas);
 
@@ -88,6 +113,14 @@ export async function gerarRelatorioSemanal(): Promise<boolean> {
     "🎯 <b>Leads:</b>",
     `- Novos leads: ${novosLeads ?? 0}`,
     `- Convertidos em alunos: ${leadsConvertidos ?? 0}`,
+    "",
+    "⚠️ <b>Risco de Evasão:</b>",
+    `- Alunos em risco alto (≥70): ${riscoAlto}`,
+    `- Alunos em risco médio (40-69): ${riscoMedio}`,
+    "",
+    "🏭 <b>Operacional:</b>",
+    `- Itens com estoque baixo: ${itensEstoqueBaixo}`,
+    `- Chamados de manutenção abertos: ${manutencaoAbertosCount ?? 0}`,
     "",
     `📊 <b>Saúde da escola:</b> ${saude.pontuacao}/100`,
   ].join("\n");

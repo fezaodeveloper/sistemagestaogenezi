@@ -4,18 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
-  Award, Banknote, BarChart2, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MessageCircle, MessagesSquare, PlayCircle, PlusCircle, Presentation, Receipt,
-  Settings, Target, TrendingDown, UserPlus, Users, Zap,
+  AlertTriangle, Award, Banknote, BarChart2, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
+  LayoutDashboard, MessageCircle, MessagesSquare, Package, PlayCircle, PlusCircle, Presentation, Receipt,
+  Settings, Target, TrendingDown, UserPlus, Users, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 
-type NavItem = { href: string; label: string; icon: React.ElementType; badge?: "chat" };
+type NavItem = { href: string; label: string; icon: React.ElementType; badge?: "chat" | "pendencias" };
 type NavGroup = { id: string; label: string; icon: React.ElementType; items: NavItem[] };
 
 const GROUPS: NavGroup[] = [
   { id: "geral", label: "Vis\u00e3o geral", icon: LayoutDashboard, items: [
     { href: "/admin", label: "Painel", icon: LayoutDashboard },
+    { href: "/admin/pendencias", label: "Pend\u00eancias", icon: AlertTriangle, badge: "pendencias" },
   ]},
   { id: "comercial", label: "Comercial", icon: Target, items: [
     { href: "/admin/leads", label: "Leads / CRM", icon: UserPlus },
@@ -55,6 +56,8 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/mensagens", label: "Mensagens Autom\u00e1ticas", icon: MessageCircle },
   ]},
   { id: "sistema", label: "Sistema", icon: Settings, items: [
+    { href: "/admin/estoque", label: "Estoque", icon: Package },
+    { href: "/admin/manutencao", label: "Manuten\u00e7\u00e3o", icon: Wrench },
     { href: "/admin/treinamentos", label: "Treinamentos", icon: PlayCircle },
     { href: "/admin/configuracoes", label: "Configura\u00e7\u00f5es", icon: Settings },
   ]},
@@ -71,9 +74,11 @@ function isItemActive(pathname: string, href: string) {
 export function AdminNavGroups({
   conversasNaoLidas,
   refetchAction,
+  pendenciasCount,
 }: {
   conversasNaoLidas: number;
   refetchAction: () => Promise<number>;
+  pendenciasCount: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState<string[]>(DEFAULT_OPEN);
@@ -156,6 +161,11 @@ export function AdminNavGroups({
                           initialCount={conversasNaoLidas}
                           refetchAction={refetchAction}
                         />
+                      )}
+                      {item.badge === "pendencias" && pendenciasCount > 0 && (
+                        <span className="bg-destructive absolute top-1.5 right-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium text-white">
+                          {pendenciasCount > 99 ? "99+" : pendenciasCount}
+                        </span>
                       )}
                     </div>
                   );
