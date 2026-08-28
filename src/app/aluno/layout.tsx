@@ -11,7 +11,14 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 export default async function AlunoLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("aluno");
   const supabase = await createClient();
-  const conversa = await getConversaPorAluno(supabase, user.id);
+  const [conversa, { count: parcelasAtrasadas }] = await Promise.all([
+    getConversaPorAluno(supabase, user.id),
+    supabase
+      .from("parcelas")
+      .select("id", { count: "exact", head: true })
+      .eq("aluno_id", user.id)
+      .eq("status", "atrasado"),
+  ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
     : 0;
@@ -19,7 +26,12 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   return (
     <div className="dark bg-background text-foreground min-h-svh">
       <SidebarProvider>
-        <AlunoSidebar user={user} conversaId={conversa?.id ?? null} mensagensNaoLidas={mensagensNaoLidas} />
+        <AlunoSidebar
+          user={user}
+          conversaId={conversa?.id ?? null}
+          mensagensNaoLidas={mensagensNaoLidas}
+          parcelasAtrasadas={parcelasAtrasadas ?? 0}
+        />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger />

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Coins, FileBadge, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
+import { Banknote, Coins, FileBadge, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -13,6 +13,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -21,10 +22,12 @@ export function AlunoSidebar({
   user,
   conversaId,
   mensagensNaoLidas,
+  parcelasAtrasadas,
 }: {
   user: CurrentUser;
   conversaId: string | null;
   mensagensNaoLidas: number;
+  parcelasAtrasadas: number;
 }) {
   return (
     <Sidebar>
@@ -45,6 +48,21 @@ export function AlunoSidebar({
                     </Link>
                   }
                 />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/aluno/financeiro">
+                      <Banknote />
+                      <span>Financeiro</span>
+                    </Link>
+                  }
+                />
+                {parcelasAtrasadas > 0 && (
+                  <SidebarMenuBadge className="bg-destructive text-white">
+                    {parcelasAtrasadas}
+                  </SidebarMenuBadge>
+                )}
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
