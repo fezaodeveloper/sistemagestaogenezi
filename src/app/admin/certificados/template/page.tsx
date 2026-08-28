@@ -58,6 +58,8 @@ export default async function CertificadoTemplatePage() {
             esquerda: 10,
             direita: 10,
           },
+          cor_texto_frente: template?.cor_texto_frente ?? "#000000",
+          cor_texto_verso: template?.cor_texto_verso ?? "#000000",
           assinatura_x_percentual: template?.assinatura_x_percentual ?? 50,
           assinatura_y_percentual: template?.assinatura_y_percentual ?? 90,
           assinatura_largura_px: template?.assinatura_largura_px ?? 200,

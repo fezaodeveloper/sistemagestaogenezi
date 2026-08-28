@@ -25,6 +25,8 @@ export type TemplateFormState =
           | "logo_tamanho"
           | "texto_frente"
           | "texto_verso"
+          | "cor_texto_frente"
+          | "cor_texto_verso"
           | "fundo_frente"
           | "fundo_verso"
           | "logo"
@@ -88,6 +90,8 @@ export async function updateCertificadoTemplate(
     texto_verso_margem_inferior: formData.get("texto_verso_margem_inferior"),
     texto_verso_margem_esquerda: formData.get("texto_verso_margem_esquerda"),
     texto_verso_margem_direita: formData.get("texto_verso_margem_direita"),
+    cor_texto_frente: formData.get("cor_texto_frente"),
+    cor_texto_verso: formData.get("cor_texto_verso"),
     assinatura_x_percentual: formData.get("assinatura_x_percentual"),
     assinatura_y_percentual: formData.get("assinatura_y_percentual"),
     assinatura_largura_px: formData.get("assinatura_largura_px"),
@@ -144,6 +148,8 @@ export async function updateCertificadoTemplate(
         esquerda: parsed.data.texto_verso_margem_esquerda,
         direita: parsed.data.texto_verso_margem_direita,
       },
+      cor_texto_frente: parsed.data.cor_texto_frente,
+      cor_texto_verso: parsed.data.cor_texto_verso,
       assinatura_x_percentual: parsed.data.assinatura_x_percentual,
       assinatura_y_percentual: parsed.data.assinatura_y_percentual,
       assinatura_largura_px: parsed.data.assinatura_largura_px,

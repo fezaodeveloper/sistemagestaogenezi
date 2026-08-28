@@ -20,6 +20,21 @@ const LOGO_TAMANHOS_PT: Record<CertificadoTemplate["logo_tamanho"], number> = {
   grande: 140,
 };
 
+type CorTexto = ReturnType<typeof rgb>;
+
+const COR_TEXTO_PADRAO = rgb(0.1, 0.1, 0.1);
+
+// #rrggbb (formato emitido por <input type="color">, validado no schema) ->
+// RGB 0-1 do pdf-lib. Cai no padrão em vez de lançar se, por algum motivo,
+// vier um valor fora do formato esperado (ex.: linha antiga sem a coluna
+// preenchida) — cor errada nunca deveria travar a emissão do certificado.
+function hexParaRgb(hex: string) {
+  const match = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(hex);
+  if (!match) return COR_TEXTO_PADRAO;
+  const [, r, g, b] = match;
+  return rgb(parseInt(r, 16) / 255, parseInt(g, 16) / 255, parseInt(b, 16) / 255);
+}
+
 export async function gerarCertificadoPdf(dados: {
   template: CertificadoTemplate;
   nomeAluno: string;
@@ -78,6 +93,7 @@ export async function gerarCertificadoPdf(dados: {
     dados.template.texto_frente_margens,
     fonteRegular,
     fonteNegrito,
+    hexParaRgb(dados.template.cor_texto_frente),
   );
 
   if (dados.template.assinatura_url) {
@@ -109,6 +125,7 @@ export async function gerarCertificadoPdf(dados: {
     dados.template.texto_verso_margens,
     fonteRegular,
     fonteNegrito,
+    hexParaRgb(dados.template.cor_texto_verso),
   );
 
   return pdf.save();
@@ -205,10 +222,11 @@ function desenharTextoCertificado(
   margens: MargensTexto,
   fonteRegular: PDFFont,
   fonteNegrito: PDFFont,
+  cor: CorTexto,
 ) {
   const caixa = calcularCaixaTexto(page, margens);
   const linhas = ajustarLinhasParaCaber(runs, fonteRegular, fonteNegrito, caixa);
-  desenharTexto(page, linhas, caixa, fonteRegular, fonteNegrito);
+  desenharTexto(page, linhas, caixa, fonteRegular, fonteNegrito, cor);
 }
 
 function escalarRun(run: TextoRun, fator: number): TextoRun {
@@ -317,9 +335,8 @@ function desenharTexto(
   caixa: { x: number; largura: number; topo: number; base: number; altura: number },
   fonteRegular: PDFFont,
   fonteNegrito: PDFFont,
+  cor: CorTexto,
 ) {
-  const cor = rgb(0.1, 0.1, 0.1);
-
   const alturasLinha = linhas.map((linha) => {
     const maiorTamanho = linha.reduce((max, run) => Math.max(max, tamanhoDoRun(run)), 0);
     return maiorTamanho * ALTURA_LINHA_MULTIPLICADOR;

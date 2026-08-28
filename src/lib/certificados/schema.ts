@@ -49,6 +49,8 @@ export type CertificadoTemplate = {
   texto_verso: JSONContent;
   texto_frente_margens: MargensTexto;
   texto_verso_margens: MargensTexto;
+  cor_texto_frente: string;
+  cor_texto_verso: string;
   assinatura_url: string | null;
   assinatura_x_percentual: number;
   assinatura_y_percentual: number;
@@ -84,6 +86,13 @@ function isJsonContent(value: unknown): value is JSONContent {
   return typeof value === "object" && value !== null;
 }
 
+// Formato exato emitido por <input type="color"> (#rrggbb minúsculo) —
+// não precisa aceitar variações (#fff, rgb(...), nomes de cor), já que o
+// valor sempre vem desse input, nunca digitado à mão.
+const corHex = z
+  .string({ error: "Informe uma cor válida." })
+  .regex(/^#[0-9a-fA-F]{6}$/, { error: "Informe uma cor no formato #RRGGBB." });
+
 const percentual0a100 = z.coerce
   .number({ error: "Informe um número entre 0 e 100." })
   .int({ error: "Informe um número inteiro." })
@@ -103,6 +112,8 @@ export const templateFormSchema = z.object({
   texto_verso_margem_inferior: percentual0a100,
   texto_verso_margem_esquerda: percentual0a100,
   texto_verso_margem_direita: percentual0a100,
+  cor_texto_frente: corHex,
+  cor_texto_verso: corHex,
   assinatura_x_percentual: percentual0a100,
   assinatura_y_percentual: percentual0a100,
   assinatura_largura_px: z.coerce

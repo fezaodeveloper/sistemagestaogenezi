@@ -116,6 +116,8 @@ export function CertificadoTemplateForm({
     texto_verso: JSONContent;
     texto_frente_margens: MargensTexto;
     texto_verso_margens: MargensTexto;
+    cor_texto_frente: string;
+    cor_texto_verso: string;
     assinatura_x_percentual: number;
     assinatura_y_percentual: number;
     assinatura_largura_px: number;
@@ -140,6 +142,8 @@ export function CertificadoTemplateForm({
   const [textoVersoJson, setTextoVersoJson] = useState<JSONContent>(defaultValues.texto_verso);
   const [margensFrente, setMargensFrente] = useState<MargensTexto>(defaultValues.texto_frente_margens);
   const [margensVerso, setMargensVerso] = useState<MargensTexto>(defaultValues.texto_verso_margens);
+  const [corTextoFrente, setCorTextoFrente] = useState(defaultValues.cor_texto_frente);
+  const [corTextoVerso, setCorTextoVerso] = useState(defaultValues.cor_texto_verso);
   const [assinaturaX, setAssinaturaX] = useState(defaultValues.assinatura_x_percentual);
   const [assinaturaY, setAssinaturaY] = useState(defaultValues.assinatura_y_percentual);
   const [assinaturaLargura, setAssinaturaLargura] = useState(defaultValues.assinatura_largura_px);
@@ -150,6 +154,7 @@ export function CertificadoTemplateForm({
   const fundoPreviewAtual = ladoPreview === "frente" ? fundoFrente.preview : fundoVerso.preview;
   const linhasPreviewAtual = ladoPreview === "frente" ? linhasFrente : linhasVerso;
   const margensPreviewAtual = ladoPreview === "frente" ? margensFrente : margensVerso;
+  const corTextoAtual = ladoPreview === "frente" ? corTextoFrente : corTextoVerso;
   const imagemLarguraAtual = ladoPreview === "frente" ? imagemFrenteLargura : imagemVersoLargura;
 
   // Largura da assinatura é um valor absoluto (px) relativo ao pixel real
@@ -394,6 +399,24 @@ export function CertificadoTemplateForm({
           )}
           <Label className="text-muted-foreground text-xs">Caixa de texto — frente</Label>
           <CamposMargem prefixo="texto_frente" margens={margensFrente} onChange={setMargensFrente} />
+          <div className="flex items-center gap-2">
+            <Label htmlFor="cor_texto_frente" className="text-muted-foreground text-xs">
+              Cor do texto (frente)
+            </Label>
+            <Input
+              id="cor_texto_frente"
+              name="cor_texto_frente"
+              type="color"
+              className="h-8 w-14 p-1"
+              value={corTextoFrente}
+              onChange={(e) => setCorTextoFrente(e.target.value)}
+            />
+          </div>
+          {state?.errors?.cor_texto_frente && (
+            <p role="alert" className="text-destructive text-sm">
+              {state.errors.cor_texto_frente[0]}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -410,6 +433,24 @@ export function CertificadoTemplateForm({
           )}
           <Label className="text-muted-foreground text-xs">Caixa de texto — verso</Label>
           <CamposMargem prefixo="texto_verso" margens={margensVerso} onChange={setMargensVerso} />
+          <div className="flex items-center gap-2">
+            <Label htmlFor="cor_texto_verso" className="text-muted-foreground text-xs">
+              Cor do texto (verso)
+            </Label>
+            <Input
+              id="cor_texto_verso"
+              name="cor_texto_verso"
+              type="color"
+              className="h-8 w-14 p-1"
+              value={corTextoVerso}
+              onChange={(e) => setCorTextoVerso(e.target.value)}
+            />
+          </div>
+          {state?.errors?.cor_texto_verso && (
+            <p role="alert" className="text-destructive text-sm">
+              {state.errors.cor_texto_verso[0]}
+            </p>
+          )}
         </div>
 
         <p className="text-muted-foreground text-xs">
@@ -493,7 +534,7 @@ export function CertificadoTemplateForm({
                 isso, um tamanho de 100px apareceria do mesmo jeito numa
                 imagem de 400px de largura ou de 4000px, o que não reflete
                 o PDF real (a página nasce no tamanho em pixels da imagem). */}
-            <p className="leading-relaxed">
+            <p className="leading-relaxed" style={{ color: corTextoAtual }}>
               {linhasPreviewAtual.map((run, i) => {
                 const tamanho = run.tamanhoFonte ?? TAMANHO_FONTE_PADRAO;
                 const fontSizeCqw = imagemLarguraAtual ? (tamanho / imagemLarguraAtual) * 100 : null;
