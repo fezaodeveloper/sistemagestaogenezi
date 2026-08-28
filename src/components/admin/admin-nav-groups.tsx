@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
-  AlertTriangle, Award, Banknote, BarChart2, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, FileBadge, Gift, GraduationCap, IdCard,
+  AlertTriangle, Award, Banknote, BarChart2, CalendarDays, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, Gift, GraduationCap, IdCard,
   LayoutDashboard, MessageCircle, MessagesSquare, Package, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Target, TrendingDown, UserPlus, Users, Wrench, Zap,
 } from "lucide-react";
@@ -60,6 +60,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/manutencao", label: "Manuten\u00e7\u00e3o", icon: Wrench },
     { href: "/admin/treinamentos", label: "Treinamentos", icon: PlayCircle },
     { href: "/admin/configuracoes", label: "Configura\u00e7\u00f5es", icon: Settings },
+    { href: "/admin/api", label: "API & Integra\u00e7\u00f5es", icon: Code2 },
   ]},
 ];
 
