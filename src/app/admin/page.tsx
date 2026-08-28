@@ -11,7 +11,6 @@ import { DashboardBalao } from "@/components/admin/dashboard-balao";
 import { AlertasDia } from "@/components/admin/alertas-dia";
 import { AtalhosRapidos } from "@/components/admin/atalhos-rapidos";
 import { SaudeEscola } from "@/components/admin/saude-escola";
-import { BuscaGlobal } from "@/components/admin/busca-global";
 import { Card, CardContent } from "@/components/ui/card";
 
 function saudacaoPorHorario(): string {
@@ -129,8 +128,6 @@ export default async function AdminDashboardPage() {
         </h1>
         <p className="text-muted-foreground text-sm">Aqui está o panorama da escola hoje.</p>
       </div>
-
-      <BuscaGlobal />
 
       <div>
         <h2 className="text-muted-foreground mb-3 text-sm font-medium">Resumo geral</h2>
