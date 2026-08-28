@@ -5,6 +5,7 @@ import { getContagemConversasNaoLidasAdmin } from "@/lib/chat/chat";
 import { getContadoresNotificacoes } from "@/lib/admin/notificacoes";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { SinoNotificacoes } from "@/components/admin/sino-notificacoes";
+import { BuscaGlobal } from "@/components/admin/busca-global";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -38,7 +39,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-4" />
             <span className="text-sm font-medium">Painel administrativo</span>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-3">
+              <div className="hidden w-64 sm:block">
+                <BuscaGlobal />
+              </div>
               <SinoNotificacoes grupos={gruposNotificacao} />
             </div>
           </header>
