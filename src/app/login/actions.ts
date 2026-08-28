@@ -5,8 +5,24 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { roleHome } from "@/lib/auth/roles";
+import type { LoginBanner } from "@/lib/login-banners/schema";
 
 export type LoginState = { error?: string } | undefined;
+
+// Sem requireRole de propósito — a tela de login é pública, roda antes de
+// qualquer autenticação existir. RLS de login_banners já restringe o
+// resultado a "ativo = true" pra quem não é admin (ver migration), mas
+// filtramos de novo aqui pra deixar a intenção explícita no código.
+export async function getBannersLogin(): Promise<LoginBanner[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("login_banners")
+    .select("*")
+    .eq("ativo", true)
+    .order("ordem", { ascending: true });
+
+  return (data as LoginBanner[] | null) ?? [];
+}
 
 export async function signInWithPassword(
   _prevState: LoginState,

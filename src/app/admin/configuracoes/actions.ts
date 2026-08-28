@@ -7,6 +7,8 @@ import { escolaFormSchema } from "@/lib/configuracoes/schema";
 import { CERTIFICADO_STATUS_LABELS } from "@/lib/certificados/certificados";
 import { PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
 import { PRESENCA_STATUS_LABELS, type PRESENCA_STATUSES } from "@/lib/presencas/schema";
+import { BANNER_BUCKET } from "@/lib/storage/banners";
+import { bannerLoginUpdateSchema, type LoginBanner } from "@/lib/login-banners/schema";
 
 export async function updateEadGamificacao(ativo: boolean): Promise<{ error?: string }> {
   const user = await requireRole("admin");
@@ -323,4 +325,116 @@ export async function getLogSistema(): Promise<LogSistemaEntrada[]> {
 
   entradas.sort((a, b) => (a.dataHora < b.dataHora ? 1 : -1));
   return entradas.slice(0, 50);
+}
+
+// ===== Banners do login (TAREFA 5) =====
+//
+// O upload do arquivo em si acontece do lado do client, direto pro
+// Supabase Storage (src/components/admin/banners-login-form.tsx usa
+// @/lib/supabase/client, com a sessão do próprio admin já autenticado) —
+// não passa pelo body de uma Server Action, que tem limite de tamanho
+// configurado em next.config.ts. Essa action só grava os metadados
+// (storage_path/public_url já prontos) na tabela.
+
+export async function getBannersLoginAdmin(): Promise<LoginBanner[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("login_banners").select("*").order("ordem", { ascending: true });
+
+  return (data as LoginBanner[] | null) ?? [];
+}
+
+export async function uploadBannerLogin(formData: FormData): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const storagePath = String(formData.get("storage_path") ?? "");
+  const publicUrl = String(formData.get("public_url") ?? "");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const subtitulo = String(formData.get("subtitulo") ?? "").trim();
+
+  if (!storagePath || !publicUrl) {
+    return { error: "Upload da imagem falhou antes de salvar o registro. Tente novamente." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("login_banners").insert({
+    storage_path: storagePath,
+    public_url: publicUrl,
+    titulo: titulo || null,
+    subtitulo: subtitulo || null,
+  });
+
+  if (error) {
+    return { error: "Não foi possível salvar o banner. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+export async function updateBannerLogin(
+  id: string,
+  dados: { titulo: string; subtitulo: string; ordem: number; ativo: boolean },
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const parsed = bannerLoginUpdateSchema.safeParse({
+    titulo: dados.titulo || undefined,
+    subtitulo: dados.subtitulo || undefined,
+    ordem: dados.ordem,
+    ativo: dados.ativo,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("login_banners")
+    .update({
+      titulo: parsed.data.titulo ?? null,
+      subtitulo: parsed.data.subtitulo ?? null,
+      ordem: parsed.data.ordem,
+      ativo: parsed.data.ativo,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+// Lógica anti-acúmulo: remove o arquivo do Storage antes de apagar a
+// linha — usa o storage_path salvo na própria tabela, não recalcula nada.
+export async function deleteBannerLogin(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data: banner } = await supabase
+    .from("login_banners")
+    .select("storage_path")
+    .eq("id", id)
+    .single();
+
+  if (!banner) {
+    return { error: "Banner não encontrado." };
+  }
+
+  const { error: storageError } = await supabase.storage.from(BANNER_BUCKET).remove([banner.storage_path]);
+  if (storageError) {
+    return { error: "Não foi possível remover o arquivo do Storage. Tente novamente." };
+  }
+
+  const { error } = await supabase.from("login_banners").delete().eq("id", id);
+  if (error) {
+    return { error: "Arquivo removido do Storage, mas não foi possível excluir o registro. Contate o suporte." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
 }
