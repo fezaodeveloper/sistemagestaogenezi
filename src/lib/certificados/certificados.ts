@@ -53,6 +53,8 @@ export type CertificadoAguardandoLiberacao = {
   nomeCurso: string;
   cursoTipo: string;
   criadoEm: string;
+  nota: number | null;
+  frequencia: number | null;
 };
 
 // EAD nunca aparece aqui na operação normal (nasce com liberado=true e já
@@ -65,7 +67,7 @@ export async function getCertificadosAguardandoLiberacao(
   const { data } = await supabase
     .from("certificados")
     .select(
-      "id, created_at, matriculas!inner(alunos!inner(profiles!alunos_id_fkey(full_name)), turmas!inner(cursos!inner(nome, tipo)))",
+      "id, created_at, aproveitamento_percentual, frequencia_percentual, matriculas!inner(alunos!inner(profiles!alunos_id_fkey(full_name)), turmas!inner(cursos!inner(nome, tipo)))",
     )
     .eq("liberado", false)
     .order("created_at");
@@ -73,6 +75,8 @@ export async function getCertificadosAguardandoLiberacao(
   return ((data ?? []) as unknown as Array<{
     id: string;
     created_at: string;
+    aproveitamento_percentual: number | null;
+    frequencia_percentual: number | null;
     matriculas: {
       alunos: { profiles: { full_name: string | null } | null } | null;
       turmas: { cursos: { nome: string; tipo: string } | null } | null;
@@ -83,6 +87,12 @@ export async function getCertificadosAguardandoLiberacao(
     nomeCurso: c.matriculas?.turmas?.cursos?.nome ?? "Curso removido",
     cursoTipo: c.matriculas?.turmas?.cursos?.tipo ?? "",
     criadoEm: c.created_at,
+    // aproveitamento_percentual é a média das melhores notas do aluno nas
+    // provas do curso (mesmo campo usado como "nota" na emissão do
+    // certificado — ver src/lib/certificados/emitir.ts) — cursos EAD sem
+    // frequência ficam com frequencia null (mesma lógica de avaliar_certificado).
+    nota: c.aproveitamento_percentual,
+    frequencia: c.frequencia_percentual,
   }));
 }
 

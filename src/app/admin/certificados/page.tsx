@@ -15,10 +15,12 @@ export default async function CertificadosPage() {
       <div>
         <h1 className="text-2xl font-semibold">Certificados</h1>
         <p className="text-muted-foreground text-sm">
-          Certificados aguardando liberação. Cursos EAD liberam e emitem automaticamente assim
-          que o aluno atinge os critérios — só aparecem aqui cursos presenciais/híbridos (ou, no
-          raro caso de uma emissão automática ter falhado, um EAD pra liberar manualmente). Depois
-          de liberado, o próprio aluno emite o certificado quando quiser.
+          Libere os certificados dos alunos que concluíram os critérios.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          {itens.length > 0
+            ? `${itens.length} certificado${itens.length > 1 ? "s" : ""} aguardando liberação.`
+            : "Nenhum certificado pendente no momento."}
         </p>
       </div>
 
