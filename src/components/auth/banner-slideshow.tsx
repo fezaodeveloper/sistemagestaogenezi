@@ -2,9 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getBannersLogin } from "@/app/login/actions";
-import type { LoginBanner, LoginBannerTipo } from "@/lib/login-banners/schema";
+import type { LoginBanner, LoginBannerTamanho, LoginBannerTipo } from "@/lib/login-banners/schema";
 
 const TROCA_AUTOMATICA_MS = 10000;
+
+const TITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
+  pequeno: "text-2xl",
+  medio: "text-4xl",
+  grande: "text-6xl",
+};
+
+const SUBTITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
+  pequeno: "text-sm",
+  medio: "text-xl",
+  grande: "text-2xl",
+};
 
 type Slide = {
   key: string;
@@ -13,6 +25,10 @@ type Slide = {
   emoji: string | null;
   titulo: string | null;
   subtitulo: string | null;
+  tituloTamanho: LoginBannerTamanho;
+  subtituloTamanho: LoginBannerTamanho;
+  tituloCor: string;
+  subtituloCor: string;
 };
 
 // Placeholders com a identidade visual da Gênezi — usados só enquanto não
@@ -28,6 +44,10 @@ const PLACEHOLDERS: Slide[] = [
     emoji: "🎓",
     titulo: "GÊNEZI",
     subtitulo: "Educação Profissional",
+    tituloTamanho: "medio",
+    subtituloTamanho: "medio",
+    tituloCor: "#FFFFFF",
+    subtituloCor: "#FFFFFF",
   },
   {
     key: "placeholder-2",
@@ -36,6 +56,10 @@ const PLACEHOLDERS: Slide[] = [
     emoji: "📚",
     titulo: "Transforme seu futuro",
     subtitulo: "Cursos presenciais e EAD",
+    tituloTamanho: "medio",
+    subtituloTamanho: "medio",
+    tituloCor: "#FFFFFF",
+    subtituloCor: "#FFFFFF",
   },
   {
     key: "placeholder-3",
@@ -44,6 +68,10 @@ const PLACEHOLDERS: Slide[] = [
     emoji: "🏆",
     titulo: "Certificados de qualidade",
     subtitulo: "Reconhecidos pelo mercado",
+    tituloTamanho: "medio",
+    subtituloTamanho: "medio",
+    tituloCor: "#FFFFFF",
+    subtituloCor: "#FFFFFF",
   },
 ];
 
@@ -74,6 +102,10 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
         emoji: null,
         titulo: banner.titulo,
         subtitulo: banner.subtitulo,
+        tituloTamanho: banner.titulo_tamanho,
+        subtituloTamanho: banner.subtitulo_tamanho,
+        tituloCor: banner.titulo_cor,
+        subtituloCor: banner.subtitulo_cor,
       }));
     }
     return PLACEHOLDERS;
@@ -122,9 +154,25 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
           )}
 
           {slide.imagemUrl && (slide.titulo || slide.subtitulo) && (
-            <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent p-8 pt-16">
-              {slide.titulo && <span className="block text-2xl font-bold text-white">{slide.titulo}</span>}
-              {slide.subtitulo && <span className="block text-sm text-white/80">{slide.subtitulo}</span>}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="mx-8 rounded-xl bg-black/30 px-8 py-6 backdrop-blur-sm">
+                {slide.titulo && (
+                  <span
+                    className={`text-shadow-md block text-center font-bold ${TITULO_TAMANHO_CLASSES[slide.tituloTamanho]}`}
+                    style={{ color: slide.tituloCor }}
+                  >
+                    {slide.titulo}
+                  </span>
+                )}
+                {slide.subtitulo && (
+                  <span
+                    className={`mt-2 block text-center ${SUBTITULO_TAMANHO_CLASSES[slide.subtituloTamanho]}`}
+                    style={{ color: slide.subtituloCor }}
+                  >
+                    {slide.subtitulo}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>

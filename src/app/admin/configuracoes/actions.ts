@@ -12,6 +12,7 @@ import {
   bannerLoginUpdateSchema,
   LOGIN_BANNER_TIPOS,
   type LoginBanner,
+  type LoginBannerTamanho,
   type LoginBannerTipo,
 } from "@/lib/login-banners/schema";
 
@@ -385,7 +386,16 @@ export async function uploadBannerLogin(formData: FormData): Promise<{ error?: s
 
 export async function updateBannerLogin(
   id: string,
-  dados: { titulo: string; subtitulo: string; ordem: number; ativo: boolean },
+  dados: {
+    titulo: string;
+    subtitulo: string;
+    ordem: number;
+    ativo: boolean;
+    titulo_tamanho: LoginBannerTamanho;
+    subtitulo_tamanho: LoginBannerTamanho;
+    titulo_cor: string;
+    subtitulo_cor: string;
+  },
 ): Promise<{ error?: string }> {
   await requireRole("admin");
 
@@ -394,6 +404,10 @@ export async function updateBannerLogin(
     subtitulo: dados.subtitulo || undefined,
     ordem: dados.ordem,
     ativo: dados.ativo,
+    titulo_tamanho: dados.titulo_tamanho,
+    subtitulo_tamanho: dados.subtitulo_tamanho,
+    titulo_cor: dados.titulo_cor,
+    subtitulo_cor: dados.subtitulo_cor,
   });
 
   if (!parsed.success) {
@@ -408,6 +422,10 @@ export async function updateBannerLogin(
       subtitulo: parsed.data.subtitulo ?? null,
       ordem: parsed.data.ordem,
       ativo: parsed.data.ativo,
+      titulo_tamanho: parsed.data.titulo_tamanho,
+      subtitulo_tamanho: parsed.data.subtitulo_tamanho,
+      titulo_cor: parsed.data.titulo_cor,
+      subtitulo_cor: parsed.data.subtitulo_cor,
     })
     .eq("id", id);
 
@@ -446,5 +464,83 @@ export async function deleteBannerLogin(id: string): Promise<{ error?: string }>
   }
 
   revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+// ===== Rodapé da tela de login (TAREFA 4) =====
+
+const RODAPE_LOGIN_MAX_LENGTH = 300;
+
+export async function salvarRodapeLogin(texto: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const rodape = texto.trim();
+  if (rodape.length > RODAPE_LOGIN_MAX_LENGTH) {
+    return { error: `O texto do rodapé pode ter no máximo ${RODAPE_LOGIN_MAX_LENGTH} caracteres.` };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ login_rodape: rodape || null, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar o rodapé. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/login");
+  revalidatePath("/entrar");
+  return {};
+}
+
+// ===== Logomarca da escola (TAREFA 5) =====
+//
+// Mesmo padrão dos banners do login: o upload do arquivo em si acontece do
+// lado do client, direto pro Supabase Storage (ver
+// src/components/admin/logo-escola-form.tsx) — essa action só grava a
+// URL/path já prontos na tabela. A exclusão do arquivo anterior no
+// Storage também acontece no client, antes de chamar essa action.
+
+export async function salvarLogoEscola(logoUrl: string, logoPath: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  if (!logoUrl || !logoPath) {
+    return { error: "Upload da logo falhou antes de salvar. Tente novamente." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ escola_logo_url: logoUrl, escola_logo_path: logoPath, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar a logo. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/login");
+  revalidatePath("/entrar");
+  return {};
+}
+
+export async function removerLogoEscola(): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ escola_logo_url: null, escola_logo_path: null, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível remover a logo. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/login");
+  revalidatePath("/entrar");
   return {};
 }

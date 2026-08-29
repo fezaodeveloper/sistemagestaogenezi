@@ -7,6 +7,8 @@ import { CriteriosCertificadoForm } from "@/components/admin/criterios-certifica
 import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
 import { ConfiguracoesNotificacoesForm } from "@/components/admin/configuracoes-notificacoes-form";
 import { BannersLoginForm } from "@/components/admin/banners-login-form";
+import { LogoEscolaForm } from "@/components/admin/logo-escola-form";
+import { RodapeLoginForm } from "@/components/admin/rodape-login-form";
 import { BackupSection } from "@/components/admin/backup-section";
 import { LogSistemaView } from "@/components/admin/log-sistema-view";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,7 @@ export default async function ConfiguracoesPage() {
     supabase
       .from("configuracoes")
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -44,6 +46,20 @@ export default async function ConfiguracoesPage() {
         </TabsList>
 
         <TabsContent value="geral" className="flex flex-col gap-6">
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>Logomarca da Escola</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LogoEscolaForm
+                defaultValues={{
+                  escola_logo_url: data?.escola_logo_url ?? null,
+                  escola_logo_path: data?.escola_logo_path ?? null,
+                }}
+              />
+            </CardContent>
+          </Card>
+
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle>Dados da escola</CardTitle>
@@ -114,7 +130,16 @@ export default async function ConfiguracoesPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="banners">
+        <TabsContent value="banners" className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Rodapé da tela de login</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RodapeLoginForm rodapeInicial={data?.login_rodape ?? null} />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Banners do Login</CardTitle>

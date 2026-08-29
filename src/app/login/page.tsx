@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { roleHome } from "@/lib/auth/roles";
+import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/components/auth/login-form";
 import { BannerSlideshow } from "@/components/auth/banner-slideshow";
+
+const RODAPE_LOGIN_PADRAO = "© 2026 GÊNEZI Educação Profissional";
 
 export default async function LoginPage({
   searchParams,
@@ -15,7 +18,11 @@ export default async function LoginPage({
     redirect(roleHome(profile.role));
   }
 
-  const { error } = await searchParams;
+  const supabase = await createClient();
+  const [{ error }, { data: configuracoes }] = await Promise.all([
+    searchParams,
+    supabase.from("configuracoes").select("escola_logo_url, login_rodape").single(),
+  ]);
 
   return (
     <main className="flex min-h-svh">
@@ -28,9 +35,18 @@ export default async function LoginPage({
       {/* Coluna direita — formulário */}
       <div className="flex flex-col items-center justify-center w-full lg:w-[25%] p-6 bg-background">
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="w-24 h-24 rounded-2xl bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
-            <span className="text-4xl">🎓</span>
-          </div>
+          {configuracoes?.escola_logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto, sem necessidade de otimização do next/image aqui
+            <img
+              src={configuracoes.escola_logo_url}
+              alt="Logo da escola"
+              className="w-24 h-24 rounded-2xl object-contain"
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-2xl bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+              <span className="text-4xl">🎓</span>
+            </div>
+          )}
           <div className="text-center">
             <h1 className="text-2xl font-bold text-foreground">GÊNEZI</h1>
             <p className="text-sm text-muted-foreground">Educação Profissional</p>
@@ -50,7 +66,9 @@ export default async function LoginPage({
           <LoginForm />
         </div>
 
-        <p className="mt-8 text-xs text-muted-foreground">© 2026 GÊNEZI Educação Profissional</p>
+        <p className="mt-8 text-xs text-muted-foreground">
+          {configuracoes?.login_rodape ?? RODAPE_LOGIN_PADRAO}
+        </p>
       </div>
     </main>
   );

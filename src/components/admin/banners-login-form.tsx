@@ -10,10 +10,13 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { BANNER_BUCKET, BANNER_TAMANHO_MAXIMO_BYTES, BANNER_TIPOS_ACEITOS } from "@/lib/storage/banners";
 import {
+  LOGIN_BANNER_TAMANHOS,
+  LOGIN_BANNER_TAMANHO_LABELS,
   LOGIN_BANNER_TIPOS,
   LOGIN_BANNER_TIPO_BADGE_CLASS,
   LOGIN_BANNER_TIPO_LABELS,
   type LoginBanner,
+  type LoginBannerTamanho,
   type LoginBannerTipo,
 } from "@/lib/login-banners/schema";
 import { Badge } from "@/components/ui/badge";
@@ -54,15 +57,94 @@ const TELA_DESTINO_LABELS: Record<LoginBannerTipo, string> = {
   aluno: "Tela do Aluno (/entrar)",
 };
 
+// Classes de tamanho da pré-visualização (TAREFA 3): a caixa de preview é
+// bem menor que o banner real, então as mesmas 3 opções de tamanho usam
+// escalas proporcionalmente menores aqui — mantém a relação
+// pequeno < médio < grande sem estourar a caixa de 320x180.
+const PREVIEW_TITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
+  pequeno: "text-xs",
+  medio: "text-sm",
+  grande: "text-base",
+};
+
+const PREVIEW_SUBTITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
+  pequeno: "text-[10px]",
+  medio: "text-xs",
+  grande: "text-sm",
+};
+
+function BannerPreview({
+  publicUrl,
+  titulo,
+  subtitulo,
+  tituloTamanho,
+  subtituloTamanho,
+  tituloCor,
+  subtituloCor,
+}: {
+  publicUrl: string;
+  titulo: string;
+  subtitulo: string;
+  tituloTamanho: LoginBannerTamanho;
+  subtituloTamanho: LoginBannerTamanho;
+  tituloCor: string;
+  subtituloCor: string;
+}) {
+  return (
+    <div
+      className="relative h-45 w-80 shrink-0 overflow-hidden rounded-md border bg-cover bg-center"
+      style={{ backgroundImage: `url(${publicUrl})` }}
+    >
+      {(titulo || subtitulo) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="mx-4 rounded-lg bg-black/30 px-4 py-3 backdrop-blur-sm">
+            {titulo && (
+              <span
+                className={`block text-center font-bold ${PREVIEW_TITULO_TAMANHO_CLASSES[tituloTamanho]}`}
+                style={{ color: tituloCor }}
+              >
+                {titulo}
+              </span>
+            )}
+            {subtitulo && (
+              <span
+                className={`mt-1 block text-center ${PREVIEW_SUBTITULO_TAMANHO_CLASSES[subtituloTamanho]}`}
+                style={{ color: subtituloCor }}
+              >
+                {subtitulo}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BannerRow({ banner }: { banner: LoginBanner }) {
   const [titulo, setTitulo] = useState(banner.titulo ?? "");
   const [subtitulo, setSubtitulo] = useState(banner.subtitulo ?? "");
   const [ordem, setOrdem] = useState(banner.ordem);
+  const [tituloTamanho, setTituloTamanho] = useState<LoginBannerTamanho>(banner.titulo_tamanho);
+  const [subtituloTamanho, setSubtituloTamanho] = useState<LoginBannerTamanho>(banner.subtitulo_tamanho);
+  const [tituloCor, setTituloCor] = useState(banner.titulo_cor);
+  const [subtituloCor, setSubtituloCor] = useState(banner.subtitulo_cor);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [excluirOpen, setExcluirOpen] = useState(false);
 
-  function salvar(dados: Partial<{ titulo: string; subtitulo: string; ordem: number; ativo: boolean }>) {
+  function salvar(
+    dados: Partial<{
+      titulo: string;
+      subtitulo: string;
+      ordem: number;
+      ativo: boolean;
+      titulo_tamanho: LoginBannerTamanho;
+      subtitulo_tamanho: LoginBannerTamanho;
+      titulo_cor: string;
+      subtitulo_cor: string;
+    }>,
+  ) {
     setError(null);
     startTransition(async () => {
       const resultado = await updateBannerLogin(banner.id, {
@@ -70,6 +152,10 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
         subtitulo,
         ordem,
         ativo: banner.ativo,
+        titulo_tamanho: tituloTamanho,
+        subtitulo_tamanho: subtituloTamanho,
+        titulo_cor: tituloCor,
+        subtitulo_cor: subtituloCor,
         ...dados,
       });
       if (resultado.error) setError(resultado.error);
@@ -133,10 +219,95 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
               onBlur={() => salvar({ ordem })}
             />
           </div>
+          <div className="flex w-36 flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Tamanho do título</Label>
+            <Select
+              value={tituloTamanho}
+              items={LOGIN_BANNER_TAMANHO_LABELS}
+              onValueChange={(value) => {
+                const novoTamanho = value as LoginBannerTamanho;
+                setTituloTamanho(novoTamanho);
+                salvar({ titulo_tamanho: novoTamanho });
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOGIN_BANNER_TAMANHOS.map((opcao) => (
+                  <SelectItem key={opcao} value={opcao}>
+                    {LOGIN_BANNER_TAMANHO_LABELS[opcao]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex w-36 flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Tamanho do subtítulo</Label>
+            <Select
+              value={subtituloTamanho}
+              items={LOGIN_BANNER_TAMANHO_LABELS}
+              onValueChange={(value) => {
+                const novoTamanho = value as LoginBannerTamanho;
+                setSubtituloTamanho(novoTamanho);
+                salvar({ subtitulo_tamanho: novoTamanho });
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOGIN_BANNER_TAMANHOS.map((opcao) => (
+                  <SelectItem key={opcao} value={opcao}>
+                    {LOGIN_BANNER_TAMANHO_LABELS[opcao]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Cor do título</Label>
+            <input
+              type="color"
+              value={tituloCor}
+              onChange={(event) => {
+                const novaCor = event.target.value;
+                setTituloCor(novaCor);
+                salvar({ titulo_cor: novaCor });
+              }}
+              className="h-8 w-14 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Cor do subtítulo</Label>
+            <input
+              type="color"
+              value={subtituloCor}
+              onChange={(event) => {
+                const novaCor = event.target.value;
+                setSubtituloCor(novaCor);
+                salvar({ subtitulo_cor: novaCor });
+              }}
+              className="h-8 w-14 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
+            />
+          </div>
           <div className="flex flex-col items-center gap-1">
             <Label className="text-muted-foreground text-xs">Ativo</Label>
             <Switch checked={banner.ativo} onCheckedChange={(checked) => salvar({ ativo: checked === true })} />
           </div>
+        </div>
+
+        <div className="flex w-full flex-col gap-1">
+          <Label className="text-muted-foreground text-xs">Pré-visualização</Label>
+          <BannerPreview
+            publicUrl={banner.public_url}
+            titulo={titulo}
+            subtitulo={subtitulo}
+            tituloTamanho={tituloTamanho}
+            subtituloTamanho={subtituloTamanho}
+            tituloCor={tituloCor}
+            subtituloCor={subtituloCor}
+          />
         </div>
 
         <AlertDialog open={excluirOpen} onOpenChange={setExcluirOpen}>

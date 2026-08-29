@@ -15,6 +15,15 @@ export const LOGIN_BANNER_TIPO_BADGE_CLASS: Record<LoginBannerTipo, string> = {
   aluno: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
 };
 
+export const LOGIN_BANNER_TAMANHOS = ["pequeno", "medio", "grande"] as const;
+export type LoginBannerTamanho = (typeof LOGIN_BANNER_TAMANHOS)[number];
+
+export const LOGIN_BANNER_TAMANHO_LABELS: Record<LoginBannerTamanho, string> = {
+  pequeno: "Pequeno",
+  medio: "Médio",
+  grande: "Grande",
+};
+
 export type LoginBanner = {
   id: string;
   titulo: string | null;
@@ -24,16 +33,29 @@ export type LoginBanner = {
   tipo: LoginBannerTipo;
   ordem: number;
   ativo: boolean;
+  titulo_tamanho: LoginBannerTamanho;
+  subtitulo_tamanho: LoginBannerTamanho;
+  titulo_cor: string;
+  subtitulo_cor: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 };
+
+const corHexSchema = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, { error: "Informe uma cor hexadecimal válida (ex.: #FFFFFF)." });
 
 export const bannerLoginUpdateSchema = z.object({
   titulo: z.string().trim().max(200, { error: "Máximo de 200 caracteres." }).optional(),
   subtitulo: z.string().trim().max(300, { error: "Máximo de 300 caracteres." }).optional(),
   ordem: z.coerce.number().int({ error: "A ordem deve ser um número inteiro." }).min(0),
   ativo: z.boolean(),
+  titulo_tamanho: z.enum(LOGIN_BANNER_TAMANHOS),
+  subtitulo_tamanho: z.enum(LOGIN_BANNER_TAMANHOS),
+  titulo_cor: corHexSchema,
+  subtitulo_cor: corHexSchema,
 });
 
 export type BannerLoginUpdateValues = z.infer<typeof bannerLoginUpdateSchema>;
