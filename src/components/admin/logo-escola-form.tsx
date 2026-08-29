@@ -61,23 +61,17 @@ export function LogoEscolaForm({
       const extensao = ESCOLA_LOGO_EXTENSOES_POR_TIPO[file.type];
       const path = `logo.${extensao}`;
 
-      // Remove sempre antes do upload, ignorando erro se o arquivo não
-      // existir — mais simples e robusto que listar e filtrar por prefixo.
-      console.log("Removendo (se existir):", path);
-      await supabase.storage.from(ESCOLA_LOGO_BUCKET).remove([path]);
-
-      // Aguarda o Storage processar a remoção antes de subir o novo
-      // arquivo no mesmo path — o "The resource already exists" persistia
-      // por uma condição de corrida entre o remove e o upload seguinte.
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      console.log("Fazendo upload:", path);
+      // upsert: true sobrescreve o arquivo existente diretamente, sem
+      // precisar remover antes — elimina o "The resource already exists"
+      // que persistia quando um upload anterior falhava no meio do
+      // processo e deixava o arquivo em um estado que a remoção via API
+      // do client não conseguia limpar de forma confiável.
       const { error: uploadError } = await supabase.storage.from(ESCOLA_LOGO_BUCKET).upload(path, file, {
         cacheControl: "3600",
         contentType: file.type,
+        upsert: true,
       });
       if (uploadError) {
-        console.error("Erro no upload da logo para o Storage:", uploadError);
         setError(`Erro no upload: ${uploadError.message}`);
         return;
       }
@@ -89,8 +83,6 @@ export function LogoEscolaForm({
 
       const resultado = await salvarLogoEscola(publicUrl, path);
       if (resultado.error) {
-        // TODO(debug PROBLEMA 1): remover depois de confirmar a causa real em produção.
-        console.error("Erro ao salvar a logo em configuracoes:", resultado.error);
         setError("Logo enviada mas não foi possível salvar. Tente novamente.");
         return;
       }
