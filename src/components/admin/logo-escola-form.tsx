@@ -56,33 +56,26 @@ export function LogoEscolaForm({
     try {
       const supabase = createClient();
 
-      // Lista o bucket em vez de confiar só no logoPath salvo em
-      // estado/DB — "O recurso já existe" acontecia porque um arquivo
-      // podia ficar órfão no Storage (ex.: upload anterior com outra
-      // extensão, ou falha entre o upload e o salvamento em
-      // configuracoes) sem que logoPath soubesse dele.
-      // TODO(debug): console.log de diagnóstico, remover depois de confirmar a causa em produção.
-      const { data: existingFiles, error: listError } = await supabase.storage
-        .from(ESCOLA_LOGO_BUCKET)
-        .list("", { search: "logo" });
-      console.log("Arquivos encontrados:", existingFiles);
-      if (listError) {
-        console.error("Erro ao listar arquivos existentes:", listError);
-      }
-
-      if (existingFiles && existingFiles.length > 0) {
-        const nomesParaRemover = existingFiles.map((arquivo) => arquivo.name);
-        console.log("Removendo:", nomesParaRemover);
-        await supabase.storage.from(ESCOLA_LOGO_BUCKET).remove(nomesParaRemover);
-      }
-
       // Nome fixo (logo.{extensao}): anti-acúmulo, sempre sobrescreve o
       // arquivo anterior em vez de acumular um novo nome por upload.
       const extensao = ESCOLA_LOGO_EXTENSOES_POR_TIPO[file.type];
       const path = `logo.${extensao}`;
 
+      // Remove sempre antes do upload, ignorando erro se o arquivo não
+      // existir — mais simples e robusto que listar e filtrar por prefixo.
+      console.log("Removendo (se existir):", path);
+      await supabase.storage.from(ESCOLA_LOGO_BUCKET).remove([path]);
+
+      // Aguarda o Storage processar a remoção antes de subir o novo
+      // arquivo no mesmo path — o "The resource already exists" persistia
+      // por uma condição de corrida entre o remove e o upload seguinte.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       console.log("Fazendo upload:", path);
-      const { error: uploadError } = await supabase.storage.from(ESCOLA_LOGO_BUCKET).upload(path, file);
+      const { error: uploadError } = await supabase.storage.from(ESCOLA_LOGO_BUCKET).upload(path, file, {
+        cacheControl: "3600",
+        contentType: file.type,
+      });
       if (uploadError) {
         console.error("Erro no upload da logo para o Storage:", uploadError);
         setError(`Erro no upload: ${uploadError.message}`);

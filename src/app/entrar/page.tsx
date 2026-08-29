@@ -32,10 +32,13 @@ export default async function EntrarPage({
         <BannerSlideshow tipo="aluno" />
       </div>
 
-      {/* Coluna direita — formulário. h-full + justify-center centralizam
-          verticalmente; overflow-y-auto evita que o conteúdo seja cortado
-          quando a viewport é baixa demais pra caber tudo. */}
-      <div className="flex h-full w-full flex-col items-center justify-center gap-8 lg:w-[25%] p-6 bg-background overflow-y-auto">
+      {/* Coluna direita — formulário. flex-1 faz a coluna ocupar a altura
+          do <main> (flex row com h-svh); min-h-0 é o que realmente permite
+          o overflow-y-auto funcionar aqui — sem ele, flex items têm
+          min-height:auto por padrão e o conteúdo pode "estourar" a altura
+          do pai em vez de rolar internamente (por isso h-full sozinho não
+          bastava). */}
+      <div className="flex w-full flex-1 min-h-0 flex-col items-center justify-center gap-8 p-6 lg:w-[25%] bg-background overflow-y-auto">
         <div className="flex flex-col items-center gap-3">
           {configuracoes?.escola_logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto, sem necessidade de otimização do next/image aqui
