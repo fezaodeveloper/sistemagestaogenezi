@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createProxyClient } from "@/lib/supabase/proxy";
-import { roleHome, type Role } from "@/lib/auth/roles";
+import { loginHome, roleHome, type Role } from "@/lib/auth/roles";
 
 // Camada de conveniência/UX: faz o refresh de sessão (getClaims) e redireciona
 // otimisticamente por role. Não é a fronteira de segurança — isso é papel da
@@ -20,7 +20,7 @@ export async function proxy(request: NextRequest) {
 
   if (!userId) {
     if (areaRole) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL(loginHome(areaRole), request.url));
     }
     return getResponse();
   }
@@ -32,7 +32,10 @@ export async function proxy(request: NextRequest) {
     .single();
   const role = profile?.role as Role | undefined;
 
-  if (role && ((areaRole && areaRole !== role) || pathname === "/login" || pathname === "/")) {
+  if (
+    role &&
+    ((areaRole && areaRole !== role) || pathname === "/login" || pathname === "/entrar" || pathname === "/")
+  ) {
     return NextResponse.redirect(new URL(roleHome(role), request.url));
   }
 

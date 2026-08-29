@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { roleHome, type Role } from "@/lib/auth/roles";
+import { loginHome, roleHome, type Role } from "@/lib/auth/roles";
 
 export type Profile = {
   id: string;
@@ -46,7 +46,7 @@ export async function requireRole(role: Role): Promise<CurrentUser> {
   const profile = await getCurrentProfile();
 
   if (!profile) {
-    redirect("/login");
+    redirect(loginHome(role));
   }
 
   if (profile.role !== role) {

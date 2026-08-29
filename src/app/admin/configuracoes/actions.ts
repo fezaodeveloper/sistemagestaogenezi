@@ -8,7 +8,12 @@ import { CERTIFICADO_STATUS_LABELS } from "@/lib/certificados/certificados";
 import { PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
 import { PRESENCA_STATUS_LABELS, type PRESENCA_STATUSES } from "@/lib/presencas/schema";
 import { BANNER_BUCKET } from "@/lib/storage/banners";
-import { bannerLoginUpdateSchema, type LoginBanner } from "@/lib/login-banners/schema";
+import {
+  bannerLoginUpdateSchema,
+  LOGIN_BANNER_TIPOS,
+  type LoginBanner,
+  type LoginBannerTipo,
+} from "@/lib/login-banners/schema";
 
 export async function updateEadGamificacao(ativo: boolean): Promise<{ error?: string }> {
   const user = await requireRole("admin");
@@ -352,6 +357,10 @@ export async function uploadBannerLogin(formData: FormData): Promise<{ error?: s
   const publicUrl = String(formData.get("public_url") ?? "");
   const titulo = String(formData.get("titulo") ?? "").trim();
   const subtitulo = String(formData.get("subtitulo") ?? "").trim();
+  const tipoRaw = String(formData.get("tipo") ?? "");
+  const tipo: LoginBannerTipo = LOGIN_BANNER_TIPOS.includes(tipoRaw as LoginBannerTipo)
+    ? (tipoRaw as LoginBannerTipo)
+    : "admin";
 
   if (!storagePath || !publicUrl) {
     return { error: "Upload da imagem falhou antes de salvar o registro. Tente novamente." };
@@ -363,6 +372,7 @@ export async function uploadBannerLogin(formData: FormData): Promise<{ error?: s
     public_url: publicUrl,
     titulo: titulo || null,
     subtitulo: subtitulo || null,
+    tipo,
   });
 
   if (error) {

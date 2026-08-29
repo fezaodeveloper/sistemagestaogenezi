@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import {
   deleteBannerLogin,
@@ -9,12 +9,26 @@ import {
 } from "@/app/admin/configuracoes/actions";
 import { createClient } from "@/lib/supabase/client";
 import { BANNER_BUCKET, BANNER_TAMANHO_MAXIMO_BYTES, BANNER_TIPOS_ACEITOS } from "@/lib/storage/banners";
-import type { LoginBanner } from "@/lib/login-banners/schema";
+import {
+  LOGIN_BANNER_TIPOS,
+  LOGIN_BANNER_TIPO_BADGE_CLASS,
+  LOGIN_BANNER_TIPO_LABELS,
+  type LoginBanner,
+  type LoginBannerTipo,
+} from "@/lib/login-banners/schema";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +48,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+const TELA_DESTINO_LABELS: Record<LoginBannerTipo, string> = {
+  admin: "Tela do Admin (/login)",
+  aluno: "Tela do Aluno (/entrar)",
+};
 
 function BannerRow({ banner }: { banner: LoginBanner }) {
   const [titulo, setTitulo] = useState(banner.titulo ?? "");
@@ -80,6 +99,12 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
         />
 
         <div className="flex flex-1 flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Tela</Label>
+            <Badge className={`w-fit ${LOGIN_BANNER_TIPO_BADGE_CLASS[banner.tipo]}`}>
+              {LOGIN_BANNER_TIPO_LABELS[banner.tipo]}
+            </Badge>
+          </div>
           <div className="flex min-w-40 flex-1 flex-col gap-1">
             <Label className="text-muted-foreground text-xs">Título</Label>
             <Input
@@ -143,6 +168,7 @@ function AdicionarBannerDialog() {
   const [open, setOpen] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
+  const [tipo, setTipo] = useState<LoginBannerTipo>("admin");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -150,6 +176,7 @@ function AdicionarBannerDialog() {
   function resetar() {
     setTitulo("");
     setSubtitulo("");
+    setTipo("admin");
     setArquivo(null);
     setError(null);
   }
@@ -201,6 +228,7 @@ function AdicionarBannerDialog() {
       formData.set("public_url", urlData.publicUrl);
       formData.set("titulo", titulo);
       formData.set("subtitulo", subtitulo);
+      formData.set("tipo", tipo);
 
       const resultado = await uploadBannerLogin(formData);
       if (resultado.error) {
@@ -246,6 +274,25 @@ function AdicionarBannerDialog() {
             />
           </div>
           <div className="flex flex-col gap-2">
+            <Label htmlFor="banner-tipo">Tela de destino</Label>
+            <Select
+              value={tipo}
+              onValueChange={(value) => setTipo(value as LoginBannerTipo)}
+              items={TELA_DESTINO_LABELS}
+            >
+              <SelectTrigger id="banner-tipo" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOGIN_BANNER_TIPOS.map((opcao) => (
+                  <SelectItem key={opcao} value={opcao}>
+                    {TELA_DESTINO_LABELS[opcao]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-2">
             <Label htmlFor="banner-titulo">Título</Label>
             <Input
               id="banner-titulo"
@@ -279,7 +326,20 @@ function AdicionarBannerDialog() {
   );
 }
 
+const FILTRO_TODOS = "todos";
+const FILTRO_ITEMS: Record<string, string> = {
+  [FILTRO_TODOS]: "Todos",
+  ...LOGIN_BANNER_TIPO_LABELS,
+};
+
 export function BannersLoginForm({ banners }: { banners: LoginBanner[] }) {
+  const [filtro, setFiltro] = useState<string>(FILTRO_TODOS);
+
+  const bannersFiltrados = useMemo(() => {
+    if (filtro === FILTRO_TODOS) return banners;
+    return banners.filter((banner) => banner.tipo === filtro);
+  }, [banners, filtro]);
+
   return (
     <div className="flex flex-col gap-4">
       <p className="text-muted-foreground text-sm">
@@ -287,20 +347,38 @@ export function BannersLoginForm({ banners }: { banners: LoginBanner[] }) {
         aceitos: JPG, PNG, WebP.
       </p>
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">
-          {banners.length} banner{banners.length === 1 ? "" : "s"} cadastrado{banners.length === 1 ? "" : "s"}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-2">
+          <Label className="text-muted-foreground text-xs">Filtrar por tela</Label>
+          <Select items={FILTRO_ITEMS} value={filtro} onValueChange={(value) => setFiltro(value as string)}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(FILTRO_ITEMS).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {FILTRO_ITEMS[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <AdicionarBannerDialog />
       </div>
 
-      {banners.length === 0 ? (
+      <p className="text-sm font-medium">
+        {bannersFiltrados.length} banner{bannersFiltrados.length === 1 ? "" : "s"}
+      </p>
+
+      {bannersFiltrados.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
-          Nenhum banner cadastrado — a tela de login está usando os banners padrão da Gênezi.
+          {banners.length === 0
+            ? "Nenhum banner cadastrado — as telas de login estão usando os banners padrão da Gênezi."
+            : "Nenhum banner encontrado com o filtro aplicado."}
         </p>
       ) : (
         <div className="flex flex-col gap-3">
-          {banners.map((banner) => (
+          {bannersFiltrados.map((banner) => (
             <BannerRow key={banner.id} banner={banner} />
           ))}
         </div>

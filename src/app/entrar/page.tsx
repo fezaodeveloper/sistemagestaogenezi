@@ -4,7 +4,7 @@ import { roleHome } from "@/lib/auth/roles";
 import { LoginForm } from "@/components/auth/login-form";
 import { BannerSlideshow } from "@/components/auth/banner-slideshow";
 
-export default async function LoginPage({
+export default async function EntrarPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
@@ -22,7 +22,7 @@ export default async function LoginPage({
       {/* Coluna esquerda — slideshow, escondida em telas menores que lg
           (ver TAREFA 6: mobile mostra só o formulário). */}
       <div className="hidden lg:flex lg:w-[75%] relative overflow-hidden">
-        <BannerSlideshow tipo="admin" />
+        <BannerSlideshow tipo="aluno" />
       </div>
 
       {/* Coluna direita — formulário */}

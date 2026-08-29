@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getBannersLogin } from "@/app/login/actions";
-import type { LoginBanner } from "@/lib/login-banners/schema";
+import type { LoginBanner, LoginBannerTipo } from "@/lib/login-banners/schema";
 
 const TROCA_AUTOMATICA_MS = 10000;
 
@@ -47,20 +47,20 @@ const PLACEHOLDERS: Slide[] = [
   },
 ];
 
-export function BannerSlideshow() {
+export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
   const [banners, setBanners] = useState<LoginBanner[] | null>(null);
   const [indice, setIndice] = useState(0);
   const [pausado, setPausado] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
-    getBannersLogin().then((dados) => {
+    getBannersLogin(tipo).then((dados) => {
       if (!cancelado) setBanners(dados);
     });
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [tipo]);
 
   // null (ainda carregando) e [] (nenhum banner cadastrado) caem no mesmo
   // fallback — evita o slideshow "piscar" placeholder → real na primeira
