@@ -13,6 +13,7 @@ import {
   LOGIN_BANNER_TIPOS,
   type LoginBanner,
   type LoginBannerTamanho,
+  type LoginBannerTextoPosicao,
   type LoginBannerTipo,
 } from "@/lib/login-banners/schema";
 
@@ -395,6 +396,7 @@ export async function updateBannerLogin(
     subtitulo_tamanho: LoginBannerTamanho;
     titulo_cor: string;
     subtitulo_cor: string;
+    texto_posicao: LoginBannerTextoPosicao;
   },
 ): Promise<{ error?: string }> {
   await requireRole("admin");
@@ -408,6 +410,7 @@ export async function updateBannerLogin(
     subtitulo_tamanho: dados.subtitulo_tamanho,
     titulo_cor: dados.titulo_cor,
     subtitulo_cor: dados.subtitulo_cor,
+    texto_posicao: dados.texto_posicao,
   });
 
   if (!parsed.success) {
@@ -426,6 +429,7 @@ export async function updateBannerLogin(
       subtitulo_tamanho: parsed.data.subtitulo_tamanho,
       titulo_cor: parsed.data.titulo_cor,
       subtitulo_cor: parsed.data.subtitulo_cor,
+      texto_posicao: parsed.data.texto_posicao,
     })
     .eq("id", id);
 

@@ -67,9 +67,7 @@ export function LogoEscolaForm({
       const extensao = ESCOLA_LOGO_EXTENSOES_POR_TIPO[file.type];
       const path = `logo.${extensao}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from(ESCOLA_LOGO_BUCKET)
-        .upload(path, file, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from(ESCOLA_LOGO_BUCKET).upload(path, file);
       if (uploadError) {
         setError("Não foi possível enviar a logo. Tente novamente.");
         return;

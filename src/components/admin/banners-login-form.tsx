@@ -10,6 +10,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { BANNER_BUCKET, BANNER_TAMANHO_MAXIMO_BYTES, BANNER_TIPOS_ACEITOS } from "@/lib/storage/banners";
 import {
+  LOGIN_BANNER_POSICAO_LABELS,
+  LOGIN_BANNER_POSICOES,
   LOGIN_BANNER_TAMANHOS,
   LOGIN_BANNER_TAMANHO_LABELS,
   LOGIN_BANNER_TIPOS,
@@ -17,6 +19,7 @@ import {
   LOGIN_BANNER_TIPO_LABELS,
   type LoginBanner,
   type LoginBannerTamanho,
+  type LoginBannerTextoPosicao,
   type LoginBannerTipo,
 } from "@/lib/login-banners/schema";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +76,19 @@ const PREVIEW_SUBTITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
   grande: "text-sm",
 };
 
+// Mesmo padding menor da caixa de preview (320x180) usado nos tamanhos de
+// texto — pt-16/pb-16 do banner real estourariam essa caixa.
+const PREVIEW_POSICAO_CLASSES: Record<LoginBannerTextoPosicao, string> = {
+  topo: "justify-start pt-4",
+  centro: "justify-center",
+  base: "justify-end pb-4",
+};
+
+// Mesma sombra de texto do banner real (ver PROBLEMA 2 em
+// banner-slideshow.tsx) — sem caixa de fundo atrás do texto, pra o preview
+// refletir fielmente o resultado final.
+const PREVIEW_TEXTO_SHADOW = "0 2px 8px rgba(0,0,0,0.8)";
+
 function BannerPreview({
   publicUrl,
   titulo,
@@ -81,6 +97,7 @@ function BannerPreview({
   subtituloTamanho,
   tituloCor,
   subtituloCor,
+  textoPosicao,
 }: {
   publicUrl: string;
   titulo: string;
@@ -89,6 +106,7 @@ function BannerPreview({
   subtituloTamanho: LoginBannerTamanho;
   tituloCor: string;
   subtituloCor: string;
+  textoPosicao: LoginBannerTextoPosicao;
 }) {
   return (
     <div
@@ -96,25 +114,25 @@ function BannerPreview({
       style={{ backgroundImage: `url(${publicUrl})` }}
     >
       {(titulo || subtitulo) && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="mx-4 rounded-lg bg-black/30 px-4 py-3 backdrop-blur-sm">
-            {titulo && (
-              <span
-                className={`block text-center font-bold ${PREVIEW_TITULO_TAMANHO_CLASSES[tituloTamanho]}`}
-                style={{ color: tituloCor }}
-              >
-                {titulo}
-              </span>
-            )}
-            {subtitulo && (
-              <span
-                className={`mt-1 block text-center ${PREVIEW_SUBTITULO_TAMANHO_CLASSES[subtituloTamanho]}`}
-                style={{ color: subtituloCor }}
-              >
-                {subtitulo}
-              </span>
-            )}
-          </div>
+        <div
+          className={`absolute inset-0 flex flex-col items-center px-4 ${PREVIEW_POSICAO_CLASSES[textoPosicao]}`}
+        >
+          {titulo && (
+            <span
+              className={`block text-center font-bold ${PREVIEW_TITULO_TAMANHO_CLASSES[tituloTamanho]}`}
+              style={{ color: tituloCor, textShadow: PREVIEW_TEXTO_SHADOW }}
+            >
+              {titulo}
+            </span>
+          )}
+          {subtitulo && (
+            <span
+              className={`mt-1 block text-center ${PREVIEW_SUBTITULO_TAMANHO_CLASSES[subtituloTamanho]}`}
+              style={{ color: subtituloCor, textShadow: PREVIEW_TEXTO_SHADOW }}
+            >
+              {subtitulo}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -129,6 +147,7 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
   const [subtituloTamanho, setSubtituloTamanho] = useState<LoginBannerTamanho>(banner.subtitulo_tamanho);
   const [tituloCor, setTituloCor] = useState(banner.titulo_cor);
   const [subtituloCor, setSubtituloCor] = useState(banner.subtitulo_cor);
+  const [textoPosicao, setTextoPosicao] = useState<LoginBannerTextoPosicao>(banner.texto_posicao);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [excluirOpen, setExcluirOpen] = useState(false);
@@ -143,6 +162,7 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
       subtitulo_tamanho: LoginBannerTamanho;
       titulo_cor: string;
       subtitulo_cor: string;
+      texto_posicao: LoginBannerTextoPosicao;
     }>,
   ) {
     setError(null);
@@ -156,6 +176,7 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
         subtitulo_tamanho: subtituloTamanho,
         titulo_cor: tituloCor,
         subtitulo_cor: subtituloCor,
+        texto_posicao: textoPosicao,
         ...dados,
       });
       if (resultado.error) setError(resultado.error);
@@ -291,6 +312,29 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
               className="h-8 w-14 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
             />
           </div>
+          <div className="flex w-36 flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Posição do texto</Label>
+            <Select
+              value={textoPosicao}
+              items={LOGIN_BANNER_POSICAO_LABELS}
+              onValueChange={(value) => {
+                const novaPosicao = value as LoginBannerTextoPosicao;
+                setTextoPosicao(novaPosicao);
+                salvar({ texto_posicao: novaPosicao });
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOGIN_BANNER_POSICOES.map((opcao) => (
+                  <SelectItem key={opcao} value={opcao}>
+                    {LOGIN_BANNER_POSICAO_LABELS[opcao]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex flex-col items-center gap-1">
             <Label className="text-muted-foreground text-xs">Ativo</Label>
             <Switch checked={banner.ativo} onCheckedChange={(checked) => salvar({ ativo: checked === true })} />
@@ -307,6 +351,7 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
             subtituloTamanho={subtituloTamanho}
             tituloCor={tituloCor}
             subtituloCor={subtituloCor}
+            textoPosicao={textoPosicao}
           />
         </div>
 

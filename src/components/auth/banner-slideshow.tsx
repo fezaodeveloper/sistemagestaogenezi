@@ -2,9 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getBannersLogin } from "@/app/login/actions";
-import type { LoginBanner, LoginBannerTamanho, LoginBannerTipo } from "@/lib/login-banners/schema";
+import type {
+  LoginBanner,
+  LoginBannerTamanho,
+  LoginBannerTextoPosicao,
+  LoginBannerTipo,
+} from "@/lib/login-banners/schema";
 
 const TROCA_AUTOMATICA_MS = 10000;
+
+// Sombra aplicada via style (não classe utilitária) pra garantir legibilidade
+// do texto sobre a imagem do banner sem precisar de uma caixa de fundo
+// semi-transparente atrás dele (ver PROBLEMA 2).
+const TEXTO_SHADOW = "0 2px 8px rgba(0,0,0,0.8)";
 
 const TITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
   pequeno: "text-2xl",
@@ -18,6 +28,12 @@ const SUBTITULO_TAMANHO_CLASSES: Record<LoginBannerTamanho, string> = {
   grande: "text-2xl",
 };
 
+const TEXTO_POSICAO_CLASSES: Record<LoginBannerTextoPosicao, string> = {
+  topo: "justify-start pt-16",
+  centro: "justify-center",
+  base: "justify-end pb-16",
+};
+
 type Slide = {
   key: string;
   imagemUrl: string | null;
@@ -29,6 +45,7 @@ type Slide = {
   subtituloTamanho: LoginBannerTamanho;
   tituloCor: string;
   subtituloCor: string;
+  textoPosicao: LoginBannerTextoPosicao;
 };
 
 // Placeholders com a identidade visual da Gênezi — usados só enquanto não
@@ -48,6 +65,7 @@ const PLACEHOLDERS: Slide[] = [
     subtituloTamanho: "medio",
     tituloCor: "#FFFFFF",
     subtituloCor: "#FFFFFF",
+    textoPosicao: "centro",
   },
   {
     key: "placeholder-2",
@@ -60,6 +78,7 @@ const PLACEHOLDERS: Slide[] = [
     subtituloTamanho: "medio",
     tituloCor: "#FFFFFF",
     subtituloCor: "#FFFFFF",
+    textoPosicao: "centro",
   },
   {
     key: "placeholder-3",
@@ -72,6 +91,7 @@ const PLACEHOLDERS: Slide[] = [
     subtituloTamanho: "medio",
     tituloCor: "#FFFFFF",
     subtituloCor: "#FFFFFF",
+    textoPosicao: "centro",
   },
 ];
 
@@ -106,6 +126,7 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
         subtituloTamanho: banner.subtitulo_tamanho,
         tituloCor: banner.titulo_cor,
         subtituloCor: banner.subtitulo_cor,
+        textoPosicao: banner.texto_posicao,
       }));
     }
     return PLACEHOLDERS;
@@ -154,25 +175,25 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
           )}
 
           {slide.imagemUrl && (slide.titulo || slide.subtitulo) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="mx-8 rounded-xl bg-black/30 px-8 py-6 backdrop-blur-sm">
-                {slide.titulo && (
-                  <span
-                    className={`text-shadow-md block text-center font-bold ${TITULO_TAMANHO_CLASSES[slide.tituloTamanho]}`}
-                    style={{ color: slide.tituloCor }}
-                  >
-                    {slide.titulo}
-                  </span>
-                )}
-                {slide.subtitulo && (
-                  <span
-                    className={`mt-2 block text-center ${SUBTITULO_TAMANHO_CLASSES[slide.subtituloTamanho]}`}
-                    style={{ color: slide.subtituloCor }}
-                  >
-                    {slide.subtitulo}
-                  </span>
-                )}
-              </div>
+            <div
+              className={`absolute inset-0 flex flex-col items-center px-8 ${TEXTO_POSICAO_CLASSES[slide.textoPosicao]}`}
+            >
+              {slide.titulo && (
+                <span
+                  className={`block text-center font-bold ${TITULO_TAMANHO_CLASSES[slide.tituloTamanho]}`}
+                  style={{ color: slide.tituloCor, textShadow: TEXTO_SHADOW }}
+                >
+                  {slide.titulo}
+                </span>
+              )}
+              {slide.subtitulo && (
+                <span
+                  className={`mt-2 block text-center ${SUBTITULO_TAMANHO_CLASSES[slide.subtituloTamanho]}`}
+                  style={{ color: slide.subtituloCor, textShadow: TEXTO_SHADOW }}
+                >
+                  {slide.subtitulo}
+                </span>
+              )}
             </div>
           )}
         </div>

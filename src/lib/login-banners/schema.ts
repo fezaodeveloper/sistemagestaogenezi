@@ -24,6 +24,15 @@ export const LOGIN_BANNER_TAMANHO_LABELS: Record<LoginBannerTamanho, string> = {
   grande: "Grande",
 };
 
+export const LOGIN_BANNER_POSICOES = ["topo", "centro", "base"] as const;
+export type LoginBannerTextoPosicao = (typeof LOGIN_BANNER_POSICOES)[number];
+
+export const LOGIN_BANNER_POSICAO_LABELS: Record<LoginBannerTextoPosicao, string> = {
+  topo: "Topo",
+  centro: "Centro",
+  base: "Base",
+};
+
 export type LoginBanner = {
   id: string;
   titulo: string | null;
@@ -37,6 +46,7 @@ export type LoginBanner = {
   subtitulo_tamanho: LoginBannerTamanho;
   titulo_cor: string;
   subtitulo_cor: string;
+  texto_posicao: LoginBannerTextoPosicao;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -56,6 +66,7 @@ export const bannerLoginUpdateSchema = z.object({
   subtitulo_tamanho: z.enum(LOGIN_BANNER_TAMANHOS),
   titulo_cor: corHexSchema,
   subtitulo_cor: corHexSchema,
+  texto_posicao: z.enum(LOGIN_BANNER_POSICOES),
 });
 
 export type BannerLoginUpdateValues = z.infer<typeof bannerLoginUpdateSchema>;
