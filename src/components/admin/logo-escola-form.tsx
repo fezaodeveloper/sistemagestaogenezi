@@ -56,10 +56,24 @@ export function LogoEscolaForm({
     try {
       const supabase = createClient();
 
-      // Remove o arquivo anterior antes de subir o novo — evita acúmulo de
-      // arquivos órfãos no bucket (ver TAREFA 5).
-      if (logoPath) {
-        await supabase.storage.from(ESCOLA_LOGO_BUCKET).remove([logoPath]);
+      // Lista o bucket em vez de confiar só no logoPath salvo em
+      // estado/DB — "O recurso já existe" acontecia porque um arquivo
+      // podia ficar órfão no Storage (ex.: upload anterior com outra
+      // extensão, ou falha entre o upload e o salvamento em
+      // configuracoes) sem que logoPath soubesse dele.
+      // TODO(debug): console.log de diagnóstico, remover depois de confirmar a causa em produção.
+      const { data: existingFiles, error: listError } = await supabase.storage
+        .from(ESCOLA_LOGO_BUCKET)
+        .list("", { search: "logo" });
+      console.log("Arquivos encontrados:", existingFiles);
+      if (listError) {
+        console.error("Erro ao listar arquivos existentes:", listError);
+      }
+
+      if (existingFiles && existingFiles.length > 0) {
+        const nomesParaRemover = existingFiles.map((arquivo) => arquivo.name);
+        console.log("Removendo:", nomesParaRemover);
+        await supabase.storage.from(ESCOLA_LOGO_BUCKET).remove(nomesParaRemover);
       }
 
       // Nome fixo (logo.{extensao}): anti-acúmulo, sempre sobrescreve o
@@ -67,13 +81,9 @@ export function LogoEscolaForm({
       const extensao = ESCOLA_LOGO_EXTENSOES_POR_TIPO[file.type];
       const path = `logo.${extensao}`;
 
-      // Mesmo padrão de upload de src/components/admin/banners-login-form.tsx
-      // (AdicionarBannerDialog.handleUpload): mesma instanciação de client
-      // (createClient() de @/lib/supabase/client) e mesma chamada
-      // `.upload(path, file)` sem opções extras.
+      console.log("Fazendo upload:", path);
       const { error: uploadError } = await supabase.storage.from(ESCOLA_LOGO_BUCKET).upload(path, file);
       if (uploadError) {
-        // TODO(debug PROBLEMA 1): remover depois de confirmar a causa real em produção.
         console.error("Erro no upload da logo para o Storage:", uploadError);
         setError(`Erro no upload: ${uploadError.message}`);
         return;

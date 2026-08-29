@@ -32,11 +32,11 @@ export default async function LoginPage({
         <BannerSlideshow tipo="admin" />
       </div>
 
-      {/* Coluna direita — formulário. overflow-y-auto evita que o conteúdo
-          seja cortado quando a viewport é baixa demais pra caber tudo com
-          h-svh (ver PROBLEMA 2). */}
-      <div className="flex flex-col items-center justify-center w-full lg:w-[25%] p-6 bg-background overflow-y-auto">
-        <div className="mb-6 flex flex-col items-center gap-3">
+      {/* Coluna direita — formulário. h-full + justify-center centralizam
+          verticalmente; overflow-y-auto evita que o conteúdo seja cortado
+          quando a viewport é baixa demais pra caber tudo. */}
+      <div className="flex h-full w-full flex-col items-center justify-center gap-8 lg:w-[25%] p-6 bg-background overflow-y-auto">
+        <div className="flex flex-col items-center gap-3">
           {configuracoes?.escola_logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto, sem necessidade de otimização do next/image aqui
             <img
@@ -68,7 +68,7 @@ export default async function LoginPage({
           <LoginForm />
         </div>
 
-        <p className="mt-6 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {configuracoes?.login_rodape ?? RODAPE_LOGIN_PADRAO}
         </p>
       </div>

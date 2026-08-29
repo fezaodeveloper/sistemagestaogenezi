@@ -9,7 +9,7 @@ import type {
   LoginBannerTipo,
 } from "@/lib/login-banners/schema";
 
-const TROCA_AUTOMATICA_MS = 10000;
+const TROCA_AUTOMATICA_MS = 6000;
 
 // Sombra aplicada via style (não classe utilitária) pra garantir legibilidade
 // do texto sobre a imagem do banner sem precisar de uma caixa de fundo
@@ -132,13 +132,17 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
     return PLACEHOLDERS;
   }, [banners]);
 
+  // `indice` entra nas dependências pra reiniciar a contagem sempre que o
+  // slide muda — inclusive quando o usuário clica numa bolinha (setIndice
+  // direto, fora do tick automático), garantindo os próximos 6s inteiros
+  // a partir da troca manual em vez de um avanço automático "adiantado".
   useEffect(() => {
     if (pausado || slides.length <= 1) return;
     const timer = setInterval(() => {
       setIndice((atual) => (atual + 1) % slides.length);
     }, TROCA_AUTOMATICA_MS);
     return () => clearInterval(timer);
-  }, [pausado, slides.length]);
+  }, [pausado, slides.length, indice]);
 
   // Módulo em vez de um efeito corretivo: se a lista de slides mudar (ex.:
   // placeholders → banners reais depois do fetch) e o índice guardado
