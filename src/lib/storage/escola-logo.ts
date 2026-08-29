@@ -6,7 +6,7 @@
 // arquivo continua restrito a admin via policies em storage.objects.
 export const ESCOLA_LOGO_BUCKET = "escola-logo";
 
-export const ESCOLA_LOGO_TAMANHO_MAXIMO_BYTES = 2 * 1024 * 1024; // 2MB
+export const ESCOLA_LOGO_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
 export const ESCOLA_LOGO_EXTENSOES_POR_TIPO: Record<string, string> = {
   "image/png": "png",

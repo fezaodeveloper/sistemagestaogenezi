@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   ESCOLA_LOGO_BUCKET,
   ESCOLA_LOGO_EXTENSOES_POR_TIPO,
-  ESCOLA_LOGO_TAMANHO_MAXIMO_BYTES,
+  ESCOLA_LOGO_MAX_BYTES,
   ESCOLA_LOGO_TIPOS_ACEITOS,
 } from "@/lib/storage/escola-logo";
 import { Button } from "@/components/ui/button";
@@ -44,11 +44,11 @@ export function LogoEscolaForm({
     setError(null);
 
     if (!ESCOLA_LOGO_TIPOS_ACEITOS.includes(file.type)) {
-      setError("Formato não aceito. Envie um arquivo PNG, JPG, JPEG, SVG ou WebP.");
+      setError("Formato não aceito. Use PNG, JPG, JPEG, SVG ou WebP.");
       return;
     }
-    if (file.size > ESCOLA_LOGO_TAMANHO_MAXIMO_BYTES) {
-      setError("O arquivo pode ter no máximo 2MB.");
+    if (file.size > ESCOLA_LOGO_MAX_BYTES) {
+      setError("Arquivo muito grande. Máximo permitido: 10MB.");
       return;
     }
 
@@ -67,9 +67,15 @@ export function LogoEscolaForm({
       const extensao = ESCOLA_LOGO_EXTENSOES_POR_TIPO[file.type];
       const path = `logo.${extensao}`;
 
+      // Mesmo padrão de upload de src/components/admin/banners-login-form.tsx
+      // (AdicionarBannerDialog.handleUpload): mesma instanciação de client
+      // (createClient() de @/lib/supabase/client) e mesma chamada
+      // `.upload(path, file)` sem opções extras.
       const { error: uploadError } = await supabase.storage.from(ESCOLA_LOGO_BUCKET).upload(path, file);
       if (uploadError) {
-        setError("Não foi possível enviar a logo. Tente novamente.");
+        // TODO(debug PROBLEMA 1): remover depois de confirmar a causa real em produção.
+        console.error("Erro no upload da logo para o Storage:", uploadError);
+        setError(`Erro no upload: ${uploadError.message}`);
         return;
       }
 
@@ -80,7 +86,9 @@ export function LogoEscolaForm({
 
       const resultado = await salvarLogoEscola(publicUrl, path);
       if (resultado.error) {
-        setError(resultado.error);
+        // TODO(debug PROBLEMA 1): remover depois de confirmar a causa real em produção.
+        console.error("Erro ao salvar a logo em configuracoes:", resultado.error);
+        setError("Logo enviada mas não foi possível salvar. Tente novamente.");
         return;
       }
 
