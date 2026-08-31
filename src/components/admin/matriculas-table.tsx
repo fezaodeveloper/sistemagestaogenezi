@@ -9,6 +9,7 @@ import { updateMatriculaStatus } from "@/app/admin/alunos/matriculas-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Select,
   SelectContent,
@@ -251,7 +252,19 @@ function CancelarMatriculaButton({ matricula }: { matricula: MatriculaListItem }
   );
 }
 
-export function MatriculasTable({ matriculas }: { matriculas: MatriculaListItem[] }) {
+export function MatriculasTable({
+  matriculas,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+}: {
+  matriculas: MatriculaListItem[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+}) {
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -329,7 +342,7 @@ export function MatriculasTable({ matriculas }: { matriculas: MatriculaListItem[
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleImprimir} disabled={gerandoPdf}>
             <Printer />
-            {gerandoPdf ? "Gerando PDF..." : "Imprimir Lista"}
+            {gerandoPdf ? "Gerando PDF..." : "Imprimir página atual"}
           </Button>
           <Button render={<Link href="/admin/matriculas/nova" />} nativeButton={false}>
             <Plus />
@@ -395,6 +408,14 @@ export function MatriculasTable({ matriculas }: { matriculas: MatriculaListItem[
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/matriculas"
+      />
     </div>
   );
 }

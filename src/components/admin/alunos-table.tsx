@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Select,
   SelectContent,
@@ -181,7 +182,19 @@ function AlunosPdfDocument({ alunos, geradoEm }: { alunos: AlunoListItem[]; gera
   );
 }
 
-export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
+export function AlunosTable({
+  alunos,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+}: {
+  alunos: AlunoListItem[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+}) {
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [faixaFiltro, setFaixaFiltro] = useState<string>(FAIXA_FILTRO_TODAS);
@@ -264,7 +277,7 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
         </p>
         <Button variant="outline" onClick={handleImprimir} disabled={gerandoPdf}>
           <Printer />
-          {gerandoPdf ? "Gerando PDF..." : "Imprimir"}
+          {gerandoPdf ? "Gerando PDF..." : "Imprimir página atual"}
         </Button>
       </div>
 
@@ -353,6 +366,10 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
         </div>
       </div>
 
+      <p className="text-muted-foreground text-xs">
+        Filtros aplicados apenas na página atual. Use a busca para encontrar registros específicos.
+      </p>
+
       {alunosFiltrados.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
           Nenhum aluno encontrado com os filtros aplicados.
@@ -424,6 +441,14 @@ export function AlunosTable({ alunos }: { alunos: AlunoListItem[] }) {
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/alunos"
+      />
     </div>
   );
 }
