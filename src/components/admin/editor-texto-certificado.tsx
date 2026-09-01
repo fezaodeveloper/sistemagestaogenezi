@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -24,15 +24,20 @@ const TAMANHO_FONTE_LABELS = Object.fromEntries(TAMANHOS_FONTE.map((t) => [t, `$
 // CSS/UI própria do Tiptap pra brigar contra o tema). Marcação limitada a
 // negrito/sublinhado/tamanho de fonte (o que foi pedido); StarterKit traz
 // mais marks de graça, mas o toolbar só expõe essas.
-export function EditorTextoCertificado({
-  name,
-  content,
-  onChangeJson,
-}: {
-  name: string;
-  content: JSONContent;
-  onChangeJson?: (json: JSONContent) => void;
-}) {
+export type EditorTextoCertificadoHandle = {
+  // Insere texto no ponto atual do cursor — usado pelo botão "Inserir"
+  // da lista de variáveis do contrato (ver ContratoTemplateForm).
+  insertText: (texto: string) => void;
+};
+
+export const EditorTextoCertificado = forwardRef<
+  EditorTextoCertificadoHandle,
+  {
+    name: string;
+    content: JSONContent;
+    onChangeJson?: (json: JSONContent) => void;
+  }
+>(function EditorTextoCertificado({ name, content, onChangeJson }, ref) {
   const [json, setJson] = useState<JSONContent>(content);
   const [, forcarAtualizacao] = useState(0);
 
@@ -47,6 +52,16 @@ export function EditorTextoCertificado({
     },
     onSelectionUpdate: () => forcarAtualizacao((n) => n + 1),
   });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText: (texto: string) => {
+        editor?.chain().focus().insertContent(texto).run();
+      },
+    }),
+    [editor],
+  );
 
   const tamanhoAtual = (editor?.getAttributes("textStyle").fontSize as string | undefined)
     ?.replace("px", "");
@@ -98,4 +113,4 @@ export function EditorTextoCertificado({
       <input type="hidden" name={name} value={JSON.stringify(json)} />
     </div>
   );
-}
+});

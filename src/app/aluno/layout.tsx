@@ -27,13 +27,18 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   }
 
   const supabase = await createClient();
-  const [conversa, { count: parcelasAtrasadas }] = await Promise.all([
+  const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }] = await Promise.all([
     getConversaPorAluno(supabase, user.id),
     supabase
       .from("parcelas")
       .select("id", { count: "exact", head: true })
       .eq("aluno_id", user.id)
       .eq("status", "atrasado"),
+    supabase
+      .from("contratos_assinados")
+      .select("id", { count: "exact", head: true })
+      .eq("aluno_id", user.id)
+      .eq("status", "pendente"),
   ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
@@ -47,6 +52,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           conversaId={conversa?.id ?? null}
           mensagensNaoLidas={mensagensNaoLidas}
           parcelasAtrasadas={parcelasAtrasadas ?? 0}
+          contratosPendentes={contratosPendentes ?? 0}
         />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">

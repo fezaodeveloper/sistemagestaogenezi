@@ -22,9 +22,10 @@ export default async function MatriculasPage({
   const supabase = await createClient();
   const { data, error, count } = await supabase
     .from("matriculas")
-    .select("*, alunos(full_name, email, cpf), turmas(nome, vagas_total, vagas_ocupadas, cursos(nome))", {
-      count: "exact",
-    })
+    .select(
+      "*, alunos(full_name, email, cpf), turmas(nome, vagas_total, vagas_ocupadas, cursos(nome)), contratos_assinados(status)",
+      { count: "exact" },
+    )
     .order("created_at", { ascending: false })
     .range(offset, offset + limite - 1);
   const matriculas = data as MatriculaListItem[] | null;

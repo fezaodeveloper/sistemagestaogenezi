@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, Coins, FileBadge, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
+import { Banknote, Coins, FileBadge, FileText, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import { UserMenu } from "@/components/auth/user-menu";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -23,11 +23,13 @@ export function AlunoSidebar({
   conversaId,
   mensagensNaoLidas,
   parcelasAtrasadas,
+  contratosPendentes,
 }: {
   user: CurrentUser;
   conversaId: string | null;
   mensagensNaoLidas: number;
   parcelasAtrasadas: number;
+  contratosPendentes: number;
 }) {
   return (
     <Sidebar>
@@ -121,6 +123,21 @@ export function AlunoSidebar({
                     </Link>
                   }
                 />
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/aluno/contrato">
+                      <FileText />
+                      <span>Meu Contrato</span>
+                    </Link>
+                  }
+                />
+                {contratosPendentes > 0 && (
+                  <SidebarMenuBadge className="bg-destructive text-white">
+                    {contratosPendentes}
+                  </SidebarMenuBadge>
+                )}
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

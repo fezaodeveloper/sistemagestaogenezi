@@ -11,6 +11,7 @@ import {
 } from "@/lib/matriculas/schema";
 import { notificarMatriculaWhatsApp } from "@/lib/matriculas/notificacoes";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
 import type { DIAS_SEMANA } from "@/lib/turmas/schema";
 
@@ -212,6 +213,21 @@ export async function createMatricula(
     await supabase.from("parcelas").insert(parcelas);
   }
 
+  // Contrato de matrícula (TAREFA 5) — best-effort, igual às notificações
+  // acima: nunca bloqueia a matrícula (já criada com sucesso) se a geração
+  // do PDF ou a gravação falharem.
+  try {
+    const pdfBuffer = await gerarContratoPdf(matricula.id);
+    await supabase.from("contratos_assinados").insert({
+      matricula_id: matricula.id,
+      aluno_id: data.aluno_id,
+      conteudo_pdf_base64: pdfBuffer.toString("base64"),
+      status: "pendente",
+    });
+  } catch {
+    // Best-effort — a matrícula já foi criada com sucesso acima.
+  }
+
   revalidatePath("/admin/matriculas");
   return { success: true, data: matricula as Matricula };
 }
@@ -293,4 +309,25 @@ export async function updateMatriculaDetalhes(
 
   revalidatePath("/admin/matriculas");
   return { success: true };
+}
+
+// ===== Contrato de matrícula (TAREFA 6) =====
+
+export type DownloadContratoResult = { pdf: string } | { error: string };
+
+export async function downloadContrato(matriculaId: string): Promise<DownloadContratoResult> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("contratos_assinados")
+    .select("conteudo_pdf_base64")
+    .eq("matricula_id", matriculaId)
+    .single();
+
+  if (error || !data?.conteudo_pdf_base64) {
+    return { error: "Contrato não encontrado para esta matrícula." };
+  }
+
+  return { pdf: data.conteudo_pdf_base64 };
 }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { updateMatriculaStatus } from "@/app/admin/alunos/matriculas-actions";
+import { downloadContrato } from "@/app/admin/matriculas/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ import {
   MATRICULA_STATUS_LABELS,
   type Matricula,
 } from "@/lib/matriculas/schema";
+import type { ContratoStatus } from "@/lib/contratos/schema";
 
 export type MatriculaListItem = Matricula & {
   alunos: { full_name: string | null; email: string; cpf: string } | null;
@@ -50,7 +52,61 @@ export type MatriculaListItem = Matricula & {
     vagas_ocupadas: number;
     cursos: { nome: string } | null;
   } | null;
+  contratos_assinados: { status: ContratoStatus }[] | null;
 };
+
+// Cinza (pendente) / verde (assinado) — pedido explícito da tarefa.
+// "recusado" cai no mesmo estilo cinza de "pendente": a UI atual só
+// distingue os dois estados citados na tarefa.
+const CONTRATO_BOTAO_CLASS: Record<ContratoStatus, string> = {
+  pendente: "text-muted-foreground hover:text-foreground",
+  aceito: "text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300",
+  recusado: "text-muted-foreground hover:text-foreground",
+};
+
+function ContratoButton({ matricula }: { matricula: MatriculaListItem }) {
+  const [baixando, setBaixando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const status = matricula.contratos_assinados?.[0]?.status ?? null;
+
+  // Sem contrato gerado (matrícula anterior à TAREFA 5, ou a geração
+  // best-effort falhou) — nada pra baixar, então nenhum botão aparece.
+  if (!status) return null;
+
+  async function handleBaixar() {
+    setErro(null);
+    setBaixando(true);
+    try {
+      const resultado = await downloadContrato(matricula.id);
+      if ("error" in resultado) {
+        setErro(resultado.error);
+        return;
+      }
+      const byteCharacters = atob(resultado.pdf);
+      const byteNumbers = Array.from(byteCharacters, (caractere) => caractere.charCodeAt(0));
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+      window.open(URL.createObjectURL(blob), "_blank");
+    } finally {
+      setBaixando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={handleBaixar}
+        disabled={baixando}
+        className={CONTRATO_BOTAO_CLASS[status]}
+      >
+        {baixando ? "Baixando..." : status === "aceito" ? "Contrato (assinado)" : "Contrato (pendente)"}
+      </Button>
+      {erro && <span className="text-destructive text-xs">{erro}</span>}
+    </div>
+  );
+}
 
 const STATUS_FILTRO_TODOS = "todos";
 const STATUS_FILTRO_ITEMS: Record<string, string> = {
@@ -401,6 +457,7 @@ export function MatriculasTable({
                   >
                     Ver
                   </Button>
+                  <ContratoButton matricula={matricula} />
                   <CancelarMatriculaButton matricula={matricula} />
                 </TableCell>
               </TableRow>
