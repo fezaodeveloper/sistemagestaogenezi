@@ -52,26 +52,33 @@ export type MatriculaListItem = Matricula & {
     vagas_ocupadas: number;
     cursos: { nome: string } | null;
   } | null;
-  contratos_assinados: { status: ContratoStatus }[] | null;
+  contratos_assinados: { status: ContratoStatus; aceito_em: string | null }[] | null;
 };
 
-// Cinza (pendente) / verde (assinado) — pedido explícito da tarefa.
-// "recusado" cai no mesmo estilo cinza de "pendente": a UI atual só
-// distingue os dois estados citados na tarefa.
-const CONTRATO_BOTAO_CLASS: Record<ContratoStatus, string> = {
-  pendente: "text-muted-foreground hover:text-foreground",
-  aceito: "text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300",
-  recusado: "text-muted-foreground hover:text-foreground",
+// Âmbar (pendente) / verde (assinado) / cinza (recusado) — pedido
+// explícito da tarefa. "Sem contrato" (matrícula sem linha em
+// contratos_assinados) usa esse mesmo cinza, mas nunca fica sem botão
+// nenhum: antes o botão sumia inteiramente nesse caso, o que só parecia
+// um bug ("o botão não aparece") em vez de um estado válido.
+const CONTRATO_STATUS_CONFIG: Record<ContratoStatus, { label: string; className: string }> = {
+  pendente: {
+    label: "⏳ Aguardando assinatura",
+    className: "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300",
+  },
+  aceito: {
+    label: "✓ Contrato assinado",
+    className: "text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300",
+  },
+  recusado: {
+    label: "Contrato recusado",
+    className: "text-muted-foreground hover:text-foreground",
+  },
 };
 
 function ContratoButton({ matricula }: { matricula: MatriculaListItem }) {
   const [baixando, setBaixando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const status = matricula.contratos_assinados?.[0]?.status ?? null;
-
-  // Sem contrato gerado (matrícula anterior à TAREFA 5, ou a geração
-  // best-effort falhou) — nada pra baixar, então nenhum botão aparece.
-  if (!status) return null;
+  const contrato = matricula.contratos_assinados?.[0] ?? null;
 
   async function handleBaixar() {
     setErro(null);
@@ -91,6 +98,19 @@ function ContratoButton({ matricula }: { matricula: MatriculaListItem }) {
     }
   }
 
+  // Matrícula anterior ao sistema de contratos, ou a geração best-effort
+  // em createMatricula falhou — nada pra baixar, mas o botão continua
+  // visível (cinza, desabilitado) em vez de sumir da linha.
+  if (!contrato) {
+    return (
+      <Button type="button" variant="ghost" size="sm" disabled className="text-muted-foreground">
+        Sem contrato
+      </Button>
+    );
+  }
+
+  const config = CONTRATO_STATUS_CONFIG[contrato.status];
+
   return (
     <div className="flex flex-col items-end gap-1">
       <Button
@@ -99,9 +119,10 @@ function ContratoButton({ matricula }: { matricula: MatriculaListItem }) {
         size="sm"
         onClick={handleBaixar}
         disabled={baixando}
-        className={CONTRATO_BOTAO_CLASS[status]}
+        title={contrato.aceito_em ? `Assinado em ${formatDataHora(contrato.aceito_em)}` : undefined}
+        className={config.className}
       >
-        {baixando ? "Baixando..." : status === "aceito" ? "Contrato (assinado)" : "Contrato (pendente)"}
+        {baixando ? "Baixando..." : config.label}
       </Button>
       {erro && <span className="text-destructive text-xs">{erro}</span>}
     </div>

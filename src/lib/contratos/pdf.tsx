@@ -31,7 +31,22 @@ const pdfStyles = StyleSheet.create({
   numeroContrato: { fontSize: 9, textAlign: "center", color: "#555555", marginBottom: 20 },
   paragrafo: { marginBottom: 8, textAlign: "justify" },
   assinaturas: { marginTop: 48, flexDirection: "row", justifyContent: "space-between" },
-  assinatura: { width: "45%", textAlign: "center", borderTopWidth: 1, borderTopColor: "#000000", paddingTop: 4, fontSize: 9 },
+  assinaturaColuna: { width: "45%", alignItems: "center" },
+  assinaturaImagem: { width: 110, height: 36, objectFit: "contain", marginBottom: 4 },
+  assinaturaLinha: { width: "100%", borderTopWidth: 1, borderTopColor: "#000000", paddingTop: 4 },
+  assinaturaLinhaTracejada: {
+    width: "100%",
+    borderTopWidth: 1,
+    borderTopColor: "#000000",
+    borderStyle: "dashed",
+    paddingTop: 4,
+  },
+  assinaturaNome: { fontSize: 9, textAlign: "center" },
+  assinaturaCargo: { fontSize: 8, textAlign: "center", color: "#555555" },
+  aceiteDigital: { marginTop: 24 },
+  aceiteDigitalLinha: { borderTopWidth: 1, borderTopColor: "#000000", marginBottom: 8 },
+  aceiteDigitalTitulo: { fontSize: 10, fontFamily: "Helvetica-Bold", textAlign: "center", marginBottom: 4 },
+  aceiteDigitalTexto: { fontSize: 9, textAlign: "center" },
   footer: { marginTop: 24, fontSize: 8, textAlign: "center", color: "#555555" },
 });
 
@@ -50,12 +65,17 @@ function agruparEmParagrafos(runs: TextoRun[]): TextoRun[][] {
   return paragrafos.filter((paragrafo) => paragrafo.length > 0);
 }
 
+type ContratoAssinaturaInfo = { nome: string; dataFormatada: string };
+
 function ContratoPdfDocument({
   template,
   variaveis,
   numeroContrato,
   nomeEscola,
   logoUrl,
+  assinaturaAdminUrl,
+  nomeDiretor,
+  assinatura,
   geradoEm,
 }: {
   template: ContratoTemplate;
@@ -63,6 +83,9 @@ function ContratoPdfDocument({
   numeroContrato: string;
   nomeEscola: string;
   logoUrl: string | null;
+  assinaturaAdminUrl: string | null;
+  nomeDiretor: string | null;
+  assinatura: ContratoAssinaturaInfo | null;
   geradoEm: string;
 }) {
   const paragrafos = agruparEmParagrafos(tiptapJsonParaRuns(template.conteudo, variaveis));
@@ -98,9 +121,33 @@ function ContratoPdfDocument({
         ))}
 
         <View style={pdfStyles.assinaturas}>
-          <Text style={pdfStyles.assinatura}>Escola</Text>
-          <Text style={pdfStyles.assinatura}>Aluno/Responsável</Text>
+          <View style={pdfStyles.assinaturaColuna}>
+            {assinaturaAdminUrl && (
+              // eslint-disable-next-line jsx-a11y/alt-text -- <Image> aqui é o componente do @react-pdf/renderer, não um <img> HTML
+              <Image src={assinaturaAdminUrl} style={pdfStyles.assinaturaImagem} />
+            )}
+            <View style={assinaturaAdminUrl ? pdfStyles.assinaturaLinha : pdfStyles.assinaturaLinhaTracejada} />
+            <Text style={pdfStyles.assinaturaNome}>{nomeEscola}</Text>
+            <Text style={pdfStyles.assinaturaCargo}>
+              {nomeDiretor ? `${nomeDiretor} — Diretor(a)` : "Diretor(a)"}
+            </Text>
+          </View>
+          <View style={pdfStyles.assinaturaColuna}>
+            <View style={pdfStyles.assinaturaLinhaTracejada} />
+            <Text style={pdfStyles.assinaturaNome}>{variaveis.nome_aluno}</Text>
+            <Text style={pdfStyles.assinaturaCargo}>Aluno/Responsável</Text>
+          </View>
         </View>
+
+        {assinatura && (
+          <View style={pdfStyles.aceiteDigital}>
+            <View style={pdfStyles.aceiteDigitalLinha} />
+            <Text style={pdfStyles.aceiteDigitalTitulo}>ACEITE DIGITAL</Text>
+            <Text style={pdfStyles.aceiteDigitalTexto}>Assinado por: {assinatura.nome}</Text>
+            <Text style={pdfStyles.aceiteDigitalTexto}>Data e hora: {assinatura.dataFormatada}</Text>
+            <Text style={pdfStyles.aceiteDigitalTexto}>Este documento foi assinado eletronicamente.</Text>
+          </View>
+        )}
 
         <Text style={pdfStyles.footer}>Este contrato foi gerado eletronicamente em {geradoEm}.</Text>
       </Page>
@@ -152,7 +199,10 @@ type MatriculaParaContrato = {
 // certificados/emitir.ts: quem decidiu que a matrícula existe e é válida
 // já foi o código que criou a matrícula (ver createMatricula), este código
 // só monta o PDF com dados já gravados no banco.
-export async function gerarContratoPdf(matriculaId: string): Promise<Buffer> {
+export async function gerarContratoPdf(
+  matriculaId: string,
+  opcoes?: { assinatura?: ContratoAssinaturaInfo },
+): Promise<Buffer> {
   const admin = createAdminClient();
 
   const { data: matriculaData, error } = await admin
@@ -186,7 +236,7 @@ export async function gerarContratoPdf(matriculaId: string): Promise<Buffer> {
 
   const { data: configuracoes } = await admin
     .from("configuracoes")
-    .select("escola_nome, escola_logo_url")
+    .select("escola_nome, escola_logo_url, assinatura_admin_url, nome_diretor")
     .eq("id", true)
     .single();
 
@@ -226,6 +276,9 @@ export async function gerarContratoPdf(matriculaId: string): Promise<Buffer> {
       numeroContrato={numeroContrato}
       nomeEscola={nomeEscola}
       logoUrl={configuracoes?.escola_logo_url ?? null}
+      assinaturaAdminUrl={configuracoes?.assinatura_admin_url ?? null}
+      nomeDiretor={configuracoes?.nome_diretor ?? null}
+      assinatura={opcoes?.assinatura ?? null}
       geradoEm={geradoEm}
     />,
   );

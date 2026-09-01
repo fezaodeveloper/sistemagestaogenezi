@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getBannersLoginAdmin } from "@/app/admin/configuracoes/actions";
+import { AssinaturaDiretorForm } from "@/components/admin/assinatura-diretor-form";
 import { ConfiguracoesForm } from "@/components/admin/configuracoes-form";
 import { CriteriosCertificadoForm } from "@/components/admin/criterios-certificado-form";
 import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
@@ -23,7 +24,7 @@ export default async function ConfiguracoesPage() {
     supabase
       .from("configuracoes")
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -55,6 +56,21 @@ export default async function ConfiguracoesPage() {
                 defaultValues={{
                   escola_logo_url: data?.escola_logo_url ?? null,
                   escola_logo_path: data?.escola_logo_path ?? null,
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>Assinatura do Diretor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AssinaturaDiretorForm
+                defaultValues={{
+                  assinatura_admin_url: data?.assinatura_admin_url ?? null,
+                  assinatura_admin_path: data?.assinatura_admin_path ?? null,
+                  nome_diretor: data?.nome_diretor ?? null,
                 }}
               />
             </CardContent>

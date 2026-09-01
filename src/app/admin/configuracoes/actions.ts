@@ -548,3 +548,74 @@ export async function removerLogoEscola(): Promise<{ error?: string }> {
   revalidatePath("/entrar");
   return {};
 }
+
+// ===== Assinatura do diretor(a) (TAREFA 4 — contratos) =====
+//
+// Mesmo padrão da logomarca da escola: o upload do arquivo acontece do
+// lado do client, direto pro Supabase Storage (ver
+// src/components/admin/assinatura-diretor-form.tsx) — essa action só grava
+// a URL/path já prontos na tabela. Consumida por gerarContratoPdf
+// (src/lib/contratos/pdf.tsx) via client admin, não precisa de
+// revalidatePath de páginas de aluno.
+
+export async function salvarAssinaturaAdmin(url: string, path: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  if (!url || !path) {
+    return { error: "Upload da assinatura falhou antes de salvar. Tente novamente." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ assinatura_admin_url: url, assinatura_admin_path: path, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar a assinatura. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+export async function removerAssinaturaAdmin(): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ assinatura_admin_url: null, assinatura_admin_path: null, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível remover a assinatura. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+const NOME_DIRETOR_MAX_LENGTH = 200;
+
+export async function salvarNomeDiretor(nome: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const nomeTrim = nome.trim();
+  if (nomeTrim.length > NOME_DIRETOR_MAX_LENGTH) {
+    return { error: `O nome pode ter no máximo ${NOME_DIRETOR_MAX_LENGTH} caracteres.` };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ nome_diretor: nomeTrim || null, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar o nome. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
