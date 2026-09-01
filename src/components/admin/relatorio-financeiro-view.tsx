@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Printer } from "lucide-react";
+import { FileSpreadsheet, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { getRelatorioFinanceiro, type RelatorioFinanceiro } from "@/app/admin/relatorios/actions";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,11 @@ const NOMES_MES = [
 
 function formatValor(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatDataBRSimples(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 
 function formatDataHora(isoString: string): string {
@@ -150,6 +155,7 @@ export function RelatorioFinanceiroView() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   const [anoSelecionado, mesSelecionado] = mesAno.split("-").map(Number);
 
@@ -195,6 +201,51 @@ export function RelatorioFinanceiroView() {
     }
   }
 
+  async function handleExportarExcel() {
+    if (!dados) return;
+    setExportandoExcel(true);
+    try {
+      const XLSX = await import("xlsx");
+
+      const wsResumo = XLSX.utils.json_to_sheet([
+        { Indicador: "Total de receitas", Valor: dados.receitas.total },
+        { Indicador: "Receita — parcelas", Valor: dados.receitas.parcelas },
+        { Indicador: "Receita — avulsos", Valor: dados.receitas.avulsos },
+        { Indicador: "Total de gastos", Valor: dados.gastos.total },
+        { Indicador: "Saldo do mês", Valor: dados.saldo },
+        { Indicador: "Valor em atraso", Valor: dados.inadimplencia.valorAtrasado },
+        { Indicador: "Parcelas atrasadas", Valor: dados.inadimplencia.quantidadeAtrasadas },
+        { Indicador: "Taxa de inadimplência (%)", Valor: dados.inadimplencia.taxaInadimplencia },
+      ]);
+
+      const wsParcelas = XLSX.utils.json_to_sheet(
+        dados.parcelas.map((parcela) => ({
+          Aluno: parcela.aluno,
+          Valor: parcela.valor,
+          Vencimento: formatDataBRSimples(parcela.dataVencimento),
+          Pagamento: parcela.dataPagamento ? formatDataBRSimples(parcela.dataPagamento) : "—",
+          Status: parcela.status,
+          "Forma de pagamento": parcela.formaPagamento ?? "—",
+        })),
+      );
+
+      const wsGastos = XLSX.utils.json_to_sheet(
+        GASTO_CATEGORIAS.map((categoria) => ({
+          Categoria: GASTO_CATEGORIA_LABELS[categoria],
+          Valor: dados.gastos.porCategoria[categoria] ?? 0,
+        })),
+      );
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+      XLSX.utils.book_append_sheet(wb, wsParcelas, "Parcelas");
+      XLSX.utils.book_append_sheet(wb, wsGastos, "Gastos");
+      XLSX.writeFile(wb, `relatorio-financeiro-${String(mesSelecionado).padStart(2, "0")}-${anoSelecionado}.xlsx`);
+    } finally {
+      setExportandoExcel(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -215,6 +266,10 @@ export function RelatorioFinanceiroView() {
           <Button variant="outline" onClick={handleExportarPdf} disabled={!dados || gerandoPdf}>
             <Printer />
             {gerandoPdf ? "Gerando PDF..." : "Exportar PDF"}
+          </Button>
+          <Button variant="outline" onClick={handleExportarExcel} disabled={!dados || exportandoExcel}>
+            <FileSpreadsheet />
+            {exportandoExcel ? "Exportando..." : "Exportar Excel"}
           </Button>
         </CardContent>
       </Card>

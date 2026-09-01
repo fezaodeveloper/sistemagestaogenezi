@@ -313,6 +313,57 @@ export async function updateAluno(
   redirect("/admin/alunos");
 }
 
+// ===== Foto do aluno (TAREFA 4B) =====
+//
+// Mesmo padrão da logo da escola / assinatura do diretor: o upload do
+// arquivo acontece do lado do client, direto pro Supabase Storage (ver
+// src/components/admin/foto-aluno-upload.tsx) — essa action só grava a
+// URL/path já prontos na tabela.
+
+export async function salvarFotoAluno(
+  alunoId: string,
+  fotoUrl: string,
+  fotoPath: string,
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  if (!fotoUrl || !fotoPath) {
+    return { error: "Upload da foto falhou antes de salvar. Tente novamente." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("alunos")
+    .update({ foto_url: fotoUrl, foto_path: fotoPath })
+    .eq("id", alunoId);
+
+  if (error) {
+    return { error: "Não foi possível salvar a foto. Tente novamente." };
+  }
+
+  revalidatePath("/admin/alunos");
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return {};
+}
+
+export async function removerFotoAluno(alunoId: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("alunos")
+    .update({ foto_url: null, foto_path: null })
+    .eq("id", alunoId);
+
+  if (error) {
+    return { error: "Não foi possível remover a foto. Tente novamente." };
+  }
+
+  revalidatePath("/admin/alunos");
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return {};
+}
+
 export async function deleteAluno(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 

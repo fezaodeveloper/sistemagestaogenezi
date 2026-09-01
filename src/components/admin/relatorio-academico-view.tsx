@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Printer } from "lucide-react";
+import { FileSpreadsheet, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   getRelatorioAcademico,
@@ -41,6 +41,21 @@ const STATUS_BADGE_CLASS: Record<AlunoRelatorioAcademico["status"], string> = {
 function formatDataBR(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+// Slug simples pro nome do arquivo exportado (sem acentos/espaços/símbolos)
+// — não precisa de uma lib de slugify só pra isso. NFD separa a letra da
+// marca de acento (combining diacritical mark, faixa ̀-ͯ), que o
+// segundo replace então descarta.
+const COMBINING_DIACRITICS_REGEX = /[̀-ͯ]/g;
+
+function slugificar(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(COMBINING_DIACRITICS_REGEX, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 function formatDataHora(isoString: string): string {
@@ -168,6 +183,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   const turmaItems = Object.fromEntries(
     turmas.map((turma) => [turma.id, `${turma.nome} — ${turma.cursos?.nome ?? "—"}`]),
@@ -224,6 +240,41 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
     }
   }
 
+  async function handleExportarExcel() {
+    if (!dados || !resumo) return;
+    setExportandoExcel(true);
+    try {
+      const XLSX = await import("xlsx");
+
+      const wsFrequencia = XLSX.utils.json_to_sheet(
+        dados.alunos.map((aluno) => ({
+          Aluno: aluno.nome,
+          "E-mail": aluno.email,
+          Presenças: aluno.presencas,
+          Faltas: aluno.faltas,
+          "% Frequência": aluno.percentualFrequencia,
+          "Nota Final": aluno.notaFinal ?? "—",
+          Status: aluno.status,
+        })),
+      );
+
+      const wsResumo = XLSX.utils.json_to_sheet([
+        { Indicador: "Total de alunos", Valor: resumo.total },
+        { Indicador: "Média de frequência (%)", Valor: resumo.mediaFrequencia },
+        { Indicador: "Aprovados", Valor: resumo.aprovados },
+        { Indicador: "Reprovados", Valor: resumo.reprovados },
+      ]);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsFrequencia, "Frequência");
+      XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+      const dataArquivo = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `frequencia-${slugificar(dados.turma.nome)}-${dataArquivo}.xlsx`);
+    } finally {
+      setExportandoExcel(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -270,6 +321,14 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
           >
             <Printer />
             {gerandoPdf ? "Gerando PDF..." : "Exportar PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleExportarExcel}
+            disabled={!dados || dados.alunos.length === 0 || exportandoExcel}
+          >
+            <FileSpreadsheet />
+            {exportandoExcel ? "Exportando..." : "Exportar Excel"}
           </Button>
         </CardContent>
       </Card>

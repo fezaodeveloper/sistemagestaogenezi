@@ -6,26 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 const STORAGE_KEY = "genezi-financeiro-visivel";
-const VALOR_OCULTO = "••••";
+const VALOR_OCULTO = "R$ ••••";
 
 function formatValor(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function FinanceiroStatTile({
+// Contagens simples (não são valores em R$) — nunca ocultadas pelo toggle.
+// O admin já vê esses números em outros lugares do sistema (lista de
+// matrículas, financeiro), então escondê-los não protege nada.
+function ContagemStatTile({
   icone: Icone,
   valor,
   label,
   cor,
-  visivel,
-  compacto = false,
 }: {
   icone: typeof UserCheck;
-  valor: number | string;
+  valor: number;
   label: string;
   cor: "green" | "amber";
-  visivel: boolean;
-  compacto?: boolean;
 }) {
   const corTexto: Record<string, string> = {
     green: "#2DD4A0",
@@ -40,11 +39,27 @@ function FinanceiroStatTile({
           </span>
           <Icone className="text-muted-foreground size-4" />
         </div>
-        <span
-          className={`gz-num ${compacto ? "text-[20px]" : "text-[27px]"}`}
-          style={{ color: corTexto[cor] }}
-        >
-          {visivel ? valor : VALOR_OCULTO}
+        <span className="gz-num text-[27px]" style={{ color: corTexto[cor] }}>
+          {valor}
+        </span>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Único card com valor monetário — o único afetado pelo toggle de olho.
+function ValorMonetarioStatTile({ valor, label, visivel }: { valor: number; label: string; visivel: boolean }) {
+  return (
+    <Card className="gz-kpi gz-kpi-green">
+      <CardContent className="flex flex-col gap-1.5 py-4">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+            {label}
+          </span>
+          <TrendingUp className="text-muted-foreground size-4" />
+        </div>
+        <span className="gz-num text-[20px]" style={{ color: "#2DD4A0" }}>
+          {visivel ? formatValor(valor) : VALOR_OCULTO}
         </span>
       </CardContent>
     </Card>
@@ -92,28 +107,9 @@ export function DashboardKpisFinanceiros({
         </Button>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <FinanceiroStatTile
-          icone={UserCheck}
-          valor={matriculasAtivas}
-          label="Matrículas ativas"
-          cor="green"
-          visivel={visivel}
-        />
-        <FinanceiroStatTile
-          icone={Clock}
-          valor={parcelasPendentesMes}
-          label="Parcelas pendentes (mês)"
-          cor="amber"
-          visivel={visivel}
-        />
-        <FinanceiroStatTile
-          icone={TrendingUp}
-          valor={formatValor(receitaMes)}
-          label="Receita do mês"
-          cor="green"
-          compacto
-          visivel={visivel}
-        />
+        <ContagemStatTile icone={UserCheck} valor={matriculasAtivas} label="Matrículas ativas" cor="green" />
+        <ContagemStatTile icone={Clock} valor={parcelasPendentesMes} label="Parcelas pendentes (mês)" cor="amber" />
+        <ValorMonetarioStatTile valor={receitaMes} label="Receita do mês" visivel={visivel} />
       </div>
     </div>
   );

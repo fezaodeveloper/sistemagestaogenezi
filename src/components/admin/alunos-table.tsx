@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { AlertTriangle, Printer } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,46 @@ function RiscoEvasaoBadge({ indice }: { indice: number | null }) {
     <Badge className="w-fit bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400">
       Baixo
     </Badge>
+  );
+}
+
+// AlunoAvatar (components/gamificacao/aluno-avatar.tsx) não serve aqui: é
+// o avatar ilustrado que o próprio aluno escolhe de um catálogo fixo
+// (raposa, coruja etc.), não um "foto ou iniciais" genérico — por isso um
+// componente local, só pra essa tabela.
+const AVATAR_CORES = [
+  "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500",
+  "bg-violet-500", "bg-cyan-500", "bg-orange-500", "bg-pink-500",
+];
+
+function corPorId(id: string): string {
+  const soma = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return AVATAR_CORES[soma % AVATAR_CORES.length];
+}
+
+function iniciais(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+function AlunoFotoAvatar({ aluno }: { aluno: AlunoListItem }) {
+  const nome = aluno.profiles?.full_name ?? aluno.email;
+
+  if (aluno.foto_url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+      <img src={aluno.foto_url} alt={nome} className="size-8 shrink-0 rounded-full object-cover" />
+    );
+  }
+
+  return (
+    <span
+      className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${corPorId(aluno.id)}`}
+    >
+      {iniciais(nome)}
+    </span>
   );
 }
 
@@ -202,6 +242,7 @@ export function AlunosTable({
   const [dataDe, setDataDe] = useState("");
   const [dataAte, setDataAte] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   // Filtro client-side simples: a lista de alunos já vem inteira do
   // Server Component (sem paginação hoje), então não há necessidade de ida
@@ -268,6 +309,31 @@ export function AlunosTable({
     }
   }
 
+  // Import dinâmico: xlsx só é carregado quando o admin realmente exporta,
+  // não no bundle inicial da página — a biblioteca é usada só aqui.
+  async function handleExportarExcel() {
+    setExportandoExcel(true);
+    try {
+      const XLSX = await import("xlsx");
+      const linhas = alunosFiltrados.map((aluno) => ({
+        Nome: aluno.profiles?.full_name ?? "—",
+        "E-mail": aluno.email,
+        CPF: formatCpf(aluno.cpf),
+        Telefone: formatTelefone(aluno.telefone),
+        Status: STATUS_ALUNO_LABELS[aluno.status_aluno],
+        "Turmas ativas": turmasAtivasLabel(aluno),
+        Idade: aluno.data_nascimento ? calculateAge(aluno.data_nascimento) : "—",
+        "Cadastrado em": aluno.created_at ? formatDataHora(aluno.created_at) : "—",
+      }));
+      const ws = XLSX.utils.json_to_sheet(linhas);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Alunos");
+      XLSX.writeFile(wb, `alunos-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally {
+      setExportandoExcel(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -275,10 +341,16 @@ export function AlunosTable({
           {alunosFiltrados.length} aluno{alunosFiltrados.length === 1 ? "" : "s"} encontrado
           {alunosFiltrados.length === 1 ? "" : "s"}
         </p>
-        <Button variant="outline" onClick={handleImprimir} disabled={gerandoPdf}>
-          <Printer />
-          {gerandoPdf ? "Gerando PDF..." : "Imprimir página atual"}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportarExcel} disabled={exportandoExcel}>
+            <FileSpreadsheet />
+            {exportandoExcel ? "Exportando..." : "Exportar Excel"}
+          </Button>
+          <Button variant="outline" onClick={handleImprimir} disabled={gerandoPdf}>
+            <Printer />
+            {gerandoPdf ? "Gerando PDF..." : "Imprimir página atual"}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -393,7 +465,12 @@ export function AlunosTable({
           <TableBody>
             {alunosFiltrados.map((aluno) => (
               <TableRow key={aluno.id}>
-                <TableCell className="font-medium">{aluno.profiles?.full_name ?? "—"}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    <AlunoFotoAvatar aluno={aluno} />
+                    {aluno.profiles?.full_name ?? "—"}
+                  </div>
+                </TableCell>
                 <TableCell>{aluno.email}</TableCell>
                 <TableCell>{formatCpf(aluno.cpf)}</TableCell>
                 <TableCell>{formatTelefone(aluno.telefone)}</TableCell>

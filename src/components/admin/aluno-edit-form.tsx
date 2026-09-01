@@ -22,6 +22,7 @@ import {
   STATUS_ALUNO_VALUES,
 } from "@/lib/alunos/schema";
 import { updateAluno, type AlunoEditFormState } from "@/app/admin/alunos/actions";
+import { FotoAlunoUpload } from "@/components/admin/foto-aluno-upload";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -62,10 +63,12 @@ type AlunoEditDefaults = {
 export function AlunoEditForm({
   id,
   email,
+  fotoUrlInicial,
   defaultValues,
 }: {
   id: string;
   email: string;
+  fotoUrlInicial: string | null;
   defaultValues: AlunoEditDefaults;
 }) {
   const action = updateAluno.bind(null, id);
@@ -147,6 +150,8 @@ export function AlunoEditForm({
 
       <div className="flex flex-col gap-4">
         <SectionTitle>Dados pessoais</SectionTitle>
+
+        <FotoAlunoUpload alunoId={id} fotoUrlInicial={fotoUrlInicial} />
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="full_name">Nome completo</Label>

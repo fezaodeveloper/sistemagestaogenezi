@@ -5,6 +5,7 @@ import { getStreakAluno } from "@/lib/gamificacao/streak";
 import { alunoTemCursoPresencialOuHibrido } from "@/lib/matriculas/access";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AvatarPicker } from "@/components/aluno/avatar-picker";
+import { FotoPerfilUpload } from "@/components/aluno/foto-perfil-upload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -12,10 +13,11 @@ export default async function PerfilPage() {
   const user = await requireRole("aluno");
 
   const supabase = await createClient();
-  const [catalogoBadges, meusBadges, temPresencialOuHibrido] = await Promise.all([
+  const [catalogoBadges, meusBadges, temPresencialOuHibrido, { data: alunoData }] = await Promise.all([
     getCatalogoBadges(supabase),
     getMeusBadges(supabase, user.id),
     alunoTemCursoPresencialOuHibrido(supabase, user.id),
+    supabase.from("alunos").select("foto_url").eq("id", user.id).maybeSingle(),
   ]);
 
   const streak = temPresencialOuHibrido ? await getStreakAluno(supabase, user.id) : null;
@@ -30,6 +32,15 @@ export default async function PerfilPage() {
           Escolha seu avatar e acompanhe suas conquistas.
         </p>
       </div>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Minha Foto</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FotoPerfilUpload userId={user.id} fotoUrlInicial={alunoData?.foto_url ?? null} />
+        </CardContent>
+      </Card>
 
       <Card className="max-w-2xl">
         <CardHeader>

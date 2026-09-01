@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
+  MATRICULA_STATUSES,
   matriculaDetalhesFormSchema,
   matriculaWizardSchema,
   type Matricula,
@@ -324,6 +325,38 @@ export async function updateMatriculaDetalhes(
 
   revalidatePath("/admin/matriculas");
   return { success: true };
+}
+
+// ===== Edição em lote (MELHORIA 8) =====
+
+export type AlterarStatusEmLoteResult = { success: true; count: number } | { error: string };
+
+export async function alterarStatusEmLote(
+  ids: string[],
+  novoStatus: string,
+): Promise<AlterarStatusEmLoteResult> {
+  await requireRole("admin");
+
+  if (ids.length === 0) {
+    return { error: "Nenhuma matrícula selecionada." };
+  }
+  if (!MATRICULA_STATUSES.includes(novoStatus as (typeof MATRICULA_STATUSES)[number])) {
+    return { error: "Status inválido." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("matriculas")
+    .update({ status: novoStatus })
+    .in("id", ids)
+    .select("id");
+
+  if (error) {
+    return { error: "Não foi possível atualizar o status das matrículas selecionadas." };
+  }
+
+  revalidatePath("/admin/matriculas");
+  return { success: true, count: data?.length ?? 0 };
 }
 
 // ===== Contrato de matrícula (TAREFA 6) =====

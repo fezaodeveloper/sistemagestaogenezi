@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { updateMatriculaStatus } from "@/app/admin/alunos/matriculas-actions";
-import { downloadContrato } from "@/app/admin/matriculas/actions";
+import { alterarStatusEmLote, downloadContrato } from "@/app/admin/matriculas/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
 import {
@@ -134,6 +135,108 @@ const STATUS_FILTRO_ITEMS: Record<string, string> = {
   [STATUS_FILTRO_TODOS]: "Todos os status",
   ...MATRICULA_STATUS_LABELS,
 };
+
+// Só os 4 status oferecidos pra alteração em lote, pedido explícito da
+// tarefa — "transferida" é um alias legado (ver matriculas/schema.ts),
+// não aparece aqui pelo mesmo motivo que já não aparece em
+// STATUS_INICIAL_MATRICULA no wizard.
+const STATUS_LOTE_OPCOES = ["ativa", "inativa", "concluida", "cancelada"] as const;
+const STATUS_LOTE_ITEMS: Record<string, string> = Object.fromEntries(
+  STATUS_LOTE_OPCOES.map((status) => [status, MATRICULA_STATUS_LABELS[status]]),
+);
+
+function AcoesEmLoteBar({
+  selecionados,
+  onLimpar,
+  onAplicado,
+}: {
+  selecionados: string[];
+  onLimpar: () => void;
+  onAplicado: () => void;
+}) {
+  const [novoStatus, setNovoStatus] = useState<string>(STATUS_LOTE_OPCOES[0]);
+  const [confirmando, setConfirmando] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
+
+  function handleAplicar() {
+    setErro(null);
+    startTransition(async () => {
+      const resultado = await alterarStatusEmLote(selecionados, novoStatus);
+      if ("error" in resultado) {
+        setErro(resultado.error);
+        return;
+      }
+      setConfirmando(false);
+      onAplicado();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm font-medium">
+          {selecionados.length} matrícula{selecionados.length > 1 ? "s" : ""} selecionada
+          {selecionados.length > 1 ? "s" : ""}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground text-sm">Alterar status para:</span>
+          <Select
+            items={STATUS_LOTE_ITEMS}
+            value={novoStatus}
+            onValueChange={(value) => setNovoStatus(value as string)}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_LOTE_OPCOES.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {MATRICULA_STATUS_LABELS[status]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <AlertDialog
+            open={confirmando}
+            onOpenChange={(nextOpen) => {
+              setConfirmando(nextOpen);
+              if (nextOpen) setErro(null);
+            }}
+          >
+            <AlertDialogTrigger render={<Button size="sm">Aplicar</Button>} />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Alterar status em lote</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Alterar o status de {selecionados.length} matrícula{selecionados.length > 1 ? "s" : ""}{" "}
+                  para &quot;{MATRICULA_STATUS_LABELS[novoStatus as (typeof STATUS_LOTE_OPCOES)[number]]}
+                  &quot;?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {erro && (
+                <p role="alert" className="text-destructive text-sm">
+                  {erro}
+                </p>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                <AlertDialogAction disabled={isPending} onClick={handleAplicar}>
+                  {isPending ? "Aplicando..." : "Confirmar"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <Button size="sm" variant="ghost" onClick={onLimpar}>
+            Cancelar seleção
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function formatValor(valor: number | null): string {
   if (valor === null) return "—";
@@ -342,9 +445,11 @@ export function MatriculasTable({
   totalRegistros: number;
   limite: number;
 }) {
+  const router = useRouter();
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
   // Filtro client-side simples: a lista já vem inteira do Server Component
   // (sem paginação hoje), então não há necessidade de ida e volta ao
@@ -364,6 +469,43 @@ export function MatriculasTable({
       return nomeAluno.includes(termo) || nomeCurso.includes(termo);
     });
   }, [matriculas, busca, statusFiltro]);
+
+  const idsVisiveis = useMemo(
+    () => new Set(matriculasFiltradas.map((matricula) => matricula.id)),
+    [matriculasFiltradas],
+  );
+
+  // Poda a seleção durante o render quando o filtro muda e algum item
+  // selecionado sai da lista visível — mesmo padrão de
+  // tabela-certificados-liberacao.tsx (ajuste de estado derivado durante o
+  // render, não um useEffect, já que é só sincronização de estado a partir
+  // de outro estado).
+  const [idsVisiveisAnterior, setIdsVisiveisAnterior] = useState(idsVisiveis);
+  if (idsVisiveis !== idsVisiveisAnterior) {
+    setIdsVisiveisAnterior(idsVisiveis);
+    setSelecionados((prev) => {
+      const podados = Array.from(prev).filter((id) => idsVisiveis.has(id));
+      return podados.length === prev.size ? prev : new Set(podados);
+    });
+  }
+
+  function toggleMatricula(id: string) {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTodasVisiveis() {
+    setSelecionados((prev) =>
+      prev.size === matriculasFiltradas.length ? new Set() : new Set(matriculasFiltradas.map((m) => m.id)),
+    );
+  }
+
+  const todasVisiveisSelecionadas =
+    matriculasFiltradas.length > 0 && selecionados.size === matriculasFiltradas.length;
 
   async function handleImprimir() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -428,6 +570,17 @@ export function MatriculasTable({
         </div>
       </div>
 
+      {selecionados.size > 0 && (
+        <AcoesEmLoteBar
+          selecionados={Array.from(selecionados)}
+          onLimpar={() => setSelecionados(new Set())}
+          onAplicado={() => {
+            setSelecionados(new Set());
+            router.refresh();
+          }}
+        />
+      )}
+
       {matriculasFiltradas.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
           Nenhuma matrícula encontrada com os filtros aplicados.
@@ -436,6 +589,13 @@ export function MatriculasTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={todasVisiveisSelecionadas}
+                  onCheckedChange={toggleTodasVisiveis}
+                  aria-label="Selecionar todas as matrículas visíveis"
+                />
+              </TableHead>
               <TableHead>Aluno</TableHead>
               <TableHead>Curso</TableHead>
               <TableHead>Turma</TableHead>
@@ -450,6 +610,13 @@ export function MatriculasTable({
           <TableBody>
             {matriculasFiltradas.map((matricula) => (
               <TableRow key={matricula.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selecionados.has(matricula.id)}
+                    onCheckedChange={() => toggleMatricula(matricula.id)}
+                    aria-label={`Selecionar matrícula de ${matricula.alunos?.full_name ?? "aluno"}`}
+                  />
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
                     <span className="font-medium">{matricula.alunos?.full_name ?? "—"}</span>

@@ -221,6 +221,8 @@ export type Aluno = {
   observacoes: string | null;
   status_aluno: StatusAluno;
   user_id: string | null;
+  foto_url: string | null;
+  foto_path: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;

@@ -136,11 +136,23 @@ export async function getRelatorioAcademico(
   };
 }
 
+export type ParcelaRelatorioFinanceiro = {
+  aluno: string;
+  valor: number;
+  dataVencimento: string;
+  dataPagamento: string | null;
+  status: string;
+  formaPagamento: string | null;
+};
+
 export type RelatorioFinanceiro = {
   receitas: { parcelas: number; avulsos: number; total: number };
   inadimplencia: { valorAtrasado: number; quantidadeAtrasadas: number; taxaInadimplencia: number };
   gastos: { total: number; porCategoria: Record<string, number> };
   saldo: number;
+  // Lista crua de parcelas do período — só usada pela exportação em Excel
+  // (aba "Parcelas"), não pela tela em si (que só mostra os agregados acima).
+  parcelas: ParcelaRelatorioFinanceiro[];
 };
 
 export type RelatorioFinanceiroResult = { success: true; data: RelatorioFinanceiro } | { error: string };
@@ -163,6 +175,7 @@ export async function getRelatorioFinanceiro(ano: number, mes: number): Promise<
     { data: gastosData },
     { data: atrasadasData },
     { data: todasParcelasData },
+    { data: parcelasPeriodoData },
   ] = await Promise.all([
     supabase.from("parcelas").select("valor").eq("status", "pago").gte("data_pagamento", inicio).lte("data_pagamento", fim),
     supabase.from("pagamentos_avulsos").select("valor").gte("data_pagamento", inicio).lte("data_pagamento", fim),
@@ -173,6 +186,15 @@ export async function getRelatorioFinanceiro(ano: number, mes: number): Promise<
     // volume total de cobrança já lançado, ponto de referência pro quanto
     // disso está em atraso.
     supabase.from("parcelas").select("valor"),
+    // Lista crua pra exportação em Excel (aba "Parcelas") — escopo por
+    // vencimento no período, não por status, pra dar uma visão completa
+    // do que venceu no mês (pago, pendente ou atrasado).
+    supabase
+      .from("parcelas")
+      .select("valor, data_vencimento, data_pagamento, status, forma_pagamento, alunos(full_name)")
+      .gte("data_vencimento", inicio)
+      .lte("data_vencimento", fim)
+      .order("data_vencimento"),
   ]);
 
   const receitaParcelas = somarValores(parcelasPagasData);
@@ -192,6 +214,24 @@ export async function getRelatorioFinanceiro(ano: number, mes: number): Promise<
 
   const totalReceitas = receitaParcelas + receitaAvulsos;
 
+  const parcelas: ParcelaRelatorioFinanceiro[] = (
+    (parcelasPeriodoData ?? []) as unknown as {
+      valor: number;
+      data_vencimento: string;
+      data_pagamento: string | null;
+      status: string;
+      forma_pagamento: string | null;
+      alunos: { full_name: string | null } | null;
+    }[]
+  ).map((parcela) => ({
+    aluno: parcela.alunos?.full_name ?? "—",
+    valor: Number(parcela.valor),
+    dataVencimento: parcela.data_vencimento,
+    dataPagamento: parcela.data_pagamento,
+    status: parcela.status,
+    formaPagamento: parcela.forma_pagamento,
+  }));
+
   return {
     success: true,
     data: {
@@ -203,6 +243,7 @@ export async function getRelatorioFinanceiro(ano: number, mes: number): Promise<
       },
       gastos: { total: totalGastos, porCategoria },
       saldo: totalReceitas - totalGastos,
+      parcelas,
     },
   };
 }

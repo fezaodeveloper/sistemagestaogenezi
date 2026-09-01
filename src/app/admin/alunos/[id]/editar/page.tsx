@@ -130,6 +130,7 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
       <AlunoEditForm
         id={aluno.id}
         email={aluno.email}
+        fotoUrlInicial={aluno.foto_url}
         defaultValues={{
           full_name: aluno.profiles?.full_name ?? "",
           cpf: aluno.cpf,
