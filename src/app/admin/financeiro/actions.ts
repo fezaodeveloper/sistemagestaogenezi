@@ -48,10 +48,16 @@ function somarValores(rows: { valor: number }[] | null): number {
   return (rows ?? []).reduce((total, row) => total + Number(row.valor), 0);
 }
 
-export async function getFinanceiroDados(ano: number, mes: number): Promise<FinanceiroDados> {
+export async function getFinanceiroDados(
+  ano: number,
+  mes: number,
+  dataInicio?: string,
+  dataFim?: string,
+): Promise<FinanceiroDados> {
   await requireRole("admin");
   const supabase = await createClient();
-  const { inicio, fim } = iniciosEFimDoMes(ano, mes);
+  const { inicio, fim } =
+    dataInicio && dataFim ? { inicio: dataInicio, fim: dataFim } : iniciosEFimDoMes(ano, mes);
 
   const [{ data: parcelasData }, { data: receberData }, { data: recebidoData }, { data: atrasadoData }] =
     await Promise.all([

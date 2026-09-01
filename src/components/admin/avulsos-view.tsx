@@ -8,6 +8,7 @@ import {
   type AlunoOpcao,
   type PagamentoAvulsoComAluno,
 } from "@/app/admin/financeiro/avulsos/actions";
+import type { Categoria } from "@/app/admin/financeiro/categorias/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,23 +36,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  FORMAS_PAGAMENTO_AVULSO,
-  FORMA_PAGAMENTO_AVULSO_LABELS,
-  PAGAMENTO_AVULSO_TIPOS,
-  PAGAMENTO_AVULSO_TIPO_LABELS,
-} from "@/lib/financeiro/schema";
+import { FORMAS_PAGAMENTO_AVULSO, FORMA_PAGAMENTO_AVULSO_LABELS, PAGAMENTO_AVULSO_TIPO_LABELS } from "@/lib/financeiro/schema";
 
 const NOMES_MES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-const TIPO_FILTRO_TODOS = "todos";
-const TIPO_FILTRO_ITEMS: Record<string, string> = {
-  [TIPO_FILTRO_TODOS]: "Todos os tipos",
-  ...PAGAMENTO_AVULSO_TIPO_LABELS,
-};
+const CATEGORIA_FILTRO_TODAS = "todas";
 
 function formatValor(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -62,16 +54,45 @@ function formatDataBR(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+function CategoriaBadge({
+  pagamento,
+  categoriaPorId,
+}: {
+  pagamento: PagamentoAvulsoComAluno;
+  categoriaPorId: Map<string, Categoria>;
+}) {
+  const categoria = pagamento.categoria_id ? categoriaPorId.get(pagamento.categoria_id) : null;
+
+  if (categoria) {
+    return (
+      <Badge variant="outline" className="gap-1.5">
+        <span className="inline-block size-2 rounded-full" style={{ backgroundColor: categoria.cor }} />
+        {categoria.nome}
+      </Badge>
+    );
+  }
+
+  // Registro histórico (sem categoria_id) — só tem o campo "tipo" do enum
+  // fixo antigo.
+  return <Badge variant="outline">{PAGAMENTO_AVULSO_TIPO_LABELS[pagamento.tipo]}</Badge>;
+}
+
 function NovoPagamentoDialog({
   alunos,
+  categorias,
   onCriado,
 }: {
   alunos: AlunoOpcao[];
+  categorias: Categoria[];
   onCriado: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [categoriaId, setCategoriaId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const categoriasAtivas = useMemo(() => categorias.filter((categoria) => categoria.ativo), [categorias]);
+  const categoriaItems = Object.fromEntries(categoriasAtivas.map((categoria) => [categoria.id, categoria.nome]));
 
   const alunoItems: Record<string, string> = {
     "": "Nenhum (não vinculado)",
@@ -87,6 +108,7 @@ function NovoPagamentoDialog({
         return;
       }
       setOpen(false);
+      setCategoriaId("");
       onCriado();
     });
   }
@@ -118,15 +140,20 @@ function NovoPagamentoDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tipo">Tipo</Label>
-              <Select name="tipo" items={PAGAMENTO_AVULSO_TIPO_LABELS} defaultValue="receita">
-                <SelectTrigger id="tipo" className="w-full">
-                  <SelectValue />
+              <Label htmlFor="categoria_id">Categoria</Label>
+              <Select
+                name="categoria_id"
+                items={categoriaItems}
+                value={categoriaId}
+                onValueChange={(value) => setCategoriaId(value as string)}
+              >
+                <SelectTrigger id="categoria_id" className="w-full">
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {PAGAMENTO_AVULSO_TIPOS.map((tipo) => (
-                    <SelectItem key={tipo} value={tipo}>
-                      {PAGAMENTO_AVULSO_TIPO_LABELS[tipo]}
+                  {categoriasAtivas.map((categoria) => (
+                    <SelectItem key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -182,7 +209,7 @@ function NovoPagamentoDialog({
             </p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || !categoriaId}>
               {isPending ? "Salvando..." : "Registrar pagamento"}
             </Button>
           </DialogFooter>
@@ -197,17 +224,29 @@ export function AvulsosView({
   anoInicial,
   mesInicial,
   alunos,
+  categorias,
 }: {
   pagamentosIniciais: PagamentoAvulsoComAluno[];
   anoInicial: number;
   mesInicial: number;
   alunos: AlunoOpcao[];
+  categorias: Categoria[];
 }) {
   const [ano, setAno] = useState(anoInicial);
   const [mes, setMes] = useState(mesInicial);
   const [pagamentos, setPagamentos] = useState(pagamentosIniciais);
   const [isPending, startTransition] = useTransition();
-  const [tipoFiltro, setTipoFiltro] = useState<string>(TIPO_FILTRO_TODOS);
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string>(CATEGORIA_FILTRO_TODAS);
+  const [modoFiltro, setModoFiltro] = useState<"mes" | "periodo">("mes");
+  const [periodoInicio, setPeriodoInicio] = useState("");
+  const [periodoFim, setPeriodoFim] = useState("");
+
+  const categoriaPorId = useMemo(() => new Map(categorias.map((categoria) => [categoria.id, categoria])), [categorias]);
+
+  const categoriaFiltroItems: Record<string, string> = {
+    [CATEGORIA_FILTRO_TODAS]: "Todas as categorias",
+    ...Object.fromEntries(categorias.map((categoria) => [categoria.id, categoria.nome])),
+  };
 
   function irParaMes(novoAno: number, novoMes: number) {
     startTransition(async () => {
@@ -220,7 +259,10 @@ export function AvulsosView({
 
   function recarregar() {
     startTransition(async () => {
-      const novosPagamentos = await getPagamentosAvulsos(ano, mes);
+      const novosPagamentos =
+        modoFiltro === "periodo" && periodoInicio && periodoFim
+          ? await getPagamentosAvulsos(ano, mes, periodoInicio, periodoFim)
+          : await getPagamentosAvulsos(ano, mes);
       setPagamentos(novosPagamentos);
     });
   }
@@ -233,53 +275,136 @@ export function AvulsosView({
     irParaMes(mes === 12 ? ano + 1 : ano, mes === 12 ? 1 : mes + 1);
   }
 
+  function handleModoFiltro(modo: "mes" | "periodo") {
+    setModoFiltro(modo);
+    if (modo === "mes") {
+      startTransition(async () => {
+        const novosPagamentos = await getPagamentosAvulsos(ano, mes);
+        setPagamentos(novosPagamentos);
+      });
+    }
+  }
+
+  function handleAplicarPeriodo() {
+    if (!periodoInicio || !periodoFim) return;
+    startTransition(async () => {
+      const novosPagamentos = await getPagamentosAvulsos(ano, mes, periodoInicio, periodoFim);
+      setPagamentos(novosPagamentos);
+    });
+  }
+
   const pagamentosFiltrados = useMemo(() => {
-    return pagamentos.filter(
-      (pagamento) => tipoFiltro === TIPO_FILTRO_TODOS || pagamento.tipo === tipoFiltro,
-    );
-  }, [pagamentos, tipoFiltro]);
+    if (categoriaFiltro === CATEGORIA_FILTRO_TODAS) return pagamentos;
+    return pagamentos.filter((pagamento) => {
+      if (pagamento.categoria_id === categoriaFiltro) return true;
+      // Registro histórico (sem categoria_id) — casa pelo nome, já que a
+      // migration semeia categorias_avulsos com os mesmos nomes do enum
+      // fixo antigo (ver 20260901100000_categorias_financeiro.sql).
+      const categoriaSelecionada = categoriaPorId.get(categoriaFiltro);
+      if (!categoriaSelecionada || pagamento.categoria_id) return false;
+      return PAGAMENTO_AVULSO_TIPO_LABELS[pagamento.tipo] === categoriaSelecionada.nome;
+    });
+  }, [pagamentos, categoriaFiltro, categoriaPorId]);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={handleMesAnterior}
-            disabled={isPending}
-            aria-label="Mês anterior"
-          >
-            <ChevronLeft />
-          </Button>
-          <span className="w-40 text-center text-lg font-semibold">
-            {NOMES_MES[mes - 1]} {ano}
-          </span>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={handleProximoMes}
-            disabled={isPending}
-            aria-label="Próximo mês"
-          >
-            <ChevronRight />
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex w-fit items-center gap-1 rounded-md border p-0.5">
+            <Button
+              type="button"
+              variant={modoFiltro === "mes" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => handleModoFiltro("mes")}
+            >
+              Por mês
+            </Button>
+            <Button
+              type="button"
+              variant={modoFiltro === "periodo" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => handleModoFiltro("periodo")}
+            >
+              Por período
+            </Button>
+          </div>
+
+          {modoFiltro === "mes" ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={handleMesAnterior}
+                disabled={isPending}
+                aria-label="Mês anterior"
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="w-40 text-center text-lg font-semibold">
+                {NOMES_MES[mes - 1]} {ano}
+              </span>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={handleProximoMes}
+                disabled={isPending}
+                aria-label="Próximo mês"
+              >
+                <ChevronRight />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="periodo_inicio_avulso" className="text-xs">
+                  De:
+                </Label>
+                <Input
+                  id="periodo_inicio_avulso"
+                  type="date"
+                  value={periodoInicio}
+                  onChange={(event) => setPeriodoInicio(event.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="periodo_fim_avulso" className="text-xs">
+                  Até:
+                </Label>
+                <Input
+                  id="periodo_fim_avulso"
+                  type="date"
+                  value={periodoFim}
+                  onChange={(event) => setPeriodoFim(event.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAplicarPeriodo}
+                disabled={isPending || !periodoInicio || !periodoFim}
+              >
+                Aplicar
+              </Button>
+            </div>
+          )}
         </div>
-        <NovoPagamentoDialog alunos={alunos} onCriado={recarregar} />
+        <NovoPagamentoDialog alunos={alunos} categorias={categorias} onCriado={recarregar} />
       </div>
 
       <Select
-        items={TIPO_FILTRO_ITEMS}
-        value={tipoFiltro}
-        onValueChange={(value) => setTipoFiltro(value as string)}
+        items={categoriaFiltroItems}
+        value={categoriaFiltro}
+        onValueChange={(value) => setCategoriaFiltro(value as string)}
       >
         <SelectTrigger className="w-48">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {Object.keys(TIPO_FILTRO_ITEMS).map((tipo) => (
-            <SelectItem key={tipo} value={tipo}>
-              {TIPO_FILTRO_ITEMS[tipo]}
+          {Object.keys(categoriaFiltroItems).map((categoriaId) => (
+            <SelectItem key={categoriaId} value={categoriaId}>
+              {categoriaFiltroItems[categoriaId]}
             </SelectItem>
           ))}
         </SelectContent>
@@ -287,14 +412,16 @@ export function AvulsosView({
 
       {pagamentosFiltrados.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
-          Nenhum pagamento avulso registrado em {NOMES_MES[mes - 1]} de {ano}.
+          {modoFiltro === "periodo" && periodoInicio && periodoFim
+            ? `Nenhum pagamento avulso registrado entre ${formatDataBR(periodoInicio)} e ${formatDataBR(periodoFim)}.`
+            : `Nenhum pagamento avulso registrado em ${NOMES_MES[mes - 1]} de ${ano}.`}
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Descrição</TableHead>
-              <TableHead>Tipo</TableHead>
+              <TableHead>Categoria</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Forma de pagamento</TableHead>
@@ -313,7 +440,7 @@ export function AvulsosView({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{PAGAMENTO_AVULSO_TIPO_LABELS[pagamento.tipo]}</Badge>
+                  <CategoriaBadge pagamento={pagamento} categoriaPorId={categoriaPorId} />
                 </TableCell>
                 <TableCell>{formatValor(Number(pagamento.valor))}</TableCell>
                 <TableCell>{formatDataBR(pagamento.data_pagamento)}</TableCell>

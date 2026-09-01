@@ -1,16 +1,11 @@
-import { Users, GraduationCap, School, UserCheck, Clock, TrendingUp } from "lucide-react";
+import { Users, GraduationCap, School } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getNotificacaoResgatesPendentes } from "@/lib/creditos/resgates";
-import { getNotificacaoCertificadosPendentes } from "@/lib/certificados/certificados";
-import { getNotificacaoMensagensFalha } from "@/lib/mensagens/mensagens";
-import { getNotificacaoLeadsNovos } from "@/lib/leads/leads";
-import { getNotificacaoConversasNaoLidas } from "@/lib/chat/chat";
-import type { DashboardNotificacao } from "@/lib/admin/dashboard";
-import { DashboardBalao } from "@/components/admin/dashboard-balao";
 import { AlertasDia } from "@/components/admin/alertas-dia";
 import { AtalhosRapidos } from "@/components/admin/atalhos-rapidos";
 import { SaudeEscola } from "@/components/admin/saude-escola";
+import { PendenciasResumo } from "@/components/admin/pendencias-resumo";
+import { DashboardKpisFinanceiros } from "@/components/admin/dashboard-kpis-financeiros";
 import { Card, CardContent } from "@/components/ui/card";
 
 function saudacaoPorHorario(): string {
@@ -25,20 +20,15 @@ function StatTile({
   valor,
   label,
   cor,
-  compacto = false,
 }: {
   icone: typeof Users;
   valor: number | string;
   label: string;
-  cor: "blue" | "cyan" | "green" | "amber" | "red" | "violet";
-  compacto?: boolean;
+  cor: "blue" | "cyan" | "violet";
 }) {
   const corTexto: Record<string, string> = {
     blue: "#2196F3",
     cyan: "#22D3EE",
-    green: "#2DD4A0",
-    amber: "#FFB020",
-    red: "#FF5A5F",
     violet: "#A78BFA",
   };
   return (
@@ -50,10 +40,7 @@ function StatTile({
           </span>
           <Icone className="text-muted-foreground size-4" />
         </div>
-        <span
-          className={`gz-num ${compacto ? "text-[20px]" : "text-[27px]"}`}
-          style={{ color: corTexto[cor] }}
-        >
+        <span className="gz-num text-[27px]" style={{ color: corTexto[cor] }}>
           {valor}
         </span>
       </CardContent>
@@ -79,11 +66,6 @@ export default async function AdminDashboardPage() {
     { count: parcelasPendentesMes },
     { data: parcelasPagasMesData },
     { data: avulsosMesData },
-    notificacaoResgates,
-    notificacaoCertificados,
-    notificacaoMensagens,
-    notificacaoLeads,
-    notificacaoConversas,
   ] = await Promise.all([
     supabase.from("alunos").select("*", { count: "exact", head: true }),
     supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
@@ -97,28 +79,11 @@ export default async function AdminDashboardPage() {
       .lte("data_vencimento", fimMes),
     supabase.from("parcelas").select("valor").eq("status", "pago").gte("data_pagamento", inicioMes).lte("data_pagamento", fimMes),
     supabase.from("pagamentos_avulsos").select("valor").gte("data_pagamento", inicioMes).lte("data_pagamento", fimMes),
-    getNotificacaoResgatesPendentes(supabase),
-    getNotificacaoCertificadosPendentes(supabase),
-    getNotificacaoMensagensFalha(supabase),
-    getNotificacaoLeadsNovos(supabase),
-    getNotificacaoConversasNaoLidas(supabase),
   ]);
 
   const receitaMes =
     ((parcelasPagasMesData ?? []) as { valor: number }[]).reduce((soma, p) => soma + Number(p.valor), 0) +
     ((avulsosMesData ?? []) as { valor: number }[]).reduce((soma, a) => soma + Number(a.valor), 0);
-
-  // Cada domínio (resgates, certificados, mensagens, leads, chat) devolve
-  // null quando não há nada pendente — só entra aqui quem tem algo pra
-  // mostrar. Adicionar um balão novo é só empilhar mais uma function
-  // nesse array, sem mexer em mais nada nesta página.
-  const notificacoes: DashboardNotificacao[] = [
-    notificacaoResgates,
-    notificacaoCertificados,
-    notificacaoMensagens,
-    notificacaoLeads,
-    notificacaoConversas,
-  ].filter((n): n is DashboardNotificacao => n !== null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -131,39 +96,27 @@ export default async function AdminDashboardPage() {
 
       <div>
         <h2 className="text-muted-foreground mb-3 text-sm font-medium">Resumo geral</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatTile icone={Users} valor={totalAlunos ?? 0} label="Alunos" cor="cyan" />
           <StatTile icone={GraduationCap} valor={cursosAtivos ?? 0} label="Cursos ativos" cor="blue" />
           <StatTile icone={School} valor={turmasEmAndamento ?? 0} label="Turmas em andamento" cor="violet" />
-          <StatTile icone={UserCheck} valor={matriculasAtivas ?? 0} label="Matrículas ativas" cor="green" />
-          <StatTile icone={Clock} valor={parcelasPendentesMes ?? 0} label="Parcelas pendentes (mês)" cor="amber" />
-          <StatTile
-            icone={TrendingUp}
-            valor={receitaMes.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-            label="Receita do mês"
-            cor="green"
-            compacto
-          />
         </div>
       </div>
+
+      <DashboardKpisFinanceiros
+        matriculasAtivas={matriculasAtivas ?? 0}
+        parcelasPendentesMes={parcelasPendentesMes ?? 0}
+        receitaMes={receitaMes}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <AlertasDia />
-          <AtalhosRapidos />
+          <PendenciasResumo />
         </div>
         <div className="flex flex-col gap-6">
+          <AtalhosRapidos />
           <SaudeEscola />
-          {notificacoes.length > 0 && (
-            <div>
-              <h2 className="text-muted-foreground mb-3 text-sm font-medium">Pendências</h2>
-              <div className="grid grid-cols-1 gap-4">
-                {notificacoes.map((notificacao) => (
-                  <DashboardBalao key={notificacao.chave} notificacao={notificacao} />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

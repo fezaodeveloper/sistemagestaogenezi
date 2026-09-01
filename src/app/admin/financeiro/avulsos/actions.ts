@@ -16,10 +16,16 @@ export type PagamentoAvulsoComAluno = PagamentoAvulso & {
   alunos: { full_name: string | null } | null;
 };
 
-export async function getPagamentosAvulsos(ano: number, mes: number): Promise<PagamentoAvulsoComAluno[]> {
+export async function getPagamentosAvulsos(
+  ano: number,
+  mes: number,
+  dataInicio?: string,
+  dataFim?: string,
+): Promise<PagamentoAvulsoComAluno[]> {
   await requireRole("admin");
   const supabase = await createClient();
-  const { inicio, fim } = iniciosEFimDoMes(ano, mes);
+  const { inicio, fim } =
+    dataInicio && dataFim ? { inicio: dataInicio, fim: dataFim } : iniciosEFimDoMes(ano, mes);
 
   const { data } = await supabase
     .from("pagamentos_avulsos")
@@ -51,7 +57,7 @@ export async function criarPagamentoAvulso(formData: FormData): Promise<Pagament
     descricao: formData.get("descricao"),
     valor: Number(formData.get("valor")),
     data_pagamento: formData.get("data_pagamento"),
-    tipo: formData.get("tipo"),
+    categoria_id: formData.get("categoria_id"),
     forma_pagamento: formData.get("forma_pagamento") || null,
     aluno_id: alunoIdRaw || null,
     observacoes: formData.get("observacoes") || undefined,
@@ -67,7 +73,7 @@ export async function criarPagamentoAvulso(formData: FormData): Promise<Pagament
     descricao: data.descricao,
     valor: data.valor,
     data_pagamento: data.data_pagamento,
-    tipo: data.tipo,
+    categoria_id: data.categoria_id,
     forma_pagamento: data.forma_pagamento,
     aluno_id: data.aluno_id ?? null,
     observacoes: data.observacoes ?? null,

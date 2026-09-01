@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Check, ChevronLeft, ChevronRight, Loader2, Printer } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCpf, formatTelefone, onlyDigits } from "@/lib/alunos/schema";
+import { formatCpf, formatTelefone } from "@/lib/alunos/schema";
 import { CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { DIA_SEMANA_LABELS, type DIAS_SEMANA } from "@/lib/turmas/schema";
 import {
@@ -40,6 +40,7 @@ import {
   type MatriculaWizardInput,
 } from "@/lib/matriculas/schema";
 import {
+  buscarAlunosParaWizard,
   createMatricula,
   type AlunoParaMatricula,
   type CursoParaMatricula,
@@ -132,10 +133,8 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
 // --- Wizard ---
 
 export function MatriculaWizard({
-  alunos,
   cursos,
 }: {
-  alunos: AlunoParaMatricula[];
   cursos: CursoParaMatricula[];
 }) {
   const [step, setStep] = useState(1);
@@ -143,6 +142,33 @@ export function MatriculaWizard({
   // Etapa 1 — Aluno
   const [buscaAluno, setBuscaAluno] = useState("");
   const [aluno, setAluno] = useState<AlunoParaMatricula | null>(null);
+  const [resultadosBusca, setResultadosBusca] = useState<AlunoParaMatricula[]>([]);
+  const [buscandoAluno, setBuscandoAluno] = useState(false);
+
+  // Busca sob demanda com debounce de 300ms — só dispara com 2+ caracteres.
+  // Sem isso, a Etapa 1 carregava a lista inteira de alunos ativos de uma
+  // vez só, mesmo antes do admin digitar qualquer coisa.
+  useEffect(() => {
+    const termo = buscaAluno.trim();
+
+    // Todo setState fica dentro do callback do timeout (não no corpo
+    // síncrono do efeito) — inclusive o caso "termo curto demais", que só
+    // limpa os resultados depois do debounce, não na hora.
+    const timeoutId = setTimeout(() => {
+      if (termo.length < 2) {
+        setResultadosBusca([]);
+        setBuscandoAluno(false);
+        return;
+      }
+
+      setBuscandoAluno(true);
+      buscarAlunosParaWizard(termo)
+        .then((resultado) => setResultadosBusca(resultado))
+        .finally(() => setBuscandoAluno(false));
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [buscaAluno]);
 
   // Etapa 2 — Curso e turma
   const [curso, setCurso] = useState<CursoParaMatricula | null>(null);
@@ -233,6 +259,7 @@ export function MatriculaWizard({
   function resetWizard() {
     setStep(1);
     setBuscaAluno("");
+    setResultadosBusca([]);
     setAluno(null);
     setCurso(null);
     setTurma(null);
@@ -409,16 +436,7 @@ export function MatriculaWizard({
   }
 
   function renderEtapaAluno() {
-    const termo = buscaAluno.trim().toLowerCase();
-    const termoDigits = onlyDigits(buscaAluno);
-    const resultados = !termo
-      ? alunos
-      : alunos.filter((candidato) => {
-          const nome = (candidato.full_name ?? "").toLowerCase();
-          if (nome.includes(termo) || candidato.email.toLowerCase().includes(termo)) return true;
-          if (termoDigits.length === 0) return false;
-          return candidato.cpf.includes(termoDigits) || candidato.telefone.includes(termoDigits);
-        });
+    const termo = buscaAluno.trim();
 
     return (
       <div className="flex flex-col gap-4">
@@ -448,12 +466,16 @@ export function MatriculaWizard({
         )}
 
         <div className="flex max-h-80 flex-col overflow-y-auto rounded-md border">
-          {resultados.length === 0 ? (
+          {termo.length < 2 ? (
+            <p className="text-muted-foreground p-4 text-center text-sm">Digite para buscar alunos</p>
+          ) : buscandoAluno ? (
+            <p className="text-muted-foreground p-4 text-center text-sm">Buscando...</p>
+          ) : resultadosBusca.length === 0 ? (
             <p className="text-muted-foreground p-4 text-center text-sm">
-              Nenhum aluno ativo encontrado.
+              Nenhum aluno encontrado para &quot;{termo}&quot;
             </p>
           ) : (
-            resultados.map((candidato) => (
+            resultadosBusca.map((candidato) => (
               <button
                 key={candidato.id}
                 type="button"

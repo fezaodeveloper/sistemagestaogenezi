@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { getAlunosParaPagamentoAvulso, getPagamentosAvulsos } from "@/app/admin/financeiro/avulsos/actions";
+import { getCategorias } from "@/app/admin/financeiro/categorias/actions";
 import { AvulsosView } from "@/components/admin/avulsos-view";
 
 export default async function AvulsosPage() {
@@ -9,9 +10,10 @@ export default async function AvulsosPage() {
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth() + 1;
 
-  const [pagamentos, alunos] = await Promise.all([
+  const [pagamentos, alunos, categorias] = await Promise.all([
     getPagamentosAvulsos(ano, mes),
     getAlunosParaPagamentoAvulso(),
+    getCategorias("categorias_avulsos"),
   ]);
 
   return (
@@ -27,6 +29,7 @@ export default async function AvulsosPage() {
         anoInicial={ano}
         mesInicial={mes}
         alunos={alunos}
+        categorias={categorias}
       />
     </div>
   );

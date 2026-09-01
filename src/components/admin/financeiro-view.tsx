@@ -496,6 +496,9 @@ export function FinanceiroView({
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [gerandoCarne, setGerandoCarne] = useState(false);
+  const [modoFiltro, setModoFiltro] = useState<"mes" | "periodo">("mes");
+  const [periodoInicio, setPeriodoInicio] = useState("");
+  const [periodoFim, setPeriodoFim] = useState("");
 
   function irParaMes(novoAno: number, novoMes: number) {
     startTransition(async () => {
@@ -509,7 +512,10 @@ export function FinanceiroView({
 
   function recarregar() {
     startTransition(async () => {
-      const novosDados = await getFinanceiroDados(ano, mes);
+      const novosDados =
+        modoFiltro === "periodo" && periodoInicio && periodoFim
+          ? await getFinanceiroDados(ano, mes, periodoInicio, periodoFim)
+          : await getFinanceiroDados(ano, mes);
       setDados(novosDados);
       setSelecionadas(new Set());
     });
@@ -521,6 +527,26 @@ export function FinanceiroView({
 
   function handleProximoMes() {
     irParaMes(mes === 12 ? ano + 1 : ano, mes === 12 ? 1 : mes + 1);
+  }
+
+  function handleModoFiltro(modo: "mes" | "periodo") {
+    setModoFiltro(modo);
+    if (modo === "mes") {
+      startTransition(async () => {
+        const novosDados = await getFinanceiroDados(ano, mes);
+        setDados(novosDados);
+        setSelecionadas(new Set());
+      });
+    }
+  }
+
+  function handleAplicarPeriodo() {
+    if (!periodoInicio || !periodoFim) return;
+    startTransition(async () => {
+      const novosDados = await getFinanceiroDados(ano, mes, periodoInicio, periodoFim);
+      setDados(novosDados);
+      setSelecionadas(new Set());
+    });
   }
 
   const parcelasFiltradas = useMemo(() => {
@@ -586,28 +612,86 @@ export function FinanceiroView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={handleMesAnterior}
-            disabled={isPending}
-            aria-label="Mês anterior"
-          >
-            <ChevronLeft />
-          </Button>
-          <span className="w-40 text-center text-lg font-semibold">
-            {NOMES_MES[mes - 1]} {ano}
-          </span>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={handleProximoMes}
-            disabled={isPending}
-            aria-label="Próximo mês"
-          >
-            <ChevronRight />
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex w-fit items-center gap-1 rounded-md border p-0.5">
+            <Button
+              type="button"
+              variant={modoFiltro === "mes" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => handleModoFiltro("mes")}
+            >
+              Por mês
+            </Button>
+            <Button
+              type="button"
+              variant={modoFiltro === "periodo" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => handleModoFiltro("periodo")}
+            >
+              Por período
+            </Button>
+          </div>
+
+          {modoFiltro === "mes" ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={handleMesAnterior}
+                disabled={isPending}
+                aria-label="Mês anterior"
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="w-40 text-center text-lg font-semibold">
+                {NOMES_MES[mes - 1]} {ano}
+              </span>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={handleProximoMes}
+                disabled={isPending}
+                aria-label="Próximo mês"
+              >
+                <ChevronRight />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="periodo_inicio" className="text-xs">
+                  De:
+                </Label>
+                <Input
+                  id="periodo_inicio"
+                  type="date"
+                  value={periodoInicio}
+                  onChange={(event) => setPeriodoInicio(event.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="periodo_fim" className="text-xs">
+                  Até:
+                </Label>
+                <Input
+                  id="periodo_fim"
+                  type="date"
+                  value={periodoFim}
+                  onChange={(event) => setPeriodoFim(event.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAplicarPeriodo}
+                disabled={isPending || !periodoInicio || !periodoFim}
+              >
+                Aplicar
+              </Button>
+            </div>
+          )}
         </div>
 
         <NovaParcelaDialog matriculas={matriculas} onCriada={recarregar} />
@@ -682,7 +766,9 @@ export function FinanceiroView({
 
       {parcelasFiltradas.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
-          Nenhuma parcela encontrada para {NOMES_MES[mes - 1]} de {ano}.
+          {modoFiltro === "periodo" && periodoInicio && periodoFim
+            ? `Nenhuma parcela encontrada entre ${formatDataBR(periodoInicio)} e ${formatDataBR(periodoFim)}.`
+            : `Nenhuma parcela encontrada para ${NOMES_MES[mes - 1]} de ${ano}.`}
         </p>
       ) : (
         <Table>

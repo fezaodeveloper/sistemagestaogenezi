@@ -12,10 +12,16 @@ function iniciosEFimDoMes(ano: number, mes: number) {
   return { inicio, fim };
 }
 
-export async function getGastos(ano: number, mes: number): Promise<Gasto[]> {
+export async function getGastos(
+  ano: number,
+  mes: number,
+  dataInicio?: string,
+  dataFim?: string,
+): Promise<Gasto[]> {
   await requireRole("admin");
   const supabase = await createClient();
-  const { inicio, fim } = iniciosEFimDoMes(ano, mes);
+  const { inicio, fim } =
+    dataInicio && dataFim ? { inicio: dataInicio, fim: dataFim } : iniciosEFimDoMes(ano, mes);
 
   const { data } = await supabase
     .from("gastos")
@@ -34,7 +40,7 @@ export async function criarGasto(formData: FormData): Promise<GastoActionResult>
 
   const parsed = gastoFormSchema.safeParse({
     descricao: formData.get("descricao"),
-    categoria: formData.get("categoria"),
+    categoria_id: formData.get("categoria_id"),
     valor: Number(formData.get("valor")),
     data_gasto: formData.get("data_gasto"),
     forma_pagamento: formData.get("forma_pagamento") || undefined,
@@ -50,7 +56,7 @@ export async function criarGasto(formData: FormData): Promise<GastoActionResult>
   const supabase = await createClient();
   const { error } = await supabase.from("gastos").insert({
     descricao: data.descricao,
-    categoria: data.categoria,
+    categoria_id: data.categoria_id,
     valor: data.valor,
     data_gasto: data.data_gasto,
     forma_pagamento: data.forma_pagamento ?? null,

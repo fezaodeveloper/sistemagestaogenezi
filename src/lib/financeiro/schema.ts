@@ -84,7 +84,11 @@ export type PagamentoAvulso = {
   descricao: string;
   valor: number;
   data_pagamento: string;
+  // "tipo" é o enum fixo legado — mantido só pra exibição de registros
+  // criados antes de categorias_avulsos existir. Registros novos usam
+  // categoria_id (a FK dinâmica) e deixam "tipo" no default do banco.
   tipo: PagamentoAvulsoTipo;
+  categoria_id: string | null;
   forma_pagamento: FormaPagamentoAvulso | null;
   aluno_id: string | null;
   observacoes: string | null;
@@ -96,7 +100,11 @@ export type PagamentoAvulso = {
 export type Gasto = {
   id: string;
   descricao: string;
-  categoria: GastoCategoria;
+  // Enum fixo legado, agora nullable — mantido só pra exibição de
+  // registros criados antes de categorias_gastos existir. Registros novos
+  // usam categoria_id (a FK dinâmica) e deixam este campo em branco.
+  categoria: GastoCategoria | null;
+  categoria_id: string | null;
   valor: number;
   data_gasto: string;
   forma_pagamento: string | null;
@@ -123,7 +131,7 @@ export const pagamentoAvulsoFormSchema = z.object({
   descricao: z.string().trim().min(1, { error: "Informe a descrição." }),
   valor: z.number().min(0.01, { error: "Informe um valor válido." }),
   data_pagamento: z.string().min(1, { error: "Informe a data do pagamento." }),
-  tipo: z.enum(PAGAMENTO_AVULSO_TIPOS, { error: "Selecione o tipo." }),
+  categoria_id: z.uuid({ error: "Selecione a categoria." }),
   forma_pagamento: z.enum(FORMAS_PAGAMENTO_AVULSO).nullable(),
   aluno_id: z.uuid().nullable().optional(),
   observacoes: z.string().trim().max(1000, { error: "Observações muito longas." }).optional(),
@@ -133,7 +141,7 @@ export type PagamentoAvulsoFormValues = z.infer<typeof pagamentoAvulsoFormSchema
 
 export const gastoFormSchema = z.object({
   descricao: z.string().trim().min(1, { error: "Informe a descrição." }),
-  categoria: z.enum(GASTO_CATEGORIAS, { error: "Selecione a categoria." }),
+  categoria_id: z.uuid({ error: "Selecione a categoria." }),
   valor: z.number().min(0.01, { error: "Informe um valor válido." }),
   data_gasto: z.string().min(1, { error: "Informe a data do gasto." }),
   forma_pagamento: z.string().trim().max(100).optional(),

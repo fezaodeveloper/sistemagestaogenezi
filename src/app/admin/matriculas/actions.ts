@@ -23,17 +23,32 @@ export type AlunoParaMatricula = {
   telefone: string;
 };
 
-// Só alunos com status_aluno = "ativo" fazem sentido pra uma matrícula nova
-// — inativo/trancado/formado ficam de fora da busca do wizard.
-export async function getAlunosParaMatricula(): Promise<AlunoParaMatricula[]> {
+// Busca sob demanda pro wizard de matrícula (Etapa 1) — substituiu o
+// antigo getAlunosParaMatricula(), que carregava a lista inteira de alunos
+// ativos de uma vez só. Só dispara com 2+ caracteres (o client já garante
+// isso antes de chamar, mas a checagem é repetida aqui porque a action é
+// um endpoint alcançável direto, sem depender do client se comportar).
+export async function buscarAlunosParaWizard(query: string): Promise<AlunoParaMatricula[]> {
   await requireRole("admin");
+
+  const termo = query.trim();
+  if (termo.length < 2) return [];
+
+  // PostgREST usa vírgula e parênteses como delimitadores da sintaxe do
+  // próprio .or() — removidos do termo antes de montar o filtro pra não
+  // quebrá-lo (ex.: aluno colando um telefone com DDD entre parênteses).
+  const termoSeguro = termo.replace(/[,()]/g, "").trim();
+  if (!termoSeguro) return [];
+  const termoLike = `%${termoSeguro}%`;
 
   const supabase = await createClient();
   const { data } = await supabase
     .from("alunos")
     .select("id, full_name, email, cpf, telefone")
     .eq("status_aluno", "ativo")
-    .order("full_name");
+    .or(`full_name.ilike.${termoLike},cpf.ilike.${termoLike},email.ilike.${termoLike}`)
+    .order("full_name")
+    .limit(10);
 
   return (data as AlunoParaMatricula[] | null) ?? [];
 }
