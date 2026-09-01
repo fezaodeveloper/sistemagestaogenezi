@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pencil, User } from "lucide-react";
+import { Pencil, Trash2, User } from "lucide-react";
 import { removerFotoAluno, salvarFotoAluno } from "@/app/admin/alunos/actions";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -146,7 +146,8 @@ export function FotoAlunoUpload({
           <AlertDialog open={excluirOpen} onOpenChange={setExcluirOpen}>
             <AlertDialogTrigger
               render={
-                <Button type="button" variant="ghost" size="sm" className="w-fit">
+                <Button type="button" variant="ghost" size="sm" className="text-destructive w-fit">
+                  <Trash2 />
                   Remover foto
                 </Button>
               }
@@ -155,8 +156,7 @@ export function FotoAlunoUpload({
               <AlertDialogHeader>
                 <AlertDialogTitle>Remover foto do aluno</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Tem certeza que deseja remover a foto? A lista de alunos volta a mostrar as
-                  iniciais do nome no lugar dela.
+                  Deseja remover a foto do aluno? Esta ação não pode ser desfeita.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

@@ -1,10 +1,21 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Pencil, User } from "lucide-react";
-import { salvarFotoPropria } from "@/app/aluno/perfil/actions";
+import { Pencil, Trash2, User } from "lucide-react";
+import { removerFotoPropria, salvarFotoPropria } from "@/app/aluno/perfil/actions";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const FOTO_ALUNO_BUCKET = "fotos-alunos";
 const FOTO_ALUNO_MAX_BYTES = 5 * 1024 * 1024; // 5MB
@@ -19,7 +30,9 @@ export function FotoPerfilUpload({
 }) {
   const [fotoUrl, setFotoUrl] = useState(fotoUrlInicial);
   const [enviando, setEnviando] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [excluirOpen, setExcluirOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleArquivoChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -70,6 +83,22 @@ export function FotoPerfilUpload({
     }
   }
 
+  async function handleRemover() {
+    setError(null);
+    setRemovendo(true);
+    try {
+      const resultado = await removerFotoPropria();
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setFotoUrl(null);
+      setExcluirOpen(false);
+    } finally {
+      setRemovendo(false);
+    }
+  }
+
   return (
     <div className="flex items-center gap-4">
       <input
@@ -98,16 +127,42 @@ export function FotoPerfilUpload({
         )}
       </button>
       <div className="flex flex-col gap-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          onClick={() => inputRef.current?.click()}
-          disabled={enviando}
-        >
-          {enviando ? "Enviando..." : "Alterar foto"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={() => inputRef.current?.click()}
+            disabled={enviando}
+          >
+            {enviando ? "Enviando..." : "Alterar foto"}
+          </Button>
+          {fotoUrl && (
+            <AlertDialog open={excluirOpen} onOpenChange={setExcluirOpen}>
+              <AlertDialogTrigger
+                render={
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive w-fit">
+                    <Trash2 />
+                    Remover foto
+                  </Button>
+                }
+              />
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remover foto de perfil</AlertDialogTitle>
+                  <AlertDialogDescription>Deseja remover sua foto de perfil?</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Voltar</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" disabled={removendo} onClick={handleRemover}>
+                    {removendo ? "Removendo..." : "Remover"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
         <p className="text-muted-foreground text-xs">JPG, PNG ou WebP. Máximo 5MB.</p>
         {error && (
           <p role="alert" className="text-destructive text-xs">

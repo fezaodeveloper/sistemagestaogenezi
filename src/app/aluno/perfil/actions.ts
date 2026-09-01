@@ -57,3 +57,34 @@ export async function salvarFotoPropria(fotoUrl: string, fotoPath: string): Prom
   revalidatePath("/aluno/perfil");
   return {};
 }
+
+export async function removerFotoPropria(): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+
+  const { data: aluno } = await supabase
+    .from("alunos")
+    .select("foto_path")
+    .eq("id", user.id)
+    .single();
+
+  if (aluno?.foto_path) {
+    const { error: storageError } = await supabase.storage.from("fotos-alunos").remove([aluno.foto_path]);
+    if (storageError) {
+      return { error: "Não foi possível remover o arquivo do Storage. Tente novamente." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("alunos")
+    .update({ foto_url: null, foto_path: null })
+    .eq("id", user.id);
+
+  if (error) {
+    return { error: "Arquivo removido do Storage, mas não foi possível atualizar o cadastro. Contate o suporte." };
+  }
+
+  revalidatePath("/aluno/perfil");
+  return {};
+}

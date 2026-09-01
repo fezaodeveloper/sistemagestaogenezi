@@ -350,13 +350,27 @@ export async function removerFotoAluno(alunoId: string): Promise<{ error?: strin
   await requireRole("admin");
 
   const supabase = await createClient();
+
+  const { data: aluno } = await supabase
+    .from("alunos")
+    .select("foto_path")
+    .eq("id", alunoId)
+    .single();
+
+  if (aluno?.foto_path) {
+    const { error: storageError } = await supabase.storage.from("fotos-alunos").remove([aluno.foto_path]);
+    if (storageError) {
+      return { error: "Não foi possível remover o arquivo do Storage. Tente novamente." };
+    }
+  }
+
   const { error } = await supabase
     .from("alunos")
     .update({ foto_url: null, foto_path: null })
     .eq("id", alunoId);
 
   if (error) {
-    return { error: "Não foi possível remover a foto. Tente novamente." };
+    return { error: "Arquivo removido do Storage, mas não foi possível atualizar o cadastro. Contate o suporte." };
   }
 
   revalidatePath("/admin/alunos");
