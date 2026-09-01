@@ -7,25 +7,13 @@ import { getMeusPontos } from "@/lib/gamificacao/ranking";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { isAvatarId } from "@/lib/avatares/catalog";
-import { PARCELA_STATUS_BADGE_CLASS, PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
 import { Capa } from "@/components/aluno/capa";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 type CursoTipo = (typeof CURSO_TIPOS)[number];
-
-type ParcelaFinanceiroResumo = {
-  id: string;
-  numero_parcela: number;
-  valor: number;
-  data_vencimento: string;
-  status: "pendente" | "atrasado";
-  asaas_invoice_url: string | null;
-  matriculas: { turmas: { cursos: { nome: string } | null } | null } | null;
-};
 
 type MatriculaCursoRow = {
   status: (typeof MATRICULA_STATUSES)[number];
@@ -46,10 +34,6 @@ type CursoAluno = {
 function formatDateBR(isoDate: string) {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
-}
-
-function formatValor(valor: number): string {
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 // Um card por curso, não por matrícula/turma — o aluno pode ter mais de uma
@@ -95,28 +79,15 @@ export default async function AlunoDashboardPage() {
   const user = await requireRole("aluno");
 
   const supabase = await createClient();
-  const [{ data, error }, meusPontos, { data: parcelasData, count: totalParcelasPendentes }] =
-    await Promise.all([
-      supabase
-        .from("matriculas")
-        .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url))")
-        .eq("aluno_id", user.id)
-        .in("status", ["ativa", "concluida"])
-        .order("created_at", { ascending: false }),
-      getMeusPontos(supabase, user.id),
-      supabase
-        .from("parcelas")
-        .select(
-          "id, numero_parcela, valor, data_vencimento, status, asaas_invoice_url, matriculas(turmas(cursos(nome)))",
-          { count: "exact" },
-        )
-        .eq("aluno_id", user.id)
-        .in("status", ["pendente", "atrasado"])
-        .order("data_vencimento", { ascending: true })
-        .limit(5),
-    ]);
-
-  const parcelasFinanceiro = (parcelasData as unknown as ParcelaFinanceiroResumo[] | null) ?? [];
+  const [{ data, error }, meusPontos] = await Promise.all([
+    supabase
+      .from("matriculas")
+      .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url))")
+      .eq("aluno_id", user.id)
+      .in("status", ["ativa", "concluida"])
+      .order("created_at", { ascending: false }),
+    getMeusPontos(supabase, user.id),
+  ]);
 
   const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
 
@@ -159,56 +130,6 @@ export default async function AlunoDashboardPage() {
           </span>
         </Link>
       </div>
-
-      {parcelasFinanceiro.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Situação Financeira</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {parcelasFinanceiro.map((parcela) => (
-              <div
-                key={parcela.id}
-                className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 last:border-b-0 last:pb-0"
-              >
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <Badge className={PARCELA_STATUS_BADGE_CLASS[parcela.status]}>
-                      {PARCELA_STATUS_LABELS[parcela.status]}
-                    </Badge>
-                    <span className="text-sm font-medium">
-                      {parcela.matriculas?.turmas?.cursos?.nome ?? "—"}
-                    </span>
-                  </div>
-                  <span className="text-muted-foreground text-xs">
-                    Parcela {parcela.numero_parcela} · Vencimento: {formatDateBR(parcela.data_vencimento)} ·
-                    Valor: {formatValor(Number(parcela.valor))}
-                  </span>
-                </div>
-                {parcela.asaas_invoice_url ? (
-                  <Button
-                    size="sm"
-                    render={<a href={parcela.asaas_invoice_url} target="_blank" rel="noopener noreferrer" />}
-                    nativeButton={false}
-                  >
-                    Pagar
-                  </Button>
-                ) : (
-                  <span className="text-muted-foreground text-xs">Aguardando geração</span>
-                )}
-              </div>
-            ))}
-            {(totalParcelasPendentes ?? 0) > 5 && (
-              <Link
-                href="/aluno/financeiro"
-                className="text-primary self-end text-sm hover:underline"
-              >
-                Ver todas →
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {error ? (
         <Card>
