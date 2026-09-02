@@ -385,22 +385,26 @@ function AcoesParcela({
             {isPending ? "Gerando..." : "Gerar cobrança"}
           </Button>
         )}
-        {emAberto && parcela.asaas_invoice_url && (
-          <WhatsappStubButton
-            tipo="cobranca"
-            matriculaId={parcela.matricula_id}
-            label="📱 Enviar cobrança"
-            mensagem={`Integração com WhatsApp em breve. Quando ativa, enviará o link da fatura: ${parcela.asaas_invoice_url}`}
-          />
-        )}
-        {parcela.status === "pago" && (
-          <WhatsappStubButton
-            tipo="comprovante"
-            matriculaId={parcela.matricula_id}
-            label="📱 Comprovante"
-            mensagem="Integração com WhatsApp em breve. Quando ativa, enviará o comprovante de pagamento ao aluno."
-          />
-        )}
+        <WhatsappStubButton
+          tipo="cobranca"
+          matriculaId={parcela.matricula_id}
+          label="📱 Enviar cobrança"
+          mensagem={
+            parcela.asaas_invoice_url
+              ? `Integração com WhatsApp em breve. Quando ativa, enviará o link da fatura: ${parcela.asaas_invoice_url}`
+              : "Integração com WhatsApp em breve."
+          }
+        />
+        <WhatsappStubButton
+          tipo="comprovante"
+          matriculaId={parcela.matricula_id}
+          label="📱 Comprovante"
+          mensagem={
+            parcela.status === "pago"
+              ? "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante de pagamento ao aluno."
+              : "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante quando o pagamento for confirmado."
+          }
+        />
         {parcela.asaas_invoice_url && (
           <Button
             render={<a href={parcela.asaas_invoice_url} target="_blank" rel="noopener noreferrer" />}
