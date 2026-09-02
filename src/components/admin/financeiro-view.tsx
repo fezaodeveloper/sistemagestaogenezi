@@ -14,7 +14,7 @@ import {
   type MatriculaParaParcela,
   type ParcelaComRelacoes,
 } from "@/app/admin/financeiro/actions";
-import { WhatsappStubButton } from "@/components/admin/whatsapp-stub";
+import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -385,25 +385,25 @@ function AcoesParcela({
             {isPending ? "Gerando..." : "Gerar cobrança"}
           </Button>
         )}
-        <WhatsappStubButton
-          tipo="cobranca"
+        <WhatsappStubDropdown
           matriculaId={parcela.matricula_id}
-          label="📱 Enviar cobrança"
-          mensagem={
-            parcela.asaas_invoice_url
-              ? `Integração com WhatsApp em breve. Quando ativa, enviará o link da fatura: ${parcela.asaas_invoice_url}`
-              : "Integração com WhatsApp em breve."
-          }
-        />
-        <WhatsappStubButton
-          tipo="comprovante"
-          matriculaId={parcela.matricula_id}
-          label="📱 Comprovante"
-          mensagem={
-            parcela.status === "pago"
-              ? "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante de pagamento ao aluno."
-              : "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante quando o pagamento for confirmado."
-          }
+          opcoes={[
+            {
+              tipo: "cobranca",
+              label: "Enviar cobrança",
+              mensagem: parcela.asaas_invoice_url
+                ? `Integração com WhatsApp em breve. Quando ativa, enviará o link da fatura: ${parcela.asaas_invoice_url}`
+                : "Integração com WhatsApp em breve.",
+            },
+            {
+              tipo: "comprovante",
+              label: "Enviar comprovante",
+              mensagem:
+                parcela.status === "pago"
+                  ? "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante de pagamento ao aluno."
+                  : "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante quando o pagamento for confirmado.",
+            },
+          ]}
         />
         {parcela.asaas_invoice_url && (
           <Button

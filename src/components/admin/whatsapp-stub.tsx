@@ -64,7 +64,9 @@ export function WhatsappStubButton({
   );
 }
 
-const OPCOES_PADRAO: { tipo: WhatsappStubTipo; label: string }[] = [
+type OpcaoWhatsappStub = { tipo: WhatsappStubTipo; label: string; mensagem?: string };
+
+const OPCOES_PADRAO: OpcaoWhatsappStub[] = [
   { tipo: "contrato", label: "📱 Enviar contrato" },
   { tipo: "comprovante", label: "📱 Enviar comprovante" },
   { tipo: "dados_acesso", label: "📱 Dados de acesso" },
@@ -73,9 +75,14 @@ const OPCOES_PADRAO: { tipo: WhatsappStubTipo; label: string }[] = [
 export function WhatsappStubDropdown({
   matriculaId,
   triggerLabel = "📱 WhatsApp",
+  opcoes = OPCOES_PADRAO,
 }: {
   matriculaId: string;
   triggerLabel?: string;
+  // Permite opções e mensagens próprias por tela (ex.: financeiro-view.tsx,
+  // onde a mensagem do stub muda conforme asaas_invoice_url/status da
+  // parcela) — sem isso, fica preso às 3 opções fixas de matrícula/contrato.
+  opcoes?: OpcaoWhatsappStub[];
 }) {
   return (
     <DropdownMenu>
@@ -88,10 +95,10 @@ export function WhatsappStubDropdown({
         }
       />
       <DropdownMenuContent align="end">
-        {OPCOES_PADRAO.map((opcao) => (
+        {opcoes.map((opcao) => (
           <DropdownMenuItem
             key={opcao.tipo}
-            onClick={() => disparar(opcao.tipo, matriculaId, MENSAGEM_PADRAO)}
+            onClick={() => disparar(opcao.tipo, matriculaId, opcao.mensagem ?? MENSAGEM_PADRAO)}
           >
             {opcao.label}
           </DropdownMenuItem>
