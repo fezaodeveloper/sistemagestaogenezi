@@ -3,15 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { contratoTemplateFormSchema, extrairTextoPlano, type ContratoTemplate } from "@/lib/contratos/schema";
+import {
+  contratoTemplateFormSchema,
+  extrairTextoPlano,
+  CONTRATO_TIPO_CURSO_LABELS,
+  type ContratoTemplate,
+  type ContratoTipoCurso,
+} from "@/lib/contratos/schema";
 
-export async function getContratoTemplate(): Promise<ContratoTemplate | null> {
+export async function getContratoTemplates(): Promise<ContratoTemplate[]> {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const { data } = await supabase.from("contrato_template").select("*").maybeSingle();
+  const { data } = await supabase.from("contrato_template").select("*").order("tipo_curso");
 
-  return (data as ContratoTemplate | null) ?? null;
+  return (data as ContratoTemplate[] | null) ?? [];
 }
 
 export type ContratoTemplateFormState =
@@ -22,12 +28,14 @@ export type ContratoTemplateFormState =
     }
   | undefined;
 
-// templateId vem preso via .bind() na própria page.tsx (mesmo padrão de
-// updateCertificadoTemplate) — só é null se, por algum motivo raro, a
-// criação do template padrão na page.tsx tiver falhado antes de renderizar
-// o form; nesse caso o insert abaixo cobre o caso.
+// templateId + tipoCurso vêm presos via .bind() na própria page.tsx (mesmo
+// padrão de updateCertificadoTemplate) — templateId só é null se, por
+// algum motivo raro, a criação do template padrão daquele tipo na
+// page.tsx tiver falhado antes de renderizar o form; nesse caso o insert
+// abaixo (já com o tipo_curso certo) cobre o caso.
 export async function salvarContratoTemplate(
   templateId: string | null,
+  tipoCurso: ContratoTipoCurso,
   _prevState: ContratoTemplateFormState,
   formData: FormData,
 ): Promise<ContratoTemplateFormState> {
@@ -55,6 +63,8 @@ export async function salvarContratoTemplate(
         })
         .eq("id", templateId)
     : await supabase.from("contrato_template").insert({
+        tipo_curso: tipoCurso,
+        nome: `Contrato ${CONTRATO_TIPO_CURSO_LABELS[tipoCurso]}`,
         conteudo: parsed.data.conteudo,
         conteudo_texto: conteudoTexto,
         cor_texto: parsed.data.cor_texto,

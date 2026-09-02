@@ -6,19 +6,19 @@ import { createClient } from "@/lib/supabase/server";
 import { reprocessarEvento } from "@/lib/automacoes/motor";
 import type { EventoAutomacao } from "@/lib/automacoes/schema";
 
-const LIMITE_EVENTOS = 100;
-
-export async function getEventosAutomacao(): Promise<EventoAutomacao[]> {
+export async function getEventosAutomacao(
+  paginacao: { offset: number; limite: number },
+): Promise<{ itens: EventoAutomacao[]; total: number }> {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, count } = await supabase
     .from("eventos_automacao")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
-    .limit(LIMITE_EVENTOS);
+    .range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
 
-  return (data as EventoAutomacao[] | null) ?? [];
+  return { itens: (data as EventoAutomacao[] | null) ?? [], total: count ?? 0 };
 }
 
 export async function reprocessarEventoAction(id: string): Promise<{ error?: string }> {

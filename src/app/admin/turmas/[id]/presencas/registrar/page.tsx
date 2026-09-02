@@ -6,19 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 import { PRESENCA_STATUSES } from "@/lib/presencas/schema";
 import type { Turma } from "@/lib/turmas/schema";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AulaBuscaChamadaForm, type AulaOpcaoBusca } from "@/components/admin/aula-busca-chamada-form";
 import { ChamadaForm } from "@/components/admin/chamada-form";
 
-type AulaOpcao = { id: string; titulo: string };
+type AulaOpcao = AulaOpcaoBusca;
 
 type MatriculaAluno = {
   id: string;
@@ -39,7 +31,7 @@ export default async function RegistrarPresencaPage({
   const supabase = await createClient();
   const [{ data: turmaData }, { data: aulasData }] = await Promise.all([
     supabase.from("turmas").select("*").eq("id", turmaId).single(),
-    supabase.from("aulas").select("id, titulo, modulo_id, modulos(curso_id)").order("numero"),
+    supabase.from("aulas").select("id, titulo, modulo_id, modulos(titulo, curso_id)").order("numero"),
   ]);
   const turma = turmaData as Turma | null;
 
@@ -51,11 +43,11 @@ export default async function RegistrarPresencaPage({
     (aulasData ?? []) as unknown as {
       id: string;
       titulo: string;
-      modulos: { curso_id: string } | null;
+      modulos: { titulo: string; curso_id: string } | null;
     }[]
   )
     .filter((aula) => aula.modulos?.curso_id === turma.curso_id)
-    .map((aula): AulaOpcao => ({ id: aula.id, titulo: aula.titulo }));
+    .map((aula): AulaOpcao => ({ id: aula.id, titulo: aula.titulo, moduloNome: aula.modulos?.titulo ?? null }));
 
   // Passo 1: sem aula + data escolhidos ainda, mostra o seletor.
   if (!aulaId || !data) {
@@ -85,42 +77,7 @@ export default async function RegistrarPresencaPage({
             </CardContent>
           </Card>
         ) : (
-          <form
-            action={`/admin/turmas/${turmaId}/presencas/registrar`}
-            className="flex max-w-xl flex-wrap items-end gap-3"
-          >
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="aulaId">Aula</Label>
-              <Select
-                name="aulaId"
-                items={Object.fromEntries(aulasDoCurso.map((aula) => [aula.id, aula.titulo]))}
-              >
-                <SelectTrigger id="aulaId" className="w-64">
-                  <SelectValue placeholder="Selecione a aula" />
-                </SelectTrigger>
-                <SelectContent>
-                  {aulasDoCurso.map((aula) => (
-                    <SelectItem key={aula.id} value={aula.id}>
-                      {aula.titulo}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="data">Data</Label>
-              <Input
-                id="data"
-                name="data"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                required
-              />
-            </div>
-
-            <Button type="submit">Continuar</Button>
-          </form>
+          <AulaBuscaChamadaForm turmaId={turmaId} aulas={aulasDoCurso} />
         )}
       </div>
     );

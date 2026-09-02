@@ -71,33 +71,51 @@ export type CursoParaMatricula = {
   tipo: (typeof CURSO_TIPOS)[number];
   carga_horaria_horas: number | null;
   valor: number | null;
-  turmas: TurmaParaMatricula[];
 };
 
-type CursoParaMatriculaRow = Omit<CursoParaMatricula, "turmas"> & {
-  turmas: (TurmaParaMatricula & { status: string })[] | null;
-};
-
-// Cursos ativos com suas turmas ativas aninhadas. Filtra turma.status="ativa"
-// em memória (não com um `turmas!inner(...)` na query) de propósito: um
-// !inner esconderia cursos ativos que hoje não têm nenhuma turma ativa, mas
-// o wizard ainda deve listar o curso — só sem opção de turma pra escolher.
-export async function getCursosParaMatricula(): Promise<CursoParaMatricula[]> {
+// Busca sob demanda pro wizard de matrícula (Etapa 2) — substituiu o
+// antigo getCursosParaMatricula(), que carregava todos os cursos ativos
+// (com turmas aninhadas) de uma vez só. Mesmo padrão de
+// buscarAlunosParaWizard: só dispara com 2+ caracteres.
+export async function buscarCursosParaWizard(query: string): Promise<CursoParaMatricula[]> {
   await requireRole("admin");
+
+  const termo = query.trim();
+  if (termo.length < 2) return [];
+
+  const termoSeguro = termo.replace(/[,()]/g, "").trim();
+  if (!termoSeguro) return [];
+  const termoLike = `%${termoSeguro}%`;
 
   const supabase = await createClient();
   const { data } = await supabase
     .from("cursos")
-    .select(
-      "id, nome, tipo, carga_horaria_horas, valor, turmas(id, nome, vagas_total, vagas_ocupadas, cadencia_dias_semana, horario_aula, data_inicio, data_fim, status)",
-    )
+    .select("id, nome, tipo, carga_horaria_horas, valor")
     .eq("status", "ativo")
+    .ilike("nome", termoLike)
+    .order("nome")
+    .limit(10);
+
+  return (data as CursoParaMatricula[] | null) ?? [];
+}
+
+// Turmas ativas de um curso já selecionado — busca automática (sem campo
+// de digitação), disparada assim que o admin escolhe o curso na Etapa 2.
+// Sem limit: o filtro por curso_id já é o que mantém isso pequeno (poucas
+// turmas por curso); se passar de 10, o wizard mostra um campo de busca
+// que filtra esse mesmo array no client, sem nova ida ao servidor.
+export async function buscarTurmasParaWizard(cursoId: string): Promise<TurmaParaMatricula[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("turmas")
+    .select("id, nome, vagas_total, vagas_ocupadas, cadencia_dias_semana, horario_aula, data_inicio, data_fim")
+    .eq("curso_id", cursoId)
+    .eq("status", "ativa")
     .order("nome");
 
-  return ((data as CursoParaMatriculaRow[] | null) ?? []).map((curso) => ({
-    ...curso,
-    turmas: (curso.turmas ?? []).filter((turma) => turma.status === "ativa"),
-  }));
+  return (data as TurmaParaMatricula[] | null) ?? [];
 }
 
 export type CreateMatriculaResult =

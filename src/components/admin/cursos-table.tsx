@@ -7,6 +7,7 @@ import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Select,
   SelectContent,
@@ -146,7 +147,19 @@ function CursosPdfDocument({ cursos, geradoEm }: { cursos: CursoListItem[]; gera
   );
 }
 
-export function CursosTable({ cursos }: { cursos: CursoListItem[] }) {
+export function CursosTable({
+  cursos,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+}: {
+  cursos: CursoListItem[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+}) {
   const [busca, setBusca] = useState("");
   const [modalidadeFiltro, setModalidadeFiltro] = useState<string>(MODALIDADE_FILTRO_TODAS);
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
@@ -305,6 +318,14 @@ export function CursosTable({ cursos }: { cursos: CursoListItem[] }) {
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/cursos"
+      />
     </div>
   );
 }

@@ -41,6 +41,8 @@ import {
 } from "@/lib/matriculas/schema";
 import {
   buscarAlunosParaWizard,
+  buscarCursosParaWizard,
+  buscarTurmasParaWizard,
   createMatricula,
   type AlunoParaMatricula,
   type CursoParaMatricula,
@@ -132,11 +134,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
 
 // --- Wizard ---
 
-export function MatriculaWizard({
-  cursos,
-}: {
-  cursos: CursoParaMatricula[];
-}) {
+export function MatriculaWizard() {
   const [step, setStep] = useState(1);
 
   // Etapa 1 — Aluno
@@ -171,8 +169,62 @@ export function MatriculaWizard({
   }, [buscaAluno]);
 
   // Etapa 2 — Curso e turma
+  const [buscaCurso, setBuscaCurso] = useState("");
   const [curso, setCurso] = useState<CursoParaMatricula | null>(null);
+  const [resultadosCursoBusca, setResultadosCursoBusca] = useState<CursoParaMatricula[]>([]);
+  const [buscandoCurso, setBuscandoCurso] = useState(false);
+
   const [turma, setTurma] = useState<TurmaParaMatricula | null>(null);
+  const [turmasDoCurso, setTurmasDoCurso] = useState<TurmaParaMatricula[]>([]);
+  const [buscandoTurmas, setBuscandoTurmas] = useState(false);
+  const [buscaTurma, setBuscaTurma] = useState("");
+
+  // Mesma busca sob demanda com debounce de 300ms da Etapa 1 — só dispara
+  // com 2+ caracteres, evita carregar todos os cursos ativos de uma vez.
+  useEffect(() => {
+    const termo = buscaCurso.trim();
+
+    const timeoutId = setTimeout(() => {
+      if (termo.length < 2) {
+        setResultadosCursoBusca([]);
+        setBuscandoCurso(false);
+        return;
+      }
+
+      setBuscandoCurso(true);
+      buscarCursosParaWizard(termo)
+        .then((resultado) => setResultadosCursoBusca(resultado))
+        .finally(() => setBuscandoCurso(false));
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [buscaCurso]);
+
+  // Turmas do curso escolhido: busca automática (sem campo de digitação) —
+  // dispara assim que o admin seleciona um curso na Etapa 2. Se o curso
+  // tiver mais de 10 turmas, um campo de busca extra filtra esse array já
+  // carregado no client (sem nova ida ao servidor — ver turmasFiltradas).
+  async function handleSelecionarCurso(cursoSelecionado: CursoParaMatricula) {
+    setCurso(cursoSelecionado);
+    setTurma(null);
+    setBuscaTurma("");
+    setTurmasDoCurso([]);
+    setBuscandoTurmas(true);
+    try {
+      const turmasEncontradas = await buscarTurmasParaWizard(cursoSelecionado.id);
+      setTurmasDoCurso(turmasEncontradas);
+    } finally {
+      setBuscandoTurmas(false);
+    }
+  }
+
+  const turmaBuscaAtiva = turmasDoCurso.length > 10;
+  const turmasFiltradas = useMemo(() => {
+    if (!turmaBuscaAtiva) return turmasDoCurso;
+    const termo = buscaTurma.trim().toLowerCase();
+    if (!termo) return turmasDoCurso;
+    return turmasDoCurso.filter((candidata) => candidata.nome.toLowerCase().includes(termo));
+  }, [turmasDoCurso, buscaTurma, turmaBuscaAtiva]);
 
   // Etapa 3 — Valores
   const [descontoTipo, setDescontoTipo] = useState<DescontoTipo>("sem_bolsa");
@@ -261,8 +313,12 @@ export function MatriculaWizard({
     setBuscaAluno("");
     setResultadosBusca([]);
     setAluno(null);
+    setBuscaCurso("");
     setCurso(null);
+    setResultadosCursoBusca([]);
     setTurma(null);
+    setTurmasDoCurso([]);
+    setBuscaTurma("");
     setDescontoTipo("sem_bolsa");
     setDescontoFormato(null);
     setDescontoValorInput("");
@@ -498,6 +554,8 @@ export function MatriculaWizard({
   }
 
   function renderEtapaCursoTurma() {
+    const termoCurso = buscaCurso.trim();
+
     return (
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
@@ -508,48 +566,93 @@ export function MatriculaWizard({
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label>Curso</Label>
-          <div className="flex flex-col rounded-md border">
-            {cursos.map((candidato) => {
-              const selecionado = curso?.id === candidato.id;
-              return (
-                <button
-                  key={candidato.id}
-                  type="button"
-                  onClick={() => {
-                    setCurso(candidato);
-                    setTurma(null);
-                  }}
-                  className={cn(
-                    "hover:bg-muted flex items-center justify-between gap-2 border-b border-l-4 border-l-transparent p-3 text-left text-sm last:border-b-0",
-                    selecionado && "border-l-blue-500 bg-blue-500/10 hover:bg-blue-500/10",
-                  )}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium">{candidato.nome}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {CURSO_TIPO_LABELS[candidato.tipo]}
-                      {candidato.carga_horaria_horas ? ` · ${candidato.carga_horaria_horas}h` : ""}
-                      {candidato.valor !== null ? ` · ${formatValor(candidato.valor)}` : ""}
-                    </span>
-                  </div>
-                  {selecionado && <Check className="size-4 shrink-0 text-blue-500" />}
-                </button>
-              );
-            })}
+          <Label htmlFor="busca_curso">Buscar curso</Label>
+          <Input
+            id="busca_curso"
+            placeholder="Digite o nome do curso..."
+            value={buscaCurso}
+            onChange={(event) => setBuscaCurso(event.target.value)}
+          />
+
+          {curso && (
+            <Card className="border-primary">
+              <CardContent className="flex items-center justify-between py-4">
+                <div className="flex flex-col">
+                  <span className="font-medium">{curso.nome}</span>
+                  <span className="text-muted-foreground text-sm">
+                    {CURSO_TIPO_LABELS[curso.tipo]}
+                    {curso.carga_horaria_horas ? ` · ${curso.carga_horaria_horas}h` : ""}
+                    {curso.valor !== null ? ` · ${formatValor(curso.valor)}` : ""}
+                  </span>
+                </div>
+                <Badge>Selecionado</Badge>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex max-h-80 flex-col overflow-y-auto rounded-md border">
+            {termoCurso.length < 2 ? (
+              <p className="text-muted-foreground p-4 text-center text-sm">Digite para buscar cursos</p>
+            ) : buscandoCurso ? (
+              <p className="text-muted-foreground p-4 text-center text-sm">Buscando...</p>
+            ) : resultadosCursoBusca.length === 0 ? (
+              <p className="text-muted-foreground p-4 text-center text-sm">
+                Nenhum curso encontrado para &quot;{termoCurso}&quot;
+              </p>
+            ) : (
+              resultadosCursoBusca.map((candidato) => {
+                const selecionado = curso?.id === candidato.id;
+                return (
+                  <button
+                    key={candidato.id}
+                    type="button"
+                    onClick={() => handleSelecionarCurso(candidato)}
+                    className={cn(
+                      "hover:bg-muted flex items-center justify-between gap-2 border-b border-l-4 border-l-transparent p-3 text-left text-sm last:border-b-0",
+                      selecionado && "border-l-blue-500 bg-blue-500/10 hover:bg-blue-500/10",
+                    )}
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium">{candidato.nome}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {CURSO_TIPO_LABELS[candidato.tipo]}
+                        {candidato.carga_horaria_horas ? ` · ${candidato.carga_horaria_horas}h` : ""}
+                        {candidato.valor !== null ? ` · ${formatValor(candidato.valor)}` : ""}
+                      </span>
+                    </div>
+                    {selecionado && <Check className="size-4 shrink-0 text-blue-500" />}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
         {curso && (
           <div className="animate-in fade-in slide-in-from-top-2 flex flex-col gap-2 duration-300">
             <Label>2. Agora selecione uma turma:</Label>
-            {curso.turmas.length === 0 ? (
+
+            {turmaBuscaAtiva && (
+              <Input
+                placeholder="Buscar turma..."
+                value={buscaTurma}
+                onChange={(event) => setBuscaTurma(event.target.value)}
+              />
+            )}
+
+            {buscandoTurmas ? (
+              <p className="text-muted-foreground text-sm">Buscando turmas...</p>
+            ) : turmasDoCurso.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Nenhuma turma disponível para este curso no momento.
               </p>
+            ) : turmasFiltradas.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Nenhuma turma encontrada para &quot;{buscaTurma}&quot;
+              </p>
             ) : (
               <div className="flex flex-col rounded-md border">
-                {curso.turmas.map((candidata) => {
+                {turmasFiltradas.map((candidata) => {
                   const vagasDisponiveis = candidata.vagas_total - candidata.vagas_ocupadas;
                   const semVagas = vagasDisponiveis <= 0;
                   const selecionada = turma?.id === candidata.id;

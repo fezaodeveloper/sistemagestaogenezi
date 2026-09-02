@@ -63,16 +63,24 @@ export type CertificadoAguardandoLiberacao = {
 // EAD falhar por algum motivo, o certificado aparece aqui pro admin agir.
 export async function getCertificadosAguardandoLiberacao(
   supabase: SupabaseServerClient,
-): Promise<CertificadoAguardandoLiberacao[]> {
-  const { data } = await supabase
+  paginacao?: { offset: number; limite: number },
+): Promise<{ itens: CertificadoAguardandoLiberacao[]; total: number }> {
+  let query = supabase
     .from("certificados")
     .select(
       "id, created_at, aproveitamento_percentual, frequencia_percentual, matriculas!inner(alunos!inner(profiles!alunos_id_fkey(full_name)), turmas!inner(cursos!inner(nome, tipo)))",
+      { count: "exact" },
     )
     .eq("liberado", false)
     .order("created_at");
 
-  return ((data ?? []) as unknown as Array<{
+  if (paginacao) {
+    query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
+  }
+
+  const { data, count } = await query;
+
+  const itens = ((data ?? []) as unknown as Array<{
     id: string;
     created_at: string;
     aproveitamento_percentual: number | null;
@@ -94,6 +102,8 @@ export async function getCertificadosAguardandoLiberacao(
     nota: c.aproveitamento_percentual,
     frequencia: c.frequencia_percentual,
   }));
+
+  return { itens, total: count ?? 0 };
 }
 
 // count com head:true, mesmo padrão de getNotificacaoResgatesPendentes.

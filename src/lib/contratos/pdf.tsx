@@ -188,7 +188,7 @@ type MatriculaParaContrato = {
   turmas: {
     nome: string;
     turno: Turno | null;
-    cursos: { nome: string; carga_horaria_horas: number | null } | null;
+    cursos: { nome: string; carga_horaria_horas: number | null; tipo: string } | null;
   } | null;
 };
 
@@ -208,7 +208,7 @@ export async function gerarContratoPdf(
   const { data: matriculaData, error } = await admin
     .from("matriculas")
     .select(
-      "id, aluno_id, valor_final, num_parcelas, valor_parcela, forma_pagamento, data_primeira_mensalidade, data_inicio, previsao_conclusao, alunos(cpf, telefone, email, data_nascimento, profiles!alunos_id_fkey(full_name)), turmas(nome, turno, cursos(nome, carga_horaria_horas))",
+      "id, aluno_id, valor_final, num_parcelas, valor_parcela, forma_pagamento, data_primeira_mensalidade, data_inicio, previsao_conclusao, alunos(cpf, telefone, email, data_nascimento, profiles!alunos_id_fkey(full_name)), turmas(nome, turno, cursos(nome, carga_horaria_horas, tipo))",
     )
     .eq("id", matriculaId)
     .single();
@@ -228,7 +228,24 @@ export async function gerarContratoPdf(
     responsavel = resp ?? null;
   }
 
-  const { data: templateData } = await admin.from("contrato_template").select("*").maybeSingle();
+  // Template do tipo de curso da turma (presencial/ead/hibrido) — cada tipo
+  // pode ter um contrato próprio (ver TAREFA 5 em contrato-template-form.tsx).
+  // Se o tipo do curso não tiver template configurado, cai no presencial.
+  const cursoTipo = matricula.turmas?.cursos?.tipo ?? "presencial";
+  let { data: templateData } = await admin
+    .from("contrato_template")
+    .select("*")
+    .eq("tipo_curso", cursoTipo)
+    .maybeSingle();
+
+  if (!templateData && cursoTipo !== "presencial") {
+    ({ data: templateData } = await admin
+      .from("contrato_template")
+      .select("*")
+      .eq("tipo_curso", "presencial")
+      .maybeSingle());
+  }
+
   if (!templateData) {
     throw new Error("Template de contrato não configurado.");
   }

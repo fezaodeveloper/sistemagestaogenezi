@@ -42,13 +42,11 @@ const GROUPS: NavGroup[] = [
   { id: "academico", label: "Acad\u00eamico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
     { href: "/admin/turmas", label: "Turmas", icon: Users },
+    { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
     { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
     { href: "/admin/alunos", label: "Alunos", icon: IdCard },
     { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },
     { href: "/admin/contrato", label: "Template de Contrato", icon: FileText },
-  ]},
-  { id: "conteudo", label: "Conte\u00fado", icon: FileBadge, items: [
-    { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
   ]},
   { id: "engajamento", label: "Engajamento", icon: Gift, items: [
     { href: "/admin/premios", label: "Pr\u00eamios", icon: Gift },

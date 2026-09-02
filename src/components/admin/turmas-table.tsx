@@ -8,6 +8,7 @@ import { DeleteTurmaButton } from "@/components/admin/delete-turma-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Select,
   SelectContent,
@@ -160,7 +161,19 @@ function TurmasPdfDocument({
   );
 }
 
-export function TurmasTable({ turmas }: { turmas: TurmaWithCurso[] }) {
+export function TurmasTable({
+  turmas,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+}: {
+  turmas: TurmaWithCurso[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+}) {
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [turnoFiltro, setTurnoFiltro] = useState<string>(TURNO_FILTRO_TODOS);
@@ -340,6 +353,14 @@ export function TurmasTable({ turmas }: { turmas: TurmaWithCurso[] }) {
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/turmas"
+      />
     </div>
   );
 }

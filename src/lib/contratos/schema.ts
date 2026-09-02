@@ -1,5 +1,13 @@
 import { z } from "zod";
 import type { JSONContent } from "@tiptap/react";
+import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
+
+// Um template de contrato por tipo de curso — mesmos 3 valores de
+// cursos.tipo (ver src/lib/cursos/schema.ts), reaproveitado aqui em vez de
+// duplicar a lista.
+export const CONTRATO_TIPOS_CURSO = CURSO_TIPOS;
+export type ContratoTipoCurso = (typeof CONTRATO_TIPOS_CURSO)[number];
+export const CONTRATO_TIPO_CURSO_LABELS = CURSO_TIPO_LABELS;
 
 // Variáveis disponíveis no template do contrato, substituídas na geração
 // do PDF (ver src/lib/contratos/pdf.tsx) — mesmo mecanismo de
@@ -76,6 +84,8 @@ export const VARIAVEIS_EXEMPLO_CONTRATO: Record<ContratoVariavel, string> = {
 
 export type ContratoTemplate = {
   id: string;
+  tipo_curso: ContratoTipoCurso;
+  nome: string;
   conteudo: JSONContent;
   conteudo_texto: string | null;
   cor_texto: string;

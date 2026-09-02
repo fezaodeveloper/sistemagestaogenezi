@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Table,
   TableBody,
@@ -74,7 +75,19 @@ function LeadStatusSelect({ leadId, status }: { leadId: string; status: string }
   );
 }
 
-export function TabelaLeads({ itens }: { itens: LeadComCurso[] }) {
+export function TabelaLeads({
+  itens,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+}: {
+  itens: LeadComCurso[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+}) {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -186,6 +199,14 @@ export function TabelaLeads({ itens }: { itens: LeadComCurso[] }) {
           </TableBody>
         </Table>
       </Card>
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/leads"
+      />
     </div>
   );
 }

@@ -11,16 +11,27 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export type LeadComCurso = Lead & { nomeCurso: string | null };
 
-export async function getLeads(supabase: SupabaseServerClient): Promise<LeadComCurso[]> {
-  const { data } = await supabase
+export async function getLeads(
+  supabase: SupabaseServerClient,
+  paginacao?: { offset: number; limite: number },
+): Promise<{ itens: LeadComCurso[]; total: number }> {
+  let query = supabase
     .from("leads")
-    .select("*, cursos(nome)")
+    .select("*, cursos(nome)", { count: "exact" })
     .order("created_at", { ascending: false });
 
-  return ((data ?? []) as unknown as Array<Lead & { cursos: { nome: string } | null }>).map((l) => ({
+  if (paginacao) {
+    query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
+  }
+
+  const { data, count } = await query;
+
+  const itens = ((data ?? []) as unknown as Array<Lead & { cursos: { nome: string } | null }>).map((l) => ({
     ...l,
     nomeCurso: l.cursos?.nome ?? null,
   }));
+
+  return { itens, total: count ?? 0 };
 }
 
 export async function getLead(

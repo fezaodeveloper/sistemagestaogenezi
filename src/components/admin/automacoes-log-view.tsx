@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { reprocessarEventoAction } from "@/app/admin/automacoes/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Select,
   SelectContent,
@@ -64,7 +65,19 @@ function ReprocessarButton({ eventoId }: { eventoId: string }) {
   );
 }
 
-export function AutomacoesLogView({ eventos }: { eventos: EventoAutomacao[] }) {
+export function AutomacoesLogView({
+  eventos,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+}: {
+  eventos: EventoAutomacao[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+}) {
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [tipoFiltro, setTipoFiltro] = useState<string>(TIPO_FILTRO_TODOS);
 
@@ -155,6 +168,14 @@ export function AutomacoesLogView({ eventos }: { eventos: EventoAutomacao[] }) {
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/automacoes"
+      />
     </div>
   );
 }

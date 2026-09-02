@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { FileSpreadsheet, Printer } from "lucide-react";
+import { FileSpreadsheet, Printer, X } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   getRelatorioAcademico,
@@ -13,13 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -176,7 +169,9 @@ function RelatorioAcademicoDocument({
 }
 
 export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
-  const [turmaId, setTurmaId] = useState("");
+  const [buscaTurma, setBuscaTurma] = useState("");
+  const [turmaSelecionada, setTurmaSelecionada] = useState<TurmaOpcao | null>(null);
+  const [sugestoesAbertas, setSugestoesAbertas] = useState(false);
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [dados, setDados] = useState<RelatorioAcademico | null>(null);
@@ -185,13 +180,37 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
 
-  const turmaItems = Object.fromEntries(
-    turmas.map((turma) => [turma.id, `${turma.nome} — ${turma.cursos?.nome ?? "—"}`]),
-  );
+  // Filtro client-side sobre as turmas já carregadas pelo Server Component
+  // (mesma lista pequena de sempre — turmas ativas) — não precisa de uma
+  // ida ao servidor pra isso, só de 2+ caracteres pra não listar tudo de
+  // cara.
+  const termoTurma = buscaTurma.trim().toLowerCase();
+  const sugestoesTurma = useMemo(() => {
+    if (termoTurma.length < 2) return [];
+    return turmas
+      .filter((turma) => {
+        const nomeTurma = turma.nome.toLowerCase();
+        const nomeCurso = (turma.cursos?.nome ?? "").toLowerCase();
+        return nomeTurma.includes(termoTurma) || nomeCurso.includes(termoTurma);
+      })
+      .slice(0, 8);
+  }, [turmas, termoTurma]);
+
+  function handleSelecionarTurma(turma: TurmaOpcao) {
+    setTurmaSelecionada(turma);
+    setBuscaTurma("");
+    setSugestoesAbertas(false);
+  }
+
+  function handleLimparTurma() {
+    setTurmaSelecionada(null);
+    setBuscaTurma("");
+    setDados(null);
+  }
 
   function handleGerar() {
     setError(null);
-    if (!turmaId) {
+    if (!turmaSelecionada) {
       setError("Selecione uma turma.");
       return;
     }
@@ -200,7 +219,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
       return;
     }
     startTransition(async () => {
-      const resultado = await getRelatorioAcademico(turmaId, dataInicio, dataFim);
+      const resultado = await getRelatorioAcademico(turmaSelecionada.id, dataInicio, dataFim);
       if ("error" in resultado) {
         setError(resultado.error);
         setDados(null);
@@ -279,24 +298,57 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
     <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="flex flex-col gap-2">
+          <div className="relative flex flex-col gap-2">
             <Label htmlFor="turma">Turma</Label>
-            <Select
-              items={turmaItems}
-              value={turmaId}
-              onValueChange={(value) => setTurmaId(value as string)}
-            >
-              <SelectTrigger id="turma" className="w-64">
-                <SelectValue placeholder="Selecione uma turma" />
-              </SelectTrigger>
-              <SelectContent>
-                {turmas.map((turma) => (
-                  <SelectItem key={turma.id} value={turma.id}>
-                    {turma.nome} — {turma.cursos?.nome ?? "—"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {turmaSelecionada ? (
+              <Badge variant="secondary" className="flex w-fit items-center gap-1.5 py-1.5 pr-1.5 pl-2.5">
+                {turmaSelecionada.nome} — {turmaSelecionada.cursos?.nome ?? "—"}
+                <button
+                  type="button"
+                  onClick={handleLimparTurma}
+                  className="hover:bg-muted-foreground/20 rounded-full p-0.5"
+                  aria-label="Limpar turma selecionada"
+                >
+                  <X className="size-3" />
+                </button>
+              </Badge>
+            ) : (
+              <Input
+                id="turma"
+                placeholder="Buscar turma..."
+                className="w-64"
+                value={buscaTurma}
+                onChange={(event) => {
+                  setBuscaTurma(event.target.value);
+                  setSugestoesAbertas(true);
+                }}
+                onFocus={() => setSugestoesAbertas(true)}
+                onBlur={() => setTimeout(() => setSugestoesAbertas(false), 150)}
+              />
+            )}
+
+            {sugestoesAbertas && !turmaSelecionada && termoTurma.length >= 2 && (
+              <div className="bg-popover absolute top-full left-0 z-10 mt-1 flex w-64 flex-col overflow-hidden rounded-md border shadow-md">
+                {sugestoesTurma.length === 0 ? (
+                  <p className="text-muted-foreground p-3 text-sm">Nenhuma turma encontrada.</p>
+                ) : (
+                  sugestoesTurma.map((turma) => (
+                    <button
+                      key={turma.id}
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        handleSelecionarTurma(turma);
+                      }}
+                      className="hover:bg-muted flex flex-col gap-0.5 border-b p-2.5 text-left text-sm last:border-b-0"
+                    >
+                      <span className="font-medium">{turma.nome}</span>
+                      <span className="text-muted-foreground text-xs">{turma.cursos?.nome ?? "—"}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="data_inicio">Período de</Label>

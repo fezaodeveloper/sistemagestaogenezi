@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Paginacao } from "@/components/ui/paginacao";
 import {
   Select,
   SelectContent,
@@ -47,8 +48,16 @@ const TIPO_FILTRO_ITEMS: Record<string, string> = {
 
 export function TabelaCertificadosLiberacao({
   itens,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
 }: {
   itens: CertificadoAguardandoLiberacao[];
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
 }) {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -244,6 +253,14 @@ export function TabelaCertificadosLiberacao({
           </Table>
         </Card>
       )}
+
+      <Paginacao
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/certificados"
+      />
     </div>
   );
 }

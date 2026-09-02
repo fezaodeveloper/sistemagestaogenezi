@@ -2,16 +2,27 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
 import { getLeads } from "@/lib/leads/leads";
 import { TabelaLeads } from "@/components/admin/tabela-leads";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; limit?: string }>;
+}) {
   await requireRole("admin");
+  const { page, limit } = await searchParams;
+
+  const paginaAtual = parsePagina(page);
+  const limite = parseLimite(limit);
+  const offset = calcularOffset(paginaAtual, limite);
 
   const supabase = await createClient();
-  const itens = await getLeads(supabase);
+  const { itens, total: totalRegistros } = await getLeads(supabase, { offset, limite });
+  const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,7 +51,13 @@ export default async function LeadsPage() {
           </CardContent>
         </Card>
       ) : (
-        <TabelaLeads itens={itens} />
+        <TabelaLeads
+          itens={itens}
+          paginaAtual={paginaAtual}
+          totalPaginas={totalPaginas}
+          totalRegistros={totalRegistros}
+          limite={limite}
+        />
       )}
     </div>
   );
