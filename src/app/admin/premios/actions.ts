@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { premioFormSchema } from "@/lib/premios/schema";
 import { uploadImagem, validarImagem } from "@/lib/storage/validar-imagem";
+import { dispararEvento } from "@/lib/automacoes/motor";
 
 const PREMIOS_BUCKET = "premios";
 
@@ -14,12 +15,15 @@ type PremioFormValuesEcho = {
   descricao: string;
   custo_creditos: string;
   estoque: string;
+  estoque_minimo: string;
   ativo: string;
 };
 
 export type PremioFormState =
   | {
-      errors?: Partial<Record<"nome" | "descricao" | "custo_creditos" | "estoque" | "foto", string[]>>;
+      errors?: Partial<
+        Record<"nome" | "descricao" | "custo_creditos" | "estoque" | "estoque_minimo" | "foto", string[]>
+      >;
       error?: string;
       values?: PremioFormValuesEcho;
     }
@@ -31,6 +35,7 @@ function echoValues(formData: FormData): PremioFormValuesEcho {
     descricao: String(formData.get("descricao") ?? ""),
     custo_creditos: String(formData.get("custo_creditos") ?? ""),
     estoque: String(formData.get("estoque") ?? ""),
+    estoque_minimo: String(formData.get("estoque_minimo") ?? ""),
     ativo: String(formData.get("ativo") ?? ""),
   };
 }
@@ -41,6 +46,7 @@ function parsePremioForm(formData: FormData) {
     descricao: formData.get("descricao") || undefined,
     custo_creditos: formData.get("custo_creditos"),
     estoque: formData.get("estoque"),
+    estoque_minimo: formData.get("estoque_minimo"),
     ativo: formData.get("ativo") === "on",
   });
 }
@@ -81,6 +87,7 @@ export async function createPremio(
     foto_url: fotoPath,
     custo_creditos: parsed.data.custo_creditos,
     estoque: parsed.data.estoque ?? null,
+    estoque_minimo: parsed.data.estoque_minimo,
     ativo: parsed.data.ativo,
   });
 
@@ -138,6 +145,7 @@ export async function updatePremio(
       foto_url: fotoPath,
       custo_creditos: parsed.data.custo_creditos,
       estoque: parsed.data.estoque ?? null,
+      estoque_minimo: parsed.data.estoque_minimo,
       ativo: parsed.data.ativo,
     })
     .eq("id", id);
@@ -154,6 +162,23 @@ export async function updatePremio(
   // ficar sem foto nenhuma se o remove() falhar no meio do caminho.
   if (novoPath && fotoAtual && fotoAtual !== novoPath) {
     await supabase.storage.from(PREMIOS_BUCKET).remove([fotoAtual]);
+  }
+
+  // Notificação imediata (TAREFA 1C) — best-effort via dispararEvento, não
+  // deve nunca bloquear o salvamento (já concluído acima). Diferente do
+  // resumo diário (que também lista prêmios com estoque baixo, mas 1x/dia),
+  // essa é disparada a cada edição que deixa o prêmio nessa condição —
+  // por isso a idempotencyKey inclui o timestamp, não deduplica por dia.
+  if (
+    parsed.data.ativo &&
+    parsed.data.estoque !== undefined &&
+    parsed.data.estoque <= parsed.data.estoque_minimo
+  ) {
+    await dispararEvento(
+      "premio.estoque_baixo",
+      { id, nome: parsed.data.nome, estoque: parsed.data.estoque, estoque_minimo: parsed.data.estoque_minimo },
+      `premio-estoque-baixo-${id}-${Date.now()}`,
+    );
   }
 
   revalidatePath("/admin/premios");

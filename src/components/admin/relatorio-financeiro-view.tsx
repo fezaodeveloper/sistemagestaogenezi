@@ -62,13 +62,11 @@ const pdfStyles = StyleSheet.create({
 
 function RelatorioFinanceiroDocument({
   dados,
-  ano,
-  mes,
+  subtitulo,
   geradoEm,
 }: {
   dados: RelatorioFinanceiro;
-  ano: number;
-  mes: number;
+  subtitulo: string;
   geradoEm: string;
 }) {
   return (
@@ -76,9 +74,7 @@ function RelatorioFinanceiroDocument({
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
           <Text style={pdfStyles.title}>GÊNEZI — Relatório Financeiro</Text>
-          <Text style={pdfStyles.subtitle}>
-            {NOMES_MES[mes - 1]} de {ano}
-          </Text>
+          <Text style={pdfStyles.subtitle}>{subtitulo}</Text>
           <Text style={pdfStyles.meta}>Gerado em {geradoEm}</Text>
         </View>
 
@@ -150,7 +146,10 @@ export function RelatorioFinanceiroView() {
   const hoje = new Date();
   const mesAnoAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
 
+  const [modoFiltro, setModoFiltro] = useState<"mes" | "periodo">("mes");
   const [mesAno, setMesAno] = useState(mesAnoAtual);
+  const [periodoInicio, setPeriodoInicio] = useState("");
+  const [periodoFim, setPeriodoFim] = useState("");
   const [dados, setDados] = useState<RelatorioFinanceiro | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -159,8 +158,35 @@ export function RelatorioFinanceiroView() {
 
   const [anoSelecionado, mesSelecionado] = mesAno.split("-").map(Number);
 
+  // Usado no PDF/Excel — reflete o modo ativo no momento em que o relatório
+  // foi gerado (o admin pode trocar mês/período depois de gerar, sem que
+  // isso reescreva um relatório já exportado).
+  const [periodoGerado, setPeriodoGerado] = useState<{ inicio: string; fim: string } | null>(null);
+
+  const subtitulo = periodoGerado
+    ? `${formatDataBRSimples(periodoGerado.inicio)} a ${formatDataBRSimples(periodoGerado.fim)}`
+    : `${NOMES_MES[mesSelecionado - 1]} de ${anoSelecionado}`;
+
   function handleGerar() {
     setError(null);
+    if (modoFiltro === "periodo") {
+      if (!periodoInicio || !periodoFim) {
+        setError("Informe o período.");
+        return;
+      }
+      startTransition(async () => {
+        const resultado = await getRelatorioFinanceiro(anoSelecionado, mesSelecionado, periodoInicio, periodoFim);
+        if ("error" in resultado) {
+          setError(resultado.error);
+          setDados(null);
+          return;
+        }
+        setPeriodoGerado({ inicio: periodoInicio, fim: periodoFim });
+        setDados(resultado.data);
+      });
+      return;
+    }
+
     if (!mesAno) {
       setError("Selecione o mês/ano.");
       return;
@@ -172,6 +198,7 @@ export function RelatorioFinanceiroView() {
         setDados(null);
         return;
       }
+      setPeriodoGerado(null);
       setDados(resultado.data);
     });
   }
@@ -183,12 +210,7 @@ export function RelatorioFinanceiroView() {
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
       const blob = await pdf(
-        <RelatorioFinanceiroDocument
-          dados={dados}
-          ano={anoSelecionado}
-          mes={mesSelecionado}
-          geradoEm={geradoEm}
-        />,
+        <RelatorioFinanceiroDocument dados={dados} subtitulo={subtitulo} geradoEm={geradoEm} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
@@ -240,7 +262,10 @@ export function RelatorioFinanceiroView() {
       XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
       XLSX.utils.book_append_sheet(wb, wsParcelas, "Parcelas");
       XLSX.utils.book_append_sheet(wb, wsGastos, "Gastos");
-      XLSX.writeFile(wb, `relatorio-financeiro-${String(mesSelecionado).padStart(2, "0")}-${anoSelecionado}.xlsx`);
+      const sufixoArquivo = periodoGerado
+        ? `${periodoGerado.inicio}-a-${periodoGerado.fim}`
+        : `${String(mesSelecionado).padStart(2, "0")}-${anoSelecionado}`;
+      XLSX.writeFile(wb, `relatorio-financeiro-${sufixoArquivo}.xlsx`);
     } finally {
       setExportandoExcel(false);
     }
@@ -249,28 +274,77 @@ export function RelatorioFinanceiroView() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="mes_ano">Mês/Ano</Label>
-            <Input
-              id="mes_ano"
-              type="month"
-              value={mesAno}
-              onChange={(e) => setMesAno(e.target.value)}
-              className="w-44"
-            />
+        <CardContent className="flex flex-col gap-3 py-4">
+          <div className="flex w-fit items-center gap-1 rounded-md border p-0.5">
+            <Button
+              type="button"
+              variant={modoFiltro === "mes" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setModoFiltro("mes")}
+            >
+              Por mês
+            </Button>
+            <Button
+              type="button"
+              variant={modoFiltro === "periodo" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setModoFiltro("periodo")}
+            >
+              Por período
+            </Button>
           </div>
-          <Button onClick={handleGerar} disabled={isPending}>
-            {isPending ? "Gerando..." : "Gerar Relatório"}
-          </Button>
-          <Button variant="outline" onClick={handleExportarPdf} disabled={!dados || gerandoPdf}>
-            <Printer />
-            {gerandoPdf ? "Gerando PDF..." : "Exportar PDF"}
-          </Button>
-          <Button variant="outline" onClick={handleExportarExcel} disabled={!dados || exportandoExcel}>
-            <FileSpreadsheet />
-            {exportandoExcel ? "Exportando..." : "Exportar Excel"}
-          </Button>
+
+          <div className="flex flex-wrap items-end gap-3">
+            {modoFiltro === "mes" ? (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="mes_ano">Mês/Ano</Label>
+                <Input
+                  id="mes_ano"
+                  type="month"
+                  value={mesAno}
+                  onChange={(e) => setMesAno(e.target.value)}
+                  className="w-44"
+                />
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="periodo_inicio_relatorio">De:</Label>
+                  <Input
+                    id="periodo_inicio_relatorio"
+                    type="date"
+                    value={periodoInicio}
+                    onChange={(e) => setPeriodoInicio(e.target.value)}
+                    className="w-40"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="periodo_fim_relatorio">Até:</Label>
+                  <Input
+                    id="periodo_fim_relatorio"
+                    type="date"
+                    value={periodoFim}
+                    onChange={(e) => setPeriodoFim(e.target.value)}
+                    className="w-40"
+                  />
+                </div>
+              </>
+            )}
+            <Button
+              onClick={handleGerar}
+              disabled={isPending || (modoFiltro === "periodo" && (!periodoInicio || !periodoFim))}
+            >
+              {isPending ? "Gerando..." : "Gerar Relatório"}
+            </Button>
+            <Button variant="outline" onClick={handleExportarPdf} disabled={!dados || gerandoPdf}>
+              <Printer />
+              {gerandoPdf ? "Gerando PDF..." : "Exportar PDF"}
+            </Button>
+            <Button variant="outline" onClick={handleExportarExcel} disabled={!dados || exportandoExcel}>
+              <FileSpreadsheet />
+              {exportandoExcel ? "Exportando..." : "Exportar Excel"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

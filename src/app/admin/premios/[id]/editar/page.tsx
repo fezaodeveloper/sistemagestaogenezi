@@ -34,6 +34,7 @@ export default async function EditarPremioPage({ params }: { params: Promise<{ i
           descricao: premio.descricao ?? undefined,
           custo_creditos: premio.custo_creditos,
           estoque: premio.estoque ?? undefined,
+          estoque_minimo: premio.estoque_minimo ?? 5,
           ativo: premio.ativo,
         }}
         fotoAtualUrl={fotoAtualUrl}

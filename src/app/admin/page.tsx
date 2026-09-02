@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AlertasDia } from "@/components/admin/alertas-dia";
 import { AtalhosRapidos } from "@/components/admin/atalhos-rapidos";
 import { SaudeEscola } from "@/components/admin/saude-escola";
+import { DashboardCalendario } from "@/components/admin/dashboard-calendario";
 import { PendenciasResumo } from "@/components/admin/pendencias-resumo";
 import { DashboardKpisFinanceiros } from "@/components/admin/dashboard-kpis-financeiros";
 import { Card, CardContent } from "@/components/ui/card";
@@ -117,6 +118,7 @@ export default async function AdminDashboardPage() {
         <div className="flex flex-col gap-6">
           <AtalhosRapidos />
           <SaudeEscola />
+          <DashboardCalendario />
         </div>
       </div>
     </div>

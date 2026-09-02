@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calcularIndiceEvasao } from "@/lib/evasao/calculo";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { verificarFrequenciaTurmas } from "@/lib/automacoes/handlers/frequencia-turmas";
 
 const LIMIAR_ALERTA = 70;
 
@@ -87,5 +88,17 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ processados, alertas });
+  // Verificação de turmas com baixa frequência (MELHORIA 4) — best-effort
+  // de verdade: dispararEvento (chamado dentro de verificarFrequenciaTurmas)
+  // já nunca lança, mas o cálculo em si (queries) roda fora desse try/catch
+  // interno, então protege aqui pra não derrubar a resposta do índice de
+  // evasão (já processado com sucesso acima) se algo falhar.
+  let turmasNotificadas = 0;
+  try {
+    ({ turmasNotificadas } = await verificarFrequenciaTurmas());
+  } catch {
+    // Best-effort — o cálculo de evasão acima já concluiu normalmente.
+  }
+
+  return NextResponse.json({ processados, alertas, turmasNotificadas });
 }

@@ -161,13 +161,25 @@ function somarValores(rows: { valor: number }[] | null): number {
   return (rows ?? []).reduce((total, row) => total + Number(row.valor), 0);
 }
 
-export async function getRelatorioFinanceiro(ano: number, mes: number): Promise<RelatorioFinanceiroResult> {
+export async function getRelatorioFinanceiro(
+  ano: number,
+  mes: number,
+  dataInicio?: string,
+  dataFim?: string,
+): Promise<RelatorioFinanceiroResult> {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
-  const ultimoDia = new Date(ano, mes, 0).getDate();
-  const fim = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`;
+  let inicio: string;
+  let fim: string;
+  if (dataInicio && dataFim) {
+    inicio = dataInicio;
+    fim = dataFim;
+  } else {
+    inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    fim = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`;
+  }
 
   const [
     { data: parcelasPagasData },

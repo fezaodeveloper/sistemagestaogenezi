@@ -12,6 +12,8 @@ import {
   notificarCursoConcluido,
   notificarEvasaoRisco,
   notificarErroSistema,
+  notificarPremioEstoqueBaixo,
+  notificarBaixaFrequencia,
 } from "@/lib/automacoes/handlers/telegram";
 import { gerarResumoDiario } from "@/lib/automacoes/handlers/resumo-diario";
 import { gerarRelatorioSemanal } from "@/lib/automacoes/handlers/relatorio-semanal";
@@ -49,6 +51,12 @@ async function executarHandler(tipo: string, payload: EventoPayload): Promise<vo
       return;
     case "erro.sistema":
       await notificarErroSistema(payload);
+      return;
+    case "premio.estoque_baixo":
+      await notificarPremioEstoqueBaixo(payload);
+      return;
+    case "turma.baixa_frequencia":
+      await notificarBaixaFrequencia(payload);
       return;
     case "resumo.diario":
       await gerarResumoDiario();

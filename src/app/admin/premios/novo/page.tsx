@@ -11,7 +11,11 @@ export default async function NovoPremioPage() {
         <h1 className="text-2xl font-semibold">Novo prêmio</h1>
         <p className="text-muted-foreground text-sm">Cadastre um item físico resgatável.</p>
       </div>
-      <PremioForm action={createPremio} submitLabel="Criar prêmio" defaultValues={{ ativo: true }} />
+      <PremioForm
+        action={createPremio}
+        submitLabel="Criar prêmio"
+        defaultValues={{ ativo: true, estoque_minimo: 5 }}
+      />
     </div>
   );
 }

@@ -16,6 +16,19 @@ import {
 } from "@/components/ui/table";
 import { DeletePremioButton } from "@/components/admin/delete-premio-button";
 
+// "21/08/2026 às 14:32" — mesmo formato usado em outras telas do admin
+// (ver matriculas-table.tsx).
+function formatDataHora(isoString: string): string {
+  const date = new Date(isoString);
+  const data = date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const hora = date.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${data} às ${hora}`;
+}
+
 export default async function PremiosPage() {
   await requireRole("admin");
 
@@ -68,6 +81,7 @@ export default async function PremiosPage() {
                 <TableHead>Custo</TableHead>
                 <TableHead>Estoque</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Cadastrado em</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -82,6 +96,7 @@ export default async function PremiosPage() {
                       {premio.ativo ? "Ativo" : "Inativo"}
                     </Badge>
                   </TableCell>
+                  <TableCell>{formatDataHora(premio.created_at)}</TableCell>
                   <TableCell className="flex justify-end gap-1">
                     <Button
                       render={<Link href={`/admin/premios/${premio.id}/editar`} />}

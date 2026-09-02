@@ -23,6 +23,16 @@ export const premioFormSchema = z.object({
       .min(0, { error: "O estoque não pode ser negativo." })
       .optional(),
   ),
+  // Usado só pro alerta de estoque baixo (resumo diário + notificação
+  // imediata ao editar) — não trava nada por conta própria, então não faz
+  // sentido barrar o form se ficar em branco por engano; cai no padrão 5.
+  estoque_minimo: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? 5 : v),
+    z.coerce
+      .number()
+      .int({ error: "O estoque mínimo precisa ser um número inteiro." })
+      .min(0, { error: "O estoque mínimo não pode ser negativo." }),
+  ),
   ativo: z.boolean(),
 });
 
@@ -35,6 +45,7 @@ export type Premio = {
   foto_url: string | null;
   custo_creditos: number;
   estoque: number | null;
+  estoque_minimo: number | null;
   ativo: boolean;
   created_by: string;
   created_at: string;

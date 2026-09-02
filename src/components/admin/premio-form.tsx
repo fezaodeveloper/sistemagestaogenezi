@@ -14,6 +14,7 @@ type DefaultValues = {
   descricao?: string;
   custo_creditos?: number | string;
   estoque?: number | string;
+  estoque_minimo?: number | string;
   ativo?: boolean | string;
 };
 
@@ -109,6 +110,26 @@ export function PremioForm({
         {state?.errors?.estoque && (
           <p role="alert" className="text-destructive text-sm">
             {state.errors.estoque[0]}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="estoque_minimo">Estoque mínimo para alerta</Label>
+        <Input
+          id="estoque_minimo"
+          name="estoque_minimo"
+          type="number"
+          min={0}
+          step={1}
+          defaultValue={values?.estoque_minimo ?? 5}
+        />
+        <p className="text-muted-foreground text-xs">
+          Quando o estoque cair até esse valor (ou menos), a escola recebe um alerta no Telegram.
+        </p>
+        {state?.errors?.estoque_minimo && (
+          <p role="alert" className="text-destructive text-sm">
+            {state.errors.estoque_minimo[0]}
           </p>
         )}
       </div>

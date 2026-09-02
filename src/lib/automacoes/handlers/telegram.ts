@@ -131,6 +131,36 @@ export async function notificarEvasaoRisco(payload: Record<string, unknown>): Pr
   );
 }
 
+export async function notificarPremioEstoqueBaixo(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Estoque Baixo",
+    [
+      `🎁 Prêmio: ${texto(payload.nome)}`,
+      `📦 Estoque atual: ${texto(payload.estoque)} unidade(s)`,
+      `⚙️ Mínimo configurado: ${texto(payload.estoque_minimo)}`,
+    ],
+    "🎁",
+  );
+}
+
+export async function notificarBaixaFrequencia(payload: Record<string, unknown>): Promise<boolean> {
+  const alunosAbaixo = Array.isArray(payload.alunos_abaixo) ? payload.alunos_abaixo : [];
+  const linhasAlunos = alunosAbaixo.map((item) => {
+    const aluno = item as { nome: string; percentual: number };
+    return `- ${aluno.nome}: ${aluno.percentual}%`;
+  });
+  return enviarAlertaTelegram(
+    "Baixa Frequência",
+    [
+      `🏫 Turma: ${texto(payload.turma_nome)}`,
+      `📊 Média da turma: ${texto(payload.percentual)}%`,
+      `👥 Alunos abaixo de 75%:`,
+      ...linhasAlunos,
+    ],
+    "⚠️",
+  );
+}
+
 export async function notificarErroSistema(payload: Record<string, unknown>): Promise<boolean> {
   return enviarAlertaTelegram(
     "Erro no Sistema",
