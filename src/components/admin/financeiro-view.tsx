@@ -21,6 +21,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO, calcularTotalPaginas } from "@/lib/paginacao";
 import {
   Select,
   SelectContent,
@@ -516,26 +518,36 @@ export function FinanceiroView({
   const [modoFiltro, setModoFiltro] = useState<"mes" | "periodo">("mes");
   const [periodoInicio, setPeriodoInicio] = useState("");
   const [periodoFim, setPeriodoFim] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [limite, setLimite] = useState(LIMITE_PADRAO);
 
-  function irParaMes(novoAno: number, novoMes: number) {
+  // Sempre busca com o modo de filtro (mês ou período) e a página/limite
+  // atuais — centraliza a lógica que antes estava duplicada em
+  // irParaMes/recarregar/handleModoFiltro/handleAplicarPeriodo.
+  function buscar(novoAno: number, novoMes: number, novaPagina: number, novoLimite: number) {
     startTransition(async () => {
-      const novosDados = await getFinanceiroDados(novoAno, novoMes);
+      const novosDados =
+        modoFiltro === "periodo" && periodoInicio && periodoFim
+          ? await getFinanceiroDados(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite)
+          : await getFinanceiroDados(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite);
       setAno(novoAno);
       setMes(novoMes);
+      setPagina(novaPagina);
+      setLimite(novoLimite);
       setDados(novosDados);
       setSelecionadas(new Set());
     });
   }
 
+  function irParaMes(novoAno: number, novoMes: number) {
+    buscar(novoAno, novoMes, 1, limite);
+  }
+
+  // Recarrega a página atual (usado depois de criar/atualizar/cancelar uma
+  // parcela) — mantém o filtro e a página em que o admin está, só refaz a
+  // busca pros dados poderem ter mudado.
   function recarregar() {
-    startTransition(async () => {
-      const novosDados =
-        modoFiltro === "periodo" && periodoInicio && periodoFim
-          ? await getFinanceiroDados(ano, mes, periodoInicio, periodoFim)
-          : await getFinanceiroDados(ano, mes);
-      setDados(novosDados);
-      setSelecionadas(new Set());
-    });
+    buscar(ano, mes, pagina, limite);
   }
 
   function handleMesAnterior() {
@@ -550,7 +562,8 @@ export function FinanceiroView({
     setModoFiltro(modo);
     if (modo === "mes") {
       startTransition(async () => {
-        const novosDados = await getFinanceiroDados(ano, mes);
+        const novosDados = await getFinanceiroDados(ano, mes, undefined, undefined, 1, limite);
+        setPagina(1);
         setDados(novosDados);
         setSelecionadas(new Set());
       });
@@ -560,10 +573,15 @@ export function FinanceiroView({
   function handleAplicarPeriodo() {
     if (!periodoInicio || !periodoFim) return;
     startTransition(async () => {
-      const novosDados = await getFinanceiroDados(ano, mes, periodoInicio, periodoFim);
+      const novosDados = await getFinanceiroDados(ano, mes, periodoInicio, periodoFim, 1, limite);
+      setPagina(1);
       setDados(novosDados);
       setSelecionadas(new Set());
     });
+  }
+
+  function handlePaginar(novaPagina: number, novoLimite: number) {
+    buscar(ano, mes, novaPagina, novoLimite);
   }
 
   const parcelasFiltradas = useMemo(() => {
@@ -848,6 +866,14 @@ export function FinanceiroView({
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={pagina}
+        totalPaginas={calcularTotalPaginas(dados.totalParcelas, limite)}
+        totalRegistros={dados.totalParcelas}
+        limite={limite}
+        onNavigate={handlePaginar}
+      />
     </div>
   );
 }

@@ -16,25 +16,39 @@ export type PagamentoAvulsoComAluno = PagamentoAvulso & {
   alunos: { full_name: string | null } | null;
 };
 
+export type PagamentosAvulsosPaginados = { itens: PagamentoAvulsoComAluno[]; total: number };
+
 export async function getPagamentosAvulsos(
   ano: number,
   mes: number,
   dataInicio?: string,
   dataFim?: string,
-): Promise<PagamentoAvulsoComAluno[]> {
+  page = 1,
+  limit = 20,
+  query?: string,
+): Promise<PagamentosAvulsosPaginados> {
   await requireRole("admin");
   const supabase = await createClient();
   const { inicio, fim } =
     dataInicio && dataFim ? { inicio: dataInicio, fim: dataFim } : iniciosEFimDoMes(ano, mes);
+  const offset = (page - 1) * limit;
 
-  const { data } = await supabase
+  let consulta = supabase
     .from("pagamentos_avulsos")
-    .select("*, alunos(full_name)")
+    .select("*, alunos(full_name)", { count: "exact" })
     .gte("data_pagamento", inicio)
-    .lte("data_pagamento", fim)
-    .order("data_pagamento", { ascending: false });
+    .lte("data_pagamento", fim);
 
-  return (data as PagamentoAvulsoComAluno[] | null) ?? [];
+  const termo = query?.trim();
+  if (termo) {
+    consulta = consulta.ilike("descricao", `%${termo}%`);
+  }
+
+  const { data, count } = await consulta
+    .order("data_pagamento", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  return { itens: (data as PagamentoAvulsoComAluno[] | null) ?? [], total: count ?? 0 };
 }
 
 export type AlunoOpcao = { id: string; full_name: string | null };
@@ -81,6 +95,65 @@ export async function criarPagamentoAvulso(formData: FormData): Promise<Pagament
 
   if (error) {
     return { error: "Não foi possível registrar o pagamento. Tente novamente." };
+  }
+
+  revalidatePath("/admin/financeiro/avulsos");
+  return { success: true };
+}
+
+export async function atualizarPagamentoAvulso(
+  id: string,
+  formData: FormData,
+): Promise<PagamentoAvulsoActionResult> {
+  await requireRole("admin");
+
+  const alunoIdRaw = formData.get("aluno_id");
+
+  const parsed = pagamentoAvulsoFormSchema.safeParse({
+    descricao: formData.get("descricao"),
+    valor: Number(formData.get("valor")),
+    data_pagamento: formData.get("data_pagamento"),
+    categoria_id: formData.get("categoria_id"),
+    forma_pagamento: formData.get("forma_pagamento") || null,
+    aluno_id: alunoIdRaw || null,
+    observacoes: formData.get("observacoes") || undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pagamentos_avulsos")
+    .update({
+      descricao: data.descricao,
+      valor: data.valor,
+      data_pagamento: data.data_pagamento,
+      categoria_id: data.categoria_id,
+      forma_pagamento: data.forma_pagamento,
+      aluno_id: data.aluno_id ?? null,
+      observacoes: data.observacoes ?? null,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações. Tente novamente." };
+  }
+
+  revalidatePath("/admin/financeiro/avulsos");
+  return { success: true };
+}
+
+export async function excluirPagamentoAvulso(id: string): Promise<PagamentoAvulsoActionResult> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("pagamentos_avulsos").delete().eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível excluir o pagamento. Tente novamente." };
   }
 
   revalidatePath("/admin/financeiro/avulsos");

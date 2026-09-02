@@ -10,7 +10,7 @@ export default async function AvulsosPage() {
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth() + 1;
 
-  const [pagamentos, alunos, categorias] = await Promise.all([
+  const [{ itens: pagamentos, total: totalPagamentos }, alunos, categorias] = await Promise.all([
     getPagamentosAvulsos(ano, mes),
     getAlunosParaPagamentoAvulso(),
     getCategorias("categorias_avulsos"),
@@ -26,6 +26,7 @@ export default async function AvulsosPage() {
       </div>
       <AvulsosView
         pagamentosIniciais={pagamentos}
+        totalInicial={totalPagamentos}
         anoInicial={ano}
         mesInicial={mes}
         alunos={alunos}

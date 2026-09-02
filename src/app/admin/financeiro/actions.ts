@@ -35,6 +35,7 @@ export type FinanceiroKpis = {
 export type FinanceiroDados = {
   kpis: FinanceiroKpis;
   parcelas: ParcelaComRelacoes[];
+  totalParcelas: number;
 };
 
 function iniciosEFimDoMes(ano: number, mes: number) {
@@ -53,35 +54,46 @@ export async function getFinanceiroDados(
   mes: number,
   dataInicio?: string,
   dataFim?: string,
+  page = 1,
+  limit = 20,
 ): Promise<FinanceiroDados> {
   await requireRole("admin");
   const supabase = await createClient();
   const { inicio, fim } =
     dataInicio && dataFim ? { inicio: dataInicio, fim: dataFim } : iniciosEFimDoMes(ano, mes);
+  const offset = (page - 1) * limit;
 
-  const [{ data: parcelasData }, { data: receberData }, { data: recebidoData }, { data: atrasadoData }] =
-    await Promise.all([
-      supabase
-        .from("parcelas")
-        .select(
-          "*, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, asaas_installment_id, turmas(nome, cursos(nome)))",
-        )
-        .gte("data_vencimento", inicio)
-        .lte("data_vencimento", fim)
-        .order("data_vencimento"),
-      supabase
-        .from("parcelas")
-        .select("valor")
-        .in("status", ["pendente", "atrasado"])
-        .lte("data_vencimento", fim),
-      supabase
-        .from("parcelas")
-        .select("valor")
-        .eq("status", "pago")
-        .gte("data_pagamento", inicio)
-        .lte("data_pagamento", fim),
-      supabase.from("parcelas").select("valor").eq("status", "atrasado"),
-    ]);
+  const [
+    { data: parcelasData, count: totalParcelas },
+    { data: receberData },
+    { data: recebidoData },
+    { data: atrasadoData },
+  ] = await Promise.all([
+    supabase
+      .from("parcelas")
+      .select(
+        "*, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, asaas_installment_id, turmas(nome, cursos(nome)))",
+        { count: "exact" },
+      )
+      .gte("data_vencimento", inicio)
+      .lte("data_vencimento", fim)
+      .order("data_vencimento")
+      .range(offset, offset + limit - 1),
+    // KPIs sempre olham o mês/período inteiro, nunca só a página atual —
+    // por isso essas 3 queries abaixo continuam sem .range().
+    supabase
+      .from("parcelas")
+      .select("valor")
+      .in("status", ["pendente", "atrasado"])
+      .lte("data_vencimento", fim),
+    supabase
+      .from("parcelas")
+      .select("valor")
+      .eq("status", "pago")
+      .gte("data_pagamento", inicio)
+      .lte("data_pagamento", fim),
+    supabase.from("parcelas").select("valor").eq("status", "atrasado"),
+  ]);
 
   return {
     kpis: {
@@ -91,6 +103,7 @@ export async function getFinanceiroDados(
       countAtrasado: (atrasadoData ?? []).length,
     },
     parcelas: (parcelasData as ParcelaComRelacoes[] | null) ?? [],
+    totalParcelas: totalParcelas ?? 0,
   };
 }
 

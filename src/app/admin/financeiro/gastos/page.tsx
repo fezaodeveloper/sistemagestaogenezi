@@ -10,7 +10,7 @@ export default async function GastosPage() {
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth() + 1;
 
-  const [gastos, categorias] = await Promise.all([
+  const [{ itens: gastos, total: totalGastos }, categorias] = await Promise.all([
     getGastos(ano, mes),
     getCategorias("categorias_gastos"),
   ]);
@@ -21,7 +21,13 @@ export default async function GastosPage() {
         <h1 className="text-2xl font-semibold">Gastos</h1>
         <p className="text-muted-foreground text-sm">Despesas da escola por categoria e mês.</p>
       </div>
-      <GastosView gastosIniciais={gastos} anoInicial={ano} mesInicial={mes} categorias={categorias} />
+      <GastosView
+        gastosIniciais={gastos}
+        totalInicial={totalGastos}
+        anoInicial={ano}
+        mesInicial={mes}
+        categorias={categorias}
+      />
     </div>
   );
 }

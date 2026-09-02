@@ -1,5 +1,6 @@
 "use client";
 
+import type * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -71,6 +72,43 @@ function construirHref(
   return query ? `${baseUrl}?${query}` : baseUrl;
 }
 
+// Fora de Paginacao (não recriado a cada render) — precisa por isso de
+// baseUrl/searchParams/onNavigate como props explícitas, em vez de ler do
+// closure do componente pai.
+function PaginaBotao({
+  pagina,
+  limite,
+  baseUrl,
+  searchParams,
+  onNavigate,
+  children,
+  ...props
+}: {
+  pagina: number;
+  limite: number;
+  baseUrl?: string;
+  searchParams: Record<string, string>;
+  onNavigate?: (pagina: number, limite: number) => void;
+  children: React.ReactNode;
+} & Omit<React.ComponentProps<typeof Button>, "render" | "nativeButton" | "onClick">) {
+  if (onNavigate) {
+    return (
+      <Button type="button" onClick={() => onNavigate(pagina, limite)} {...props}>
+        {children}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      render={<Link href={construirHref(baseUrl!, searchParams, pagina, limite)} />}
+      nativeButton={false}
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+}
+
 export function Paginacao({
   paginaAtual,
   totalPaginas,
@@ -78,13 +116,26 @@ export function Paginacao({
   limite,
   baseUrl,
   searchParams = {},
+  onNavigate,
 }: {
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
-  baseUrl: string;
+  // baseUrl é obrigatório no modo padrão (navegação via URL/Link, usado por
+  // alunos/matrículas/cursos/turmas/leads/certificados/automações — telas
+  // com page.tsx lendo searchParams). Quando onNavigate é passado (telas
+  // como financeiro/gastos/avulsos, que buscam dados via Server Action a
+  // partir de estado local em vez de searchParams), baseUrl não é usado —
+  // por isso opcional aqui, mas continua exigido em tempo de execução pelo
+  // modo padrão (ver PaginaBotao abaixo).
+  baseUrl?: string;
   searchParams?: Record<string, string>;
+  // Modo alternativo: em vez de navegar (Link/router.push), chama esse
+  // callback com (pagina, limite) — pro caller buscar a página nova via
+  // Server Action e atualizar seu próprio estado. Não quebra nenhum uso
+  // existente: sem essa prop, o componente continua 100% baseado em URL.
+  onNavigate?: (pagina: number, limite: number) => void;
 }) {
   const router = useRouter();
 
@@ -103,16 +154,19 @@ export function Paginacao({
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
-          <Button
-            render={<Link href={construirHref(baseUrl, searchParams, paginaAtual - 1, limite)} />}
-            nativeButton={false}
+          <PaginaBotao
+            pagina={paginaAtual - 1}
+            limite={limite}
+            baseUrl={baseUrl}
+            searchParams={searchParams}
+            onNavigate={onNavigate}
             variant="outline"
             size="sm"
             disabled={paginaAtual <= 1}
           >
             <ChevronLeft />
             Anterior
-          </Button>
+          </PaginaBotao>
 
           {paginasVisiveis.map((item, indice) =>
             item === RETICENCIAS ? (
@@ -120,29 +174,35 @@ export function Paginacao({
                 {RETICENCIAS}
               </span>
             ) : (
-              <Button
+              <PaginaBotao
                 key={item}
-                render={<Link href={construirHref(baseUrl, searchParams, item, limite)} />}
-                nativeButton={false}
+                pagina={item}
+                limite={limite}
+                baseUrl={baseUrl}
+                searchParams={searchParams}
+                onNavigate={onNavigate}
                 variant={item === paginaAtual ? "default" : "outline"}
                 size="sm"
                 className="w-9"
               >
                 {item}
-              </Button>
+              </PaginaBotao>
             ),
           )}
 
-          <Button
-            render={<Link href={construirHref(baseUrl, searchParams, paginaAtual + 1, limite)} />}
-            nativeButton={false}
+          <PaginaBotao
+            pagina={paginaAtual + 1}
+            limite={limite}
+            baseUrl={baseUrl}
+            searchParams={searchParams}
+            onNavigate={onNavigate}
             variant="outline"
             size="sm"
             disabled={paginaAtual >= totalPaginas}
           >
             Próximo
             <ChevronRight />
-          </Button>
+          </PaginaBotao>
         </div>
 
         <div className="flex items-center gap-2">
@@ -151,7 +211,11 @@ export function Paginacao({
             items={LIMITE_ITEMS}
             value={String(limite)}
             onValueChange={(value) => {
-              router.push(construirHref(baseUrl, searchParams, 1, Number(value)));
+              if (onNavigate) {
+                onNavigate(1, Number(value));
+                return;
+              }
+              router.push(construirHref(baseUrl!, searchParams, 1, Number(value)));
             }}
           >
             <SelectTrigger className="w-20">
