@@ -14,6 +14,7 @@ import {
   type MatriculaParaParcela,
   type ParcelaComRelacoes,
 } from "@/app/admin/financeiro/actions";
+import { WhatsappStubButton } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -381,6 +382,22 @@ function AcoesParcela({
           <Button variant="ghost" size="sm" onClick={handleGerarCobranca} disabled={isPending}>
             {isPending ? "Gerando..." : "Gerar cobrança"}
           </Button>
+        )}
+        {emAberto && parcela.asaas_invoice_url && (
+          <WhatsappStubButton
+            tipo="cobranca"
+            matriculaId={parcela.matricula_id}
+            label="📱 Enviar cobrança"
+            mensagem={`Integração com WhatsApp em breve. Quando ativa, enviará o link da fatura: ${parcela.asaas_invoice_url}`}
+          />
+        )}
+        {parcela.status === "pago" && (
+          <WhatsappStubButton
+            tipo="comprovante"
+            matriculaId={parcela.matricula_id}
+            label="📱 Comprovante"
+            mensagem="Integração com WhatsApp em breve. Quando ativa, enviará o comprovante de pagamento ao aluno."
+          />
         )}
         {parcela.asaas_invoice_url && (
           <Button

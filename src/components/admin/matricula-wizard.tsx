@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, formatTelefone } from "@/lib/alunos/schema";
 import { CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
@@ -33,11 +34,14 @@ import {
   MATRICULA_STATUS_LABELS,
   NUM_PARCELAS_OPTIONS,
   STATUS_INICIAL_MATRICULA,
+  TAXA_MATRICULA_FORMAS_PAGAMENTO,
+  TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS,
   type DescontoFormato,
   type DescontoTipo,
   type FormaPagamento,
   type Matricula,
   type MatriculaWizardInput,
+  type TaxaMatriculaFormaPagamento,
 } from "@/lib/matriculas/schema";
 import {
   buscarAlunosParaWizard,
@@ -235,6 +239,31 @@ export function MatriculaWizard() {
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(null);
   const [taxaCartaoInput, setTaxaCartaoInput] = useState("");
 
+  // Etapa 3 — Taxa de Matrícula (cobrada no ato, separada das parcelas
+  // mensais acima — ver TAREFA 2 do contexto "WhatsApp stub + taxa de
+  // matrícula").
+  const [cobrarTaxaMatricula, setCobrarTaxaMatricula] = useState(false);
+  const [taxaMatriculaValorInput, setTaxaMatriculaValorInput] = useState("");
+  const [taxaMatriculaDescontoTipo, setTaxaMatriculaDescontoTipo] = useState<"sem_desconto" | DescontoFormato>(
+    "sem_desconto",
+  );
+  const [taxaMatriculaDescontoValorInput, setTaxaMatriculaDescontoValorInput] = useState("");
+  const [taxaMatriculaFormaPagamento, setTaxaMatriculaFormaPagamento] =
+    useState<TaxaMatriculaFormaPagamento | null>(null);
+  const [taxaMatriculaPaga, setTaxaMatriculaPaga] = useState(false);
+
+  const taxaMatriculaValor = Number(taxaMatriculaValorInput.replace(",", ".")) || 0;
+  const taxaMatriculaDescontoValor = Number(taxaMatriculaDescontoValorInput.replace(",", ".")) || 0;
+
+  const taxaMatriculaFinal = useMemo(() => {
+    if (!cobrarTaxaMatricula) return null;
+    if (taxaMatriculaDescontoTipo === "sem_desconto") return taxaMatriculaValor;
+    if (taxaMatriculaDescontoTipo === "porcentagem") {
+      return Math.max(0, taxaMatriculaValor * (1 - taxaMatriculaDescontoValor / 100));
+    }
+    return Math.max(0, taxaMatriculaValor - taxaMatriculaDescontoValor);
+  }, [cobrarTaxaMatricula, taxaMatriculaValor, taxaMatriculaDescontoTipo, taxaMatriculaDescontoValor]);
+
   // Etapa 4 — Datas
   const [dataInicio, setDataInicio] = useState("");
   const [previsaoConclusao, setPrevisaoConclusao] = useState<string | null>(null);
@@ -326,6 +355,12 @@ export function MatriculaWizard() {
     setDataPrimeiraMensalidade("");
     setFormaPagamento(null);
     setTaxaCartaoInput("");
+    setCobrarTaxaMatricula(false);
+    setTaxaMatriculaValorInput("");
+    setTaxaMatriculaDescontoTipo("sem_desconto");
+    setTaxaMatriculaDescontoValorInput("");
+    setTaxaMatriculaFormaPagamento(null);
+    setTaxaMatriculaPaga(false);
     setDataInicio("");
     setPrevisaoConclusao(null);
     setApostilaEntregue(false);
@@ -361,6 +396,14 @@ export function MatriculaWizard() {
       kit_entregue: kitEntregue,
       observacoes: observacoes.trim() || undefined,
       status: statusInicial,
+      taxa_matricula: cobrarTaxaMatricula ? taxaMatriculaValor : null,
+      taxa_matricula_desconto_tipo:
+        cobrarTaxaMatricula && taxaMatriculaDescontoTipo !== "sem_desconto" ? taxaMatriculaDescontoTipo : null,
+      taxa_matricula_desconto_valor:
+        cobrarTaxaMatricula && taxaMatriculaDescontoTipo !== "sem_desconto" ? taxaMatriculaDescontoValor : null,
+      taxa_matricula_final: cobrarTaxaMatricula ? taxaMatriculaFinal : null,
+      taxa_matricula_forma_pagamento: cobrarTaxaMatricula ? taxaMatriculaFormaPagamento : null,
+      taxa_matricula_paga: cobrarTaxaMatricula ? taxaMatriculaPaga : false,
     };
 
     startTransition(async () => {
@@ -403,6 +446,9 @@ export function MatriculaWizard() {
             fardaEntregue,
             kitEntregue,
             observacoes,
+            taxaMatriculaFinal: cobrarTaxaMatricula ? taxaMatriculaFinal : null,
+            taxaMatriculaFormaPagamento: cobrarTaxaMatricula ? taxaMatriculaFormaPagamento : null,
+            taxaMatriculaPaga: cobrarTaxaMatricula ? taxaMatriculaPaga : false,
           }}
           geradoEm={geradoEm}
         />,
@@ -466,6 +512,38 @@ export function MatriculaWizard() {
               1ª mensalidade: {formatDataBR(dataPrimeiraMensalidade)}
             </p>
           </div>
+          {cobrarTaxaMatricula && (
+            <div>
+              <h3 className="mb-1 flex items-center gap-2 font-semibold">
+                Taxa de Matrícula
+                <Badge
+                  className={
+                    taxaMatriculaPaga
+                      ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                      : "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                  }
+                >
+                  {taxaMatriculaPaga ? "Paga" : "Pendente"}
+                </Badge>
+              </h3>
+              <p className="text-muted-foreground">Valor original: {formatValor(taxaMatriculaValor)}</p>
+              {taxaMatriculaDescontoTipo !== "sem_desconto" && (
+                <p className="text-muted-foreground">
+                  Desconto:{" "}
+                  {taxaMatriculaDescontoTipo === "porcentagem"
+                    ? `${taxaMatriculaDescontoValor}%`
+                    : formatValor(taxaMatriculaDescontoValor)}
+                </p>
+              )}
+              <p className="text-muted-foreground">Valor final: {formatValor(taxaMatriculaFinal)}</p>
+              <p className="text-muted-foreground">
+                Forma de pagamento:{" "}
+                {taxaMatriculaFormaPagamento
+                  ? TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS[taxaMatriculaFormaPagamento]
+                  : "—"}
+              </p>
+            </div>
+          )}
           <div>
             <h3 className="mb-1 font-semibold">Datas</h3>
             <p className="text-muted-foreground">Início: {formatDataBR(dataInicio)}</p>
@@ -800,6 +878,120 @@ export function MatriculaWizard() {
           <Label htmlFor="valor_final">Valor Final</Label>
           <Input id="valor_final" readOnly value={formatValor(valorFinal)} className="max-w-40" />
         </div>
+
+        <div className="flex flex-col gap-3 rounded-md border p-4">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="cobrar_taxa_matricula" className="font-normal">
+              Cobrar taxa de matrícula?
+            </Label>
+            <Switch
+              id="cobrar_taxa_matricula"
+              checked={cobrarTaxaMatricula}
+              onCheckedChange={setCobrarTaxaMatricula}
+            />
+          </div>
+
+          {cobrarTaxaMatricula && (
+            <div className="animate-in fade-in slide-in-from-top-2 flex flex-col gap-3 duration-300">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="taxa_matricula_valor">Valor da taxa</Label>
+                <Input
+                  id="taxa_matricula_valor"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={taxaMatriculaValorInput}
+                  onChange={(event) => setTaxaMatriculaValorInput(event.target.value)}
+                  className="max-w-40"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="taxa_matricula_desconto_tipo">Tipo de desconto</Label>
+                <Select
+                  items={{ sem_desconto: "Sem desconto", ...DESCONTO_FORMATO_LABELS }}
+                  value={taxaMatriculaDescontoTipo}
+                  onValueChange={(value) => {
+                    setTaxaMatriculaDescontoTipo(value as "sem_desconto" | DescontoFormato);
+                    if (value === "sem_desconto") setTaxaMatriculaDescontoValorInput("");
+                  }}
+                >
+                  <SelectTrigger id="taxa_matricula_desconto_tipo" className="w-64">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sem_desconto">Sem desconto</SelectItem>
+                    {DESCONTO_FORMATOS.map((formato) => (
+                      <SelectItem key={formato} value={formato}>
+                        {DESCONTO_FORMATO_LABELS[formato]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {taxaMatriculaDescontoTipo !== "sem_desconto" && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="taxa_matricula_desconto_valor">
+                    Desconto {taxaMatriculaDescontoTipo === "porcentagem" ? "(%)" : "(R$)"}
+                  </Label>
+                  <Input
+                    id="taxa_matricula_desconto_valor"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={taxaMatriculaDescontoValorInput}
+                    onChange={(event) => setTaxaMatriculaDescontoValorInput(event.target.value)}
+                    className="max-w-40"
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="taxa_matricula_valor_final">Valor final</Label>
+                <Input
+                  id="taxa_matricula_valor_final"
+                  readOnly
+                  value={formatValor(taxaMatriculaFinal)}
+                  className="max-w-40"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="taxa_matricula_forma_pagamento">Forma de pagamento</Label>
+                <Select
+                  items={TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS}
+                  value={taxaMatriculaFormaPagamento ?? undefined}
+                  onValueChange={(value) => setTaxaMatriculaFormaPagamento(value as TaxaMatriculaFormaPagamento)}
+                >
+                  <SelectTrigger id="taxa_matricula_forma_pagamento" className="w-64">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAXA_MATRICULA_FORMAS_PAGAMENTO.map((forma) => (
+                      <SelectItem key={forma} value={forma}>
+                        {TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS[forma]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="taxa_matricula_paga"
+                  checked={taxaMatriculaPaga}
+                  onCheckedChange={(checked) => setTaxaMatriculaPaga(checked === true)}
+                />
+                <Label htmlFor="taxa_matricula_paga" className="font-normal">
+                  Taxa já foi paga
+                </Label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t" />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">

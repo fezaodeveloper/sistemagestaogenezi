@@ -10,6 +10,7 @@ import {
   type MatriculaDetalhada,
 } from "@/app/admin/matriculas/actions";
 import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
+import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -208,6 +209,9 @@ export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada
             fardaEntregue: matriculaAtual.farda_entregue,
             kitEntregue: matriculaAtual.kit_entregue,
             observacoes: matriculaAtual.observacoes ?? "",
+            taxaMatriculaFinal: matriculaAtual.taxa_matricula_final,
+            taxaMatriculaFormaPagamento: matriculaAtual.taxa_matricula_forma_pagamento,
+            taxaMatriculaPaga: matriculaAtual.taxa_matricula_paga,
           }}
           geradoEm={geradoEm}
         />,
@@ -496,6 +500,7 @@ export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada
         </div>
 
         <div className="flex gap-2">
+          <WhatsappStubDropdown matriculaId={matriculaAtual.id} />
           <Button variant="outline" onClick={handleImprimirComprovante} disabled={gerandoPdf}>
             <Printer />
             {gerandoPdf ? "Gerando PDF..." : "Imprimir Comprovante"}

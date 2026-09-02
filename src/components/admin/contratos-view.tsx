@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { downloadContrato } from "@/app/admin/matriculas/actions";
+import { WhatsappStubButton } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -158,6 +159,12 @@ export function ContratosView({ contratos }: { contratos: ContratoListItem[] }) 
                 <TableCell>{formatDataHora(contrato.aceito_em)}</TableCell>
                 <TableCell className="flex justify-end gap-1">
                   <BaixarPdfButton matriculaId={contrato.matricula_id} />
+                  <WhatsappStubButton
+                    tipo="contrato"
+                    matriculaId={contrato.matricula_id}
+                    label="📱 Enviar contrato"
+                    disabled={contrato.status === "recusado"}
+                  />
                   <Button
                     render={<Link href={`/admin/matriculas/${contrato.matricula_id}`} />}
                     nativeButton={false}

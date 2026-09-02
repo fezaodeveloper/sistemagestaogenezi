@@ -177,6 +177,12 @@ export async function createMatricula(
       apostila_entregue: data.apostila_entregue,
       kit_entregue: data.kit_entregue,
       observacoes: data.observacoes ?? null,
+      taxa_matricula: data.taxa_matricula,
+      taxa_matricula_desconto_tipo: data.taxa_matricula_desconto_tipo,
+      taxa_matricula_desconto_valor: data.taxa_matricula_desconto_valor,
+      taxa_matricula_final: data.taxa_matricula_final,
+      taxa_matricula_forma_pagamento: data.taxa_matricula_forma_pagamento,
+      taxa_matricula_paga: data.taxa_matricula_paga,
     })
     .select()
     .single();
@@ -221,6 +227,40 @@ export async function createMatricula(
     );
   } catch {
     // Best-effort — a matrícula já foi criada com sucesso acima.
+  }
+
+  // Taxa de matrícula já paga no ato (TAREFA 2C) — gera automaticamente um
+  // registro em pagamentos_avulsos pra já entrar no financeiro, sem o
+  // admin precisar lançar manualmente. Best-effort, mesmo padrão dos blocos
+  // acima: nunca bloqueia a matrícula (já criada com sucesso).
+  if (data.taxa_matricula_paga && data.taxa_matricula_final !== null && data.taxa_matricula_final > 0) {
+    try {
+      const { data: detalhesTaxa } = await supabase
+        .from("matriculas")
+        .select("alunos(full_name), turmas(cursos(nome))")
+        .eq("id", matricula.id)
+        .single();
+
+      const infoTaxa = detalhesTaxa as unknown as {
+        alunos: { full_name: string | null } | null;
+        turmas: { cursos: { nome: string } | null } | null;
+      } | null;
+
+      const nomeAluno = infoTaxa?.alunos?.full_name ?? "—";
+      const nomeCurso = infoTaxa?.turmas?.cursos?.nome ?? "—";
+
+      await supabase.from("pagamentos_avulsos").insert({
+        descricao: `Taxa de matrícula - ${nomeAluno} - ${nomeCurso}`,
+        valor: data.taxa_matricula_final,
+        data_pagamento: new Date().toISOString().slice(0, 10),
+        tipo: "taxa",
+        forma_pagamento: data.taxa_matricula_forma_pagamento,
+        aluno_id: data.aluno_id,
+        observacoes: "Registrado automaticamente ao criar matrícula",
+      });
+    } catch {
+      // Best-effort — a matrícula já foi criada com sucesso acima.
+    }
   }
 
   // Parcelas geradas localmente (sem cobrança no Asaas) — o admin decide
@@ -396,4 +436,27 @@ export async function downloadContrato(matriculaId: string): Promise<DownloadCon
   }
 
   return { pdf: data.conteudo_pdf_base64 };
+}
+
+// ===== Botões WhatsApp — stub (5 melhorias: WhatsApp stub + taxa de matrícula) =====
+
+// "dados_acesso" não estava no exemplo de payload da tarefa
+// (que lista só 'contrato'|'comprovante'|'cobranca'), mas a MELHORIA 1
+// pede um terceiro botão "Dados de acesso" — adicionado como um 4º valor
+// de tipo, mesmo mecanismo de log.
+export type WhatsappStubTipo = "contrato" | "comprovante" | "cobranca" | "dados_acesso";
+
+// Nunca chama a API do WhatsApp de verdade — só registra a intenção via
+// dispararEvento, criando histórico em /admin/automacoes pra quando a
+// integração real (API Evolution) for ligada. Cada clique gera um evento
+// novo (idempotencyKey com timestamp): diferente de matricula.criada etc.,
+// aqui não faz sentido deduplicar — o admin pode clicar "Enviar contrato"
+// mais de uma vez de propósito (reenviar).
+export async function registrarWhatsappStub(tipo: WhatsappStubTipo, matriculaId: string): Promise<void> {
+  await requireRole("admin");
+  await dispararEvento(
+    "whatsapp.stub",
+    { tipo, matriculaId },
+    `whatsapp-stub-${tipo}-${matriculaId}-${Date.now()}`,
+  );
 }

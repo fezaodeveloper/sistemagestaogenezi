@@ -56,6 +56,13 @@ async function executarHandler(tipo: string, payload: EventoPayload): Promise<vo
     case "relatorio.semanal":
       await gerarRelatorioSemanal();
       return;
+    case "whatsapp.stub":
+      // Stub de verdade: os botões "Enviar via WhatsApp" (contrato,
+      // comprovante, cobrança, dados de acesso) ainda não chamam nenhuma
+      // API — só disparam esse evento pra registrar a intenção no log de
+      // automações, criando histórico pra quando a integração real (API
+      // Evolution) for ligada. Nada a processar aqui.
+      return;
     default:
       throw new Error(`Tipo de evento de automação desconhecido: ${tipo}`);
   }

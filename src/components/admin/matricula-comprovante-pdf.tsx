@@ -5,9 +5,11 @@ import { DIA_SEMANA_LABELS, type DIAS_SEMANA } from "@/lib/turmas/schema";
 import {
   DESCONTO_TIPO_LABELS,
   FORMA_PAGAMENTO_LABELS,
+  TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS,
   type DescontoFormato,
   type DescontoTipo,
   type FormaPagamento,
+  type TaxaMatriculaFormaPagamento,
 } from "@/lib/matriculas/schema";
 
 // Tipos estruturais mínimos que o comprovante precisa — deliberadamente não
@@ -46,6 +48,9 @@ export type ResumoMatricula = {
   fardaEntregue: boolean;
   kitEntregue: boolean;
   observacoes: string;
+  taxaMatriculaFinal?: number | null;
+  taxaMatriculaFormaPagamento?: TaxaMatriculaFormaPagamento | null;
+  taxaMatriculaPaga?: boolean;
 };
 
 function formatValor(valor: number | null): string {
@@ -156,6 +161,24 @@ export function MatriculaComprovantePdf({
           <LinhaPdf label="Forma de pagamento" value={FORMA_PAGAMENTO_LABELS[resumo.formaPagamento]} />
           <LinhaPdf label="1ª mensalidade" value={formatDataBR(resumo.dataPrimeiraMensalidade)} />
         </View>
+
+        {resumo.taxaMatriculaFinal !== null && resumo.taxaMatriculaFinal !== undefined && resumo.taxaMatriculaFinal > 0 && (
+          <View style={pdfStyles.section}>
+            <Text style={pdfStyles.sectionTitle}>Taxa de Matrícula</Text>
+            <LinhaPdf
+              label="Taxa de Matrícula"
+              value={`${formatValor(resumo.taxaMatriculaFinal)} (${resumo.taxaMatriculaPaga ? "Paga" : "Pendente"})`}
+            />
+            <LinhaPdf
+              label="Forma de pagamento"
+              value={
+                resumo.taxaMatriculaFormaPagamento
+                  ? TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS[resumo.taxaMatriculaFormaPagamento]
+                  : "—"
+              }
+            />
+          </View>
+        )}
 
         <View style={pdfStyles.section}>
           <Text style={pdfStyles.sectionTitle}>Datas</Text>

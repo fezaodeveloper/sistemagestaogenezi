@@ -38,6 +38,7 @@ export const EVENTO_AUTOMACAO_TIPOS = [
   "erro.sistema",
   "resumo.diario",
   "relatorio.semanal",
+  "whatsapp.stub",
 ] as const;
 export type EventoAutomacaoTipo = (typeof EVENTO_AUTOMACAO_TIPOS)[number];
 

@@ -78,6 +78,20 @@ export const FORMA_PAGAMENTO_LABELS: Record<FormaPagamento, string> = {
 
 export const NUM_PARCELAS_OPTIONS = Array.from({ length: 12 }, (_, indice) => indice + 1);
 
+// Forma de pagamento da taxa de matrícula (cobrada no ato, separada das
+// parcelas mensais) — subconjunto de FORMAS_PAGAMENTO_AVULSO
+// (lib/financeiro/schema.ts) sem "boleto", que não faz sentido pra um
+// pagamento no ato da matrícula. Valores batem com o CHECK constraint de
+// matriculas.taxa_matricula_forma_pagamento (20260902200000_taxa_matricula.sql).
+export const TAXA_MATRICULA_FORMAS_PAGAMENTO = ["dinheiro", "pix", "cartao", "outro"] as const;
+export type TaxaMatriculaFormaPagamento = (typeof TAXA_MATRICULA_FORMAS_PAGAMENTO)[number];
+export const TAXA_MATRICULA_FORMA_PAGAMENTO_LABELS: Record<TaxaMatriculaFormaPagamento, string> = {
+  dinheiro: "Dinheiro",
+  pix: "Pix",
+  cartao: "Cartão",
+  outro: "Outro",
+};
+
 // Status permitido na criação pelo wizard — "concluida"/"transferida" só
 // fazem sentido depois, via edição/gestão do ciclo de vida da matrícula.
 export const STATUS_INICIAL_MATRICULA = ["ativa", "inativa"] as const;
@@ -108,6 +122,14 @@ export const matriculaWizardSchema = z.object({
     .max(2000, { error: "Observações muito longas." })
     .optional(),
   status: z.enum(STATUS_INICIAL_MATRICULA, { error: "Selecione o status inicial." }),
+  // Taxa de matrícula (opcional) — cobrada no ato, separada das parcelas
+  // mensais (ver TAREFA 2 em matricula-wizard.tsx, Etapa 3).
+  taxa_matricula: z.number().min(0).nullable(),
+  taxa_matricula_desconto_tipo: z.enum(DESCONTO_FORMATOS).nullable(),
+  taxa_matricula_desconto_valor: z.number().min(0).nullable(),
+  taxa_matricula_final: z.number().min(0).nullable(),
+  taxa_matricula_forma_pagamento: z.enum(TAXA_MATRICULA_FORMAS_PAGAMENTO).nullable(),
+  taxa_matricula_paga: z.boolean(),
 });
 
 export type MatriculaWizardInput = z.infer<typeof matriculaWizardSchema>;
@@ -155,6 +177,12 @@ export type Matricula = {
   apostila_entregue: boolean;
   kit_entregue: boolean;
   observacoes: string | null;
+  taxa_matricula: number | null;
+  taxa_matricula_desconto_tipo: DescontoFormato | null;
+  taxa_matricula_desconto_valor: number | null;
+  taxa_matricula_final: number | null;
+  taxa_matricula_forma_pagamento: TaxaMatriculaFormaPagamento | null;
+  taxa_matricula_paga: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;

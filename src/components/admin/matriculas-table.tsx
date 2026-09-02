@@ -7,6 +7,7 @@ import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { updateMatriculaStatus } from "@/app/admin/alunos/matriculas-actions";
 import { alterarStatusEmLote, downloadContrato } from "@/app/admin/matriculas/actions";
+import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -646,6 +647,7 @@ export function MatriculasTable({
                     Ver
                   </Button>
                   <ContratoButton matricula={matricula} />
+                  <WhatsappStubDropdown matriculaId={matricula.id} />
                   <CancelarMatriculaButton matricula={matricula} />
                 </TableCell>
               </TableRow>
