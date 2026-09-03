@@ -14,59 +14,57 @@ type NavItem = { href: string; label: string; icon: React.ElementType; badge?: "
 type NavGroup = { id: string; label: string; icon: React.ElementType; items: NavItem[] };
 
 const GROUPS: NavGroup[] = [
-  { id: "geral", label: "Vis\u00e3o geral", icon: LayoutDashboard, items: [
+  { id: "visao-geral", label: "Visão Geral", icon: LayoutDashboard, items: [
     { href: "/admin", label: "Painel", icon: LayoutDashboard },
-    { href: "/admin/pendencias", label: "Pend\u00eancias", icon: AlertTriangle, badge: "pendencias" },
+    { href: "/admin/pendencias", label: "Pendências", icon: AlertTriangle, badge: "pendencias" },
+    { href: "/admin/relatorios/academico", label: "Relatórios Acadêmicos", icon: GraduationCap },
+    { href: "/admin/relatorios/financeiro", label: "Relatórios Financeiros", icon: BarChart2 },
+  ]},
+  { id: "matriculas", label: "Matrículas", icon: ClipboardCheck, items: [
+    { href: "/admin/alunos", label: "Alunos", icon: IdCard },
+    { href: "/admin/matriculas/nova", label: "Nova Matrícula", icon: PlusCircle },
+    { href: "/admin/matriculas", label: "Lista de Matrículas", icon: ClipboardList },
+    { href: "/admin/turmas", label: "Turmas", icon: Users },
+    { href: "/admin/contratos", label: "Contratos", icon: FileSignature },
+  ]},
+  { id: "academico", label: "Acadêmico", icon: GraduationCap, items: [
+    { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
+    { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
+    { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
+    { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },
+  ]},
+  { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
+    { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },
+    { href: "/admin/financeiro/avulsos", label: "Pagamentos Avulsos", icon: Receipt },
+    { href: "/admin/financeiro/gastos", label: "Gastos", icon: TrendingDown },
+    { href: "/admin/financeiro/categorias", label: "Categorias", icon: Tags },
   ]},
   { id: "comercial", label: "Comercial", icon: Target, items: [
     { href: "/admin/leads", label: "Leads / CRM", icon: UserPlus },
   ]},
-  { id: "matriculas", label: "Matrículas", icon: ClipboardCheck, items: [
-    { href: "/admin/matriculas", label: "Lista de matrículas", icon: ClipboardList },
-    { href: "/admin/matriculas/nova", label: "Nova matrícula", icon: PlusCircle },
-    { href: "/admin/contratos", label: "Contratos", icon: FileSignature },
-  ]},
-  { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
-    { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },
-    { href: "/admin/financeiro/avulsos", label: "Pagamentos avulsos", icon: Receipt },
-    { href: "/admin/financeiro/gastos", label: "Gastos", icon: TrendingDown },
-    { href: "/admin/financeiro/categorias", label: "Categorias", icon: Tags },
-  ]},
-  { id: "automacoes-motor", label: "Log de Automa\u00e7\u00f5es", icon: Zap, items: [
-    { href: "/admin/automacoes", label: "Log de Automa\u00e7\u00f5es", icon: Zap },
-  ]},
-  { id: "relatorios", label: "Relat\u00f3rios", icon: BarChart2, items: [
-    { href: "/admin/relatorios/academico", label: "Relat\u00f3rios Acad\u00eamicos", icon: GraduationCap },
-    { href: "/admin/relatorios/financeiro", label: "Relat\u00f3rios Financeiros", icon: BarChart2 },
-  ]},
-  { id: "academico", label: "Acad\u00eamico", icon: GraduationCap, items: [
-    { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
-    { href: "/admin/turmas", label: "Turmas", icon: Users },
-    { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
-    { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
-    { href: "/admin/alunos", label: "Alunos", icon: IdCard },
-    { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },
-    { href: "/admin/contrato", label: "Template de Contrato", icon: FileText },
-  ]},
   { id: "engajamento", label: "Engajamento", icon: Gift, items: [
-    { href: "/admin/premios", label: "Pr\u00eamios", icon: Gift },
+    { href: "/admin/premios", label: "Prêmios", icon: Gift },
     { href: "/admin/resgates", label: "Resgates", icon: Award },
     { href: "/admin/chat", label: "Chat", icon: MessagesSquare, badge: "chat" },
   ]},
-  { id: "automacoes", label: "Automa\u00e7\u00f5es", icon: MessageCircle, items: [
-    { href: "/admin/mensagens", label: "Mensagens Autom\u00e1ticas", icon: MessageCircle },
+  { id: "relatorios", label: "Relatórios", icon: BarChart2, items: [
+    { href: "/admin/relatorios/academico", label: "Relatórios Acadêmicos", icon: GraduationCap },
+    { href: "/admin/relatorios/financeiro", label: "Relatórios Financeiros", icon: BarChart2 },
   ]},
   { id: "sistema", label: "Sistema", icon: Settings, items: [
-    { href: "/admin/estoque", label: "Estoque", icon: Package },
-    { href: "/admin/manutencao", label: "Manuten\u00e7\u00e3o", icon: Wrench },
+    { href: "/admin/automacoes", label: "Log de Automações", icon: Zap },
+    { href: "/admin/mensagens", label: "Automações", icon: MessageCircle },
+    { href: "/admin/contrato", label: "Template de Contrato", icon: FileText },
     { href: "/admin/treinamentos", label: "Treinamentos", icon: PlayCircle },
-    { href: "/admin/configuracoes", label: "Configura\u00e7\u00f5es", icon: Settings },
-    { href: "/admin/api", label: "API & Integra\u00e7\u00f5es", icon: Code2 },
+    { href: "/admin/api", label: "API & Integrações", icon: Code2 },
+    { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
+    { href: "/admin/estoque", label: "Estoque", icon: Package },
+    { href: "/admin/manutencao", label: "Manutenção", icon: Wrench },
   ]},
 ];
 
 const STORAGE_KEY = "genezi-admin-nav-open";
-const DEFAULT_OPEN = ["geral", "comercial", "academico"];
+const DEFAULT_OPEN = ["visao-geral", "comercial", "academico"];
 
 function isItemActive(pathname: string, href: string) {
   if (href === "/admin") return pathname === "/admin";
