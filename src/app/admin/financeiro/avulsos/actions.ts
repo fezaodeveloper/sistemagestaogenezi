@@ -51,12 +51,34 @@ export async function getPagamentosAvulsos(
   return { itens: (data as PagamentoAvulsoComAluno[] | null) ?? [], total: count ?? 0 };
 }
 
-export type AlunoOpcao = { id: string; full_name: string | null };
+export type AlunoOpcao = { id: string; full_name: string | null; email?: string };
 
-export async function getAlunosParaPagamentoAvulso(): Promise<AlunoOpcao[]> {
+// Busca sob demanda (Etapa "Aluno vinculado" do NovoPagamentoDialog/
+// EditarPagamentoDialog) — substituiu getAlunosParaPagamentoAvulso(), que
+// carregava todos os alunos de uma vez só. Mesmo padrão de
+// buscarAlunosParaWizard (src/app/admin/matriculas/actions.ts): só dispara
+// com 2+ caracteres.
+export async function buscarAlunosParaAvulso(query: string): Promise<AlunoOpcao[]> {
   await requireRole("admin");
+
+  const termo = query.trim();
+  if (termo.length < 2) return [];
+
+  // PostgREST usa vírgula e parênteses como delimitadores da sintaxe do
+  // próprio .or() — removidos do termo antes de montar o filtro pra não
+  // quebrá-lo.
+  const termoSeguro = termo.replace(/[,()]/g, "").trim();
+  if (!termoSeguro) return [];
+  const termoLike = `%${termoSeguro}%`;
+
   const supabase = await createClient();
-  const { data } = await supabase.from("alunos").select("id, full_name").order("full_name");
+  const { data } = await supabase
+    .from("alunos")
+    .select("id, full_name, email")
+    .or(`full_name.ilike.${termoLike},email.ilike.${termoLike}`)
+    .order("full_name")
+    .limit(10);
+
   return (data as AlunoOpcao[] | null) ?? [];
 }
 

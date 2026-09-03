@@ -533,6 +533,10 @@ export function GastosView({
     () => gastosFiltrados.reduce((soma, gasto) => soma + Number(gasto.valor), 0),
     [gastosFiltrados],
   );
+  const maiorGasto = useMemo(
+    () => gastosFiltrados.reduce((maior, gasto) => Math.max(maior, Number(gasto.valor)), 0),
+    [gastosFiltrados],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -621,7 +625,7 @@ export function GastosView({
         <NovoGastoDialog categorias={categorias} onCriado={recarregarDoInicio} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="gz-kpi gz-kpi-red">
           <CardContent className="flex flex-col gap-1.5 py-4">
             <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
@@ -629,6 +633,26 @@ export function GastosView({
             </span>
             <span className="gz-num text-[22px]" style={{ color: "#FF5A5F" }}>
               {formatValor(totalPeriodo)}
+            </span>
+          </CardContent>
+        </Card>
+        <Card className="gz-kpi gz-kpi-blue">
+          <CardContent className="flex flex-col gap-1.5 py-4">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+              Quantidade de gastos
+            </span>
+            <span className="gz-num text-[22px]" style={{ color: "#2196F3" }}>
+              {gastosFiltrados.length}
+            </span>
+          </CardContent>
+        </Card>
+        <Card className="gz-kpi gz-kpi-amber">
+          <CardContent className="flex flex-col gap-1.5 py-4">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+              Maior gasto
+            </span>
+            <span className="gz-num text-[22px]" style={{ color: "#FFB020" }}>
+              {formatValor(maiorGasto)}
             </span>
           </CardContent>
         </Card>

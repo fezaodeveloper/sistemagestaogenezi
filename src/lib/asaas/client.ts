@@ -67,6 +67,14 @@ export async function cancelarCobrancaAsaas(asaasPaymentId: string): Promise<voi
   await asaasRequest<unknown>(`/payments/${asaasPaymentId}`, "DELETE");
 }
 
+// Estorno integral — sem body, o Asaas devolve o valor ao meio de pagamento
+// original automaticamente. Diferente de cancelarCobrancaAsaas (DELETE, pra
+// cobrança ainda não paga): aqui a cobrança já foi recebida, então precisa
+// de fato estornar o dinheiro, não só cancelar a cobrança.
+export async function estornarCobrancaAsaas(asaasPaymentId: string): Promise<void> {
+  await asaasRequest<unknown>(`/payments/${asaasPaymentId}/refund`, "POST");
+}
+
 // ===== PARCELAMENTO =====
 // Mesmo endpoint de criarCobrancaAsaas (POST /payments), mas com
 // installmentCount + totalValue — o Asaas cria todas as cobranças da vez e

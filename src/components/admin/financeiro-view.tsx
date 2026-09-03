@@ -1,19 +1,23 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Plus, Printer } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, Paperclip, Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   cancelarParcela,
   criarParcelaManual,
+  estornarParcela,
   gerarCarne,
   gerarCobranca,
   getFinanceiroDados,
   marcarComoPagoManual,
+  marcarNotaFiscal,
+  salvarNotaFiscal,
   type FinanceiroDados,
   type MatriculaParaParcela,
   type ParcelaComRelacoes,
 } from "@/app/admin/financeiro/actions";
+import { createClient } from "@/lib/supabase/client";
 import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -290,6 +294,171 @@ function NovaParcelaDialog({
   );
 }
 
+const NOTA_FISCAL_BUCKET = "notas-fiscais";
+const NOTA_FISCAL_MAX_BYTES = 10 * 1024 * 1024; // 10MB
+const NOTA_FISCAL_TIPOS_ACEITOS = [
+  "application/pdf",
+  "text/xml",
+  "application/xml",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+];
+
+function extensaoDoArquivo(nomeOuPath: string): string {
+  const partes = nomeOuPath.split(".");
+  return partes.length > 1 ? (partes.pop() ?? "").toLowerCase() : "";
+}
+
+// Bucket privado (ver 20260903200000_nota_fiscal.sql) — upload direto do
+// client com a sessão do admin (mesmo padrão de foto-aluno-upload.tsx),
+// mas sem getPublicUrl() servir de nada aqui: como o bucket não é público,
+// "Ver NF" sempre gera uma signed URL na hora do clique em vez de reusar
+// uma URL permanente.
+function NotaFiscalControl({
+  parcela,
+  onAtualizada,
+}: {
+  parcela: ParcelaComRelacoes;
+  onAtualizada: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleToggle(checked: boolean) {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await marcarNotaFiscal(parcela.id, checked);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        return;
+      }
+      onAtualizada();
+    });
+  }
+
+  async function handleArquivoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) return;
+
+    setError(null);
+
+    if (!NOTA_FISCAL_TIPOS_ACEITOS.includes(file.type)) {
+      setError("Formato não aceito. Use PDF, XML, JPG ou PNG.");
+      return;
+    }
+    if (file.size > NOTA_FISCAL_MAX_BYTES) {
+      setError("Arquivo muito grande. Máximo permitido: 10MB.");
+      return;
+    }
+
+    setEnviando(true);
+    try {
+      const supabase = createClient();
+      // Nome fixo (parcelaId.ext): upsert sobrescreve direto se o admin
+      // reenviar uma NF corrigida, sem precisar remover antes.
+      const extensao = extensaoDoArquivo(file.name) || "pdf";
+      const path = `${parcela.id}.${extensao}`;
+
+      const { error: uploadError } = await supabase.storage.from(NOTA_FISCAL_BUCKET).upload(path, file, {
+        upsert: true,
+        contentType: file.type,
+      });
+      if (uploadError) {
+        setError(`Erro no upload: ${uploadError.message}`);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from(NOTA_FISCAL_BUCKET).getPublicUrl(path);
+
+      const resultado = await salvarNotaFiscal(parcela.id, urlData.publicUrl, path);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        return;
+      }
+      onAtualizada();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function handleVer() {
+    if (!parcela.nota_fiscal_path) return;
+
+    // Abre a aba em branco já no clique (síncrono), antes do await — mesmo
+    // motivo de handleGerarCarne/handleImprimirComprovante (bloqueio de
+    // pop-up).
+    const novaAba = window.open("", "_blank");
+    setError(null);
+
+    const supabase = createClient();
+    const ehXml = extensaoDoArquivo(parcela.nota_fiscal_path) === "xml";
+    const { data, error: signedError } = await supabase.storage
+      .from(NOTA_FISCAL_BUCKET)
+      .createSignedUrl(parcela.nota_fiscal_path, 60, ehXml ? { download: parcela.nota_fiscal_path } : undefined);
+
+    if (signedError || !data) {
+      setError("Não foi possível abrir o arquivo.");
+      novaAba?.close();
+      return;
+    }
+
+    if (novaAba) {
+      novaAba.location.href = data.signedUrl;
+    } else {
+      window.open(data.signedUrl, "_blank");
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={`nf_emitida_${parcela.id}`}
+          checked={parcela.nota_fiscal_emitida}
+          onCheckedChange={(checked) => handleToggle(checked === true)}
+          disabled={isPending}
+        />
+        <Label htmlFor={`nf_emitida_${parcela.id}`} className="text-xs font-normal">
+          NF emitida
+        </Label>
+
+        {parcela.nota_fiscal_emitida && (
+          <>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pdf,.xml,.jpg,.jpeg,.png"
+              onChange={handleArquivoChange}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => inputRef.current?.click()}
+              disabled={enviando}
+            >
+              <Paperclip />
+              {enviando ? "Enviando..." : "Anexar NF"}
+            </Button>
+            {parcela.nota_fiscal_path && (
+              <Button type="button" variant="ghost" size="sm" onClick={handleVer}>
+                <Eye />
+                Ver NF
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+      {error && <span className="text-destructive text-xs">{error}</span>}
+    </div>
+  );
+}
+
 function AcoesParcela({
   parcela,
   onAtualizada,
@@ -300,6 +469,7 @@ function AcoesParcela({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  const [confirmandoEstorno, setConfirmandoEstorno] = useState(false);
   const [pagamentoDialogOpen, setPagamentoDialogOpen] = useState(false);
   const [gerandoCarne, setGerandoCarne] = useState(false);
 
@@ -349,6 +519,19 @@ function AcoesParcela({
         return;
       }
       setConfirmandoCancelamento(false);
+      onAtualizada();
+    });
+  }
+
+  function handleEstornar() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await estornarParcela(parcela.id);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        return;
+      }
+      setConfirmandoEstorno(false);
       onAtualizada();
     });
   }
@@ -494,7 +677,31 @@ function AcoesParcela({
             </AlertDialogContent>
           </AlertDialog>
         )}
+        {parcela.status === "pago" && parcela.asaas_payment_id && (
+          <AlertDialog open={confirmandoEstorno} onOpenChange={setConfirmandoEstorno}>
+            <AlertDialogTrigger render={<Button variant="ghost" size="sm">Estornar</Button>} />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Estornar pagamento</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja estornar o pagamento da parcela {parcela.numero_parcela} de{" "}
+                  {parcela.alunos?.full_name ?? "—"}? O valor será devolvido ao aluno via Asaas. Esta ação
+                  não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleEstornar}>
+                  {isPending ? "Estornando..." : "Estornar pagamento"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
+      {parcela.status === "pago" && (
+        <NotaFiscalControl parcela={parcela} onAtualizada={onAtualizada} />
+      )}
       {error && !pagamentoDialogOpen && <span className="text-destructive text-xs">{error}</span>}
     </div>
   );

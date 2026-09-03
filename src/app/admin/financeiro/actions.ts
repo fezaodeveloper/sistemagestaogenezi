@@ -13,6 +13,7 @@ import {
   gerarCarneAsaas,
   cancelarCobrancaAsaas,
   confirmarRecebimentoDinheiro,
+  estornarCobrancaAsaas,
 } from "@/lib/asaas/client";
 import { parcelaFormSchema, type Parcela } from "@/lib/financeiro/schema";
 
@@ -408,6 +409,111 @@ export async function marcarComoPagoManual(
     .eq("id", parcelaId);
 
   if (error) return { error: "Não foi possível marcar a parcela como paga." };
+
+  revalidatePath("/admin/financeiro");
+  return { success: true };
+}
+
+// ===== Estorno de parcela paga (ITEM 1) =====
+
+export async function estornarParcela(parcelaId: string): Promise<ParcelaActionResult> {
+  await requireRole("admin");
+  const supabase = await createClient();
+
+  const { data: parcela } = await supabase
+    .from("parcelas")
+    .select("id, asaas_payment_id")
+    .eq("id", parcelaId)
+    .single();
+
+  if (!parcela) return { error: "Parcela não encontrada." };
+
+  if (!parcela.asaas_payment_id) {
+    return { error: "Esta parcela não tem cobrança no Asaas para estornar." };
+  }
+
+  try {
+    await estornarCobrancaAsaas(parcela.asaas_payment_id);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível estornar no Asaas." };
+  }
+
+  const { error } = await supabase
+    .from("parcelas")
+    .update({ status: "estornado", asaas_status: "REFUNDED" })
+    .eq("id", parcelaId);
+
+  if (error) return { error: "Estorno feito no Asaas, mas não foi possível atualizar a parcela." };
+
+  revalidatePath("/admin/financeiro");
+  return { success: true };
+}
+
+// ===== Nota fiscal (ITEM 7) =====
+
+// Desmarcar (emitida=false) também limpa nota_fiscal_url/path e remove o
+// arquivo do Storage, se existir — segue o mesmo padrão defensivo de
+// removerFotoAluno (src/app/admin/alunos/actions.ts): se a remoção no
+// Storage falhar, retorna erro e NÃO limpa o banco, pra nunca deixar a
+// parcela "sem NF" enquanto o arquivo antigo continua órfão lá.
+export async function marcarNotaFiscal(parcelaId: string, emitida: boolean): Promise<ParcelaActionResult> {
+  await requireRole("admin");
+  const supabase = await createClient();
+
+  if (!emitida) {
+    const { data: parcela } = await supabase
+      .from("parcelas")
+      .select("nota_fiscal_path")
+      .eq("id", parcelaId)
+      .single();
+
+    if (parcela?.nota_fiscal_path) {
+      const { error: storageError } = await supabase.storage
+        .from("notas-fiscais")
+        .remove([parcela.nota_fiscal_path]);
+      if (storageError) {
+        return { error: "Não foi possível remover o arquivo do Storage. Tente novamente." };
+      }
+    }
+
+    const { error } = await supabase
+      .from("parcelas")
+      .update({ nota_fiscal_emitida: false, nota_fiscal_url: null, nota_fiscal_path: null })
+      .eq("id", parcelaId);
+
+    if (error) {
+      return { error: "Arquivo removido do Storage, mas não foi possível atualizar a parcela." };
+    }
+
+    revalidatePath("/admin/financeiro");
+    return { success: true };
+  }
+
+  const { error } = await supabase
+    .from("parcelas")
+    .update({ nota_fiscal_emitida: true })
+    .eq("id", parcelaId);
+
+  if (error) return { error: "Não foi possível marcar a nota fiscal como emitida." };
+
+  revalidatePath("/admin/financeiro");
+  return { success: true };
+}
+
+export async function salvarNotaFiscal(
+  parcelaId: string,
+  url: string,
+  path: string,
+): Promise<ParcelaActionResult> {
+  await requireRole("admin");
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("parcelas")
+    .update({ nota_fiscal_url: url, nota_fiscal_path: path })
+    .eq("id", parcelaId);
+
+  if (error) return { error: "Arquivo enviado, mas não foi possível salvar na parcela." };
 
   revalidatePath("/admin/financeiro");
   return { success: true };

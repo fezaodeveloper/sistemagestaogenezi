@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   atualizarPagamentoAvulso,
+  buscarAlunosParaAvulso,
   criarPagamentoAvulso,
   excluirPagamentoAvulso,
   getPagamentosAvulsos,
@@ -13,6 +14,7 @@ import {
 import type { Categoria } from "@/app/admin/financeiro/categorias/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
@@ -92,6 +94,104 @@ function CategoriaBadge({
   return <Badge variant="outline">{PAGAMENTO_AVULSO_TIPO_LABELS[pagamento.tipo]}</Badge>;
 }
 
+// Busca sob demanda de aluno (Etapa "Aluno vinculado") — substitui o Select
+// com a lista inteira de alunos. Recebe uma key diferente a cada abertura
+// do dialog pai (ver `key={open ...}` em Novo/EditarPagamentoDialog) pra
+// remontar do zero e reler alunoIdInicial/nomeInicial, mesmo efeito do
+// handleOpenChange que já reseta categoriaId nesses dialogs.
+function AlunoBuscaAvulso({
+  alunoIdInicial,
+  nomeInicial,
+}: {
+  alunoIdInicial: string | null;
+  nomeInicial: string | null;
+}) {
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState<AlunoOpcao[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [selecionado, setSelecionado] = useState<{ id: string; nome: string } | null>(
+    alunoIdInicial ? { id: alunoIdInicial, nome: nomeInicial ?? "—" } : null,
+  );
+
+  useEffect(() => {
+    const termo = busca.trim();
+
+    const timeoutId = setTimeout(() => {
+      if (termo.length < 2) {
+        setResultados([]);
+        setBuscando(false);
+        return;
+      }
+
+      setBuscando(true);
+      buscarAlunosParaAvulso(termo)
+        .then((resultado) => setResultados(resultado))
+        .finally(() => setBuscando(false));
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [busca]);
+
+  function handleSelecionar(aluno: AlunoOpcao) {
+    setSelecionado({ id: aluno.id, nome: aluno.full_name ?? "—" });
+    setBusca("");
+    setResultados([]);
+  }
+
+  function handleLimpar() {
+    setSelecionado(null);
+    setBusca("");
+    setResultados([]);
+  }
+
+  const termo = busca.trim();
+
+  return (
+    <div className="flex flex-col gap-2">
+      <input type="hidden" name="aluno_id" value={selecionado?.id ?? ""} />
+
+      {selecionado ? (
+        <Badge variant="secondary" className="flex w-fit items-center gap-1.5 py-1.5 pr-1.5 pl-2.5">
+          {selecionado.nome}
+          <button
+            type="button"
+            onClick={handleLimpar}
+            className="hover:bg-muted-foreground/20 rounded-full p-0.5"
+            aria-label="Limpar aluno selecionado"
+          >
+            <X className="size-3" />
+          </button>
+        </Badge>
+      ) : (
+        <>
+          <Input placeholder="Buscar aluno..." value={busca} onChange={(event) => setBusca(event.target.value)} />
+          {termo.length >= 2 && (
+            <div className="flex max-h-48 flex-col overflow-y-auto rounded-md border">
+              {buscando ? (
+                <p className="text-muted-foreground p-3 text-center text-sm">Buscando...</p>
+              ) : resultados.length === 0 ? (
+                <p className="text-muted-foreground p-3 text-center text-sm">Nenhum aluno encontrado.</p>
+              ) : (
+                resultados.map((aluno) => (
+                  <button
+                    key={aluno.id}
+                    type="button"
+                    onClick={() => handleSelecionar(aluno)}
+                    className="hover:bg-muted flex flex-col gap-0.5 border-b p-2 text-left text-sm last:border-b-0"
+                  >
+                    <span className="font-medium">{aluno.full_name ?? "—"}</span>
+                    <span className="text-muted-foreground text-xs">{aluno.email}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Mesmos campos de NovoPagamentoDialog (sem "Tipo": esse campo é o enum fixo
 // legado, substituído por categoria_id — formulários de criação/edição não
 // o expõem mais, só telas de exibição de registros históricos usam
@@ -99,34 +199,25 @@ function CategoriaBadge({
 // Sem AlertDialog: edição não é destrutiva (REGRA da tarefa).
 function EditarPagamentoDialog({
   pagamento,
-  alunos,
   categorias,
   onSalvo,
 }: {
   pagamento: PagamentoAvulsoComAluno;
-  alunos: AlunoOpcao[];
   categorias: Categoria[];
   onSalvo: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [categoriaId, setCategoriaId] = useState(pagamento.categoria_id ?? "");
-  const [alunoId, setAlunoId] = useState(pagamento.aluno_id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const categoriasAtivas = useMemo(() => categorias.filter((categoria) => categoria.ativo), [categorias]);
   const categoriaItems = Object.fromEntries(categoriasAtivas.map((categoria) => [categoria.id, categoria.nome]));
 
-  const alunoItems: Record<string, string> = {
-    "": "Nenhum (não vinculado)",
-    ...Object.fromEntries(alunos.map((aluno) => [aluno.id, aluno.full_name ?? "—"])),
-  };
-
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (nextOpen) {
       setCategoriaId(pagamento.categoria_id ?? "");
-      setAlunoId(pagamento.aluno_id ?? "");
       setError(null);
     }
   }
@@ -222,25 +313,12 @@ function EditarPagamentoDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor={`aluno_id-${pagamento.id}`}>Aluno vinculado</Label>
-            <Select
-              name="aluno_id"
-              items={alunoItems}
-              value={alunoId}
-              onValueChange={(value) => setAlunoId(value as string)}
-            >
-              <SelectTrigger id={`aluno_id-${pagamento.id}`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Nenhum (não vinculado)</SelectItem>
-                {alunos.map((aluno) => (
-                  <SelectItem key={aluno.id} value={aluno.id}>
-                    {aluno.full_name ?? "—"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Aluno vinculado</Label>
+            <AlunoBuscaAvulso
+              key={String(open)}
+              alunoIdInicial={pagamento.aluno_id}
+              nomeInicial={pagamento.alunos?.full_name ?? null}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`observacoes-${pagamento.id}`}>Observações</Label>
@@ -336,11 +414,9 @@ function ExcluirPagamentoButton({
 }
 
 function NovoPagamentoDialog({
-  alunos,
   categorias,
   onCriado,
 }: {
-  alunos: AlunoOpcao[];
   categorias: Categoria[];
   onCriado: () => void;
 }) {
@@ -351,11 +427,6 @@ function NovoPagamentoDialog({
 
   const categoriasAtivas = useMemo(() => categorias.filter((categoria) => categoria.ativo), [categorias]);
   const categoriaItems = Object.fromEntries(categoriasAtivas.map((categoria) => [categoria.id, categoria.nome]));
-
-  const alunoItems: Record<string, string> = {
-    "": "Nenhum (não vinculado)",
-    ...Object.fromEntries(alunos.map((aluno) => [aluno.id, aluno.full_name ?? "—"])),
-  };
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -442,20 +513,8 @@ function NovoPagamentoDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="aluno_id">Aluno vinculado</Label>
-            <Select name="aluno_id" items={alunoItems} defaultValue="">
-              <SelectTrigger id="aluno_id" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Nenhum (não vinculado)</SelectItem>
-                {alunos.map((aluno) => (
-                  <SelectItem key={aluno.id} value={aluno.id}>
-                    {aluno.full_name ?? "—"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Aluno vinculado</Label>
+            <AlunoBuscaAvulso key={String(open)} alunoIdInicial={null} nomeInicial={null} />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="observacoes">Observações</Label>
@@ -482,14 +541,12 @@ export function AvulsosView({
   totalInicial,
   anoInicial,
   mesInicial,
-  alunos,
   categorias,
 }: {
   pagamentosIniciais: PagamentoAvulsoComAluno[];
   totalInicial: number;
   anoInicial: number;
   mesInicial: number;
-  alunos: AlunoOpcao[];
   categorias: Categoria[];
 }) {
   const [ano, setAno] = useState(anoInicial);
@@ -606,6 +663,20 @@ export function AvulsosView({
     });
   }, [pagamentos, categoriaFiltro, categoriaPorId, busca]);
 
+  // KPIs calculados client-side sobre os pagamentos já carregados (a
+  // página atual, após os filtros de busca/categoria) — mesma limitação já
+  // documentada nas outras tabelas paginadas do admin. "Status" pedido no
+  // enunciado do card 1 (excluir cancelados) não existe como coluna em
+  // pagamentos_avulsos — soma todos os carregados.
+  const totalRecebido = useMemo(
+    () => pagamentosFiltrados.reduce((soma, pagamento) => soma + Number(pagamento.valor), 0),
+    [pagamentosFiltrados],
+  );
+  const maiorPagamento = useMemo(
+    () => pagamentosFiltrados.reduce((maior, pagamento) => Math.max(maior, Number(pagamento.valor)), 0),
+    [pagamentosFiltrados],
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -690,7 +761,40 @@ export function AvulsosView({
             </div>
           )}
         </div>
-        <NovoPagamentoDialog alunos={alunos} categorias={categorias} onCriado={recarregarDoInicio} />
+        <NovoPagamentoDialog categorias={categorias} onCriado={recarregarDoInicio} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="gz-kpi gz-kpi-green">
+          <CardContent className="flex flex-col gap-1.5 py-4">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+              Total recebido no mês
+            </span>
+            <span className="gz-num text-[22px]" style={{ color: "#2DD4A0" }}>
+              {formatValor(totalRecebido)}
+            </span>
+          </CardContent>
+        </Card>
+        <Card className="gz-kpi gz-kpi-blue">
+          <CardContent className="flex flex-col gap-1.5 py-4">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+              Quantidade de pagamentos
+            </span>
+            <span className="gz-num text-[22px]" style={{ color: "#2196F3" }}>
+              {pagamentosFiltrados.length}
+            </span>
+          </CardContent>
+        </Card>
+        <Card className="gz-kpi gz-kpi-amber">
+          <CardContent className="flex flex-col gap-1.5 py-4">
+            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+              Maior pagamento
+            </span>
+            <span className="gz-num text-[22px]" style={{ color: "#FFB020" }}>
+              {formatValor(maiorPagamento)}
+            </span>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -762,7 +866,6 @@ export function AvulsosView({
                 <TableCell className="flex justify-end gap-1">
                   <EditarPagamentoDialog
                     pagamento={pagamento}
-                    alunos={alunos}
                     categorias={categorias}
                     onSalvo={recarregar}
                   />

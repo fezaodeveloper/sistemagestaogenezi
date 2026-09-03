@@ -74,6 +74,9 @@ export type Parcela = {
   asaas_bank_slip_url: string | null;
   asaas_status: string | null;
   observacoes: string | null;
+  nota_fiscal_emitida: boolean;
+  nota_fiscal_url: string | null;
+  nota_fiscal_path: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
