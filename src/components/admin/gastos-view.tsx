@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { atualizarGasto, criarGasto, excluirGasto, getGastos } from "@/app/admin/financeiro/gastos/actions";
 import type { Categoria } from "@/app/admin/financeiro/categorias/actions";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +54,11 @@ const NOMES_MES = [
 ];
 
 const CATEGORIA_FILTRO_TODAS = "todas";
+
+// Mesmo padrão de toggle Eye/EyeOff + localStorage de
+// dashboard-kpis-financeiros.tsx — chave própria por tela.
+const KPIS_VISIVEL_STORAGE_KEY = "genezi-gastos-kpis-visivel";
+const VALOR_OCULTO = "R$ ••••";
 
 function formatValor(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -425,6 +430,27 @@ export function GastosView({
   const [modoFiltro, setModoFiltro] = useState<"mes" | "periodo">("mes");
   const [periodoInicio, setPeriodoInicio] = useState("");
   const [periodoFim, setPeriodoFim] = useState("");
+  const [kpisVisiveis, setKpisVisiveis] = useState(true);
+  const [kpisHydrated, setKpisHydrated] = useState(false);
+
+  // Leitura de localStorage tem que ficar num efeito pós-montagem, não num
+  // inicializador de useState — mesmo motivo já documentado em
+  // dashboard-kpis-financeiros.tsx (evita hydration mismatch).
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem(KPIS_VISIVEL_STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (salvo !== null) setKpisVisiveis(salvo === "true");
+    } catch {}
+    setKpisHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!kpisHydrated) return;
+    try {
+      localStorage.setItem(KPIS_VISIVEL_STORAGE_KEY, String(kpisVisiveis));
+    } catch {}
+  }, [kpisVisiveis, kpisHydrated]);
 
   const categoriaPorId = useMemo(() => new Map(categorias.map((categoria) => [categoria.id, categoria])), [categorias]);
 
@@ -625,37 +651,45 @@ export function GastosView({
         <NovoGastoDialog categorias={categorias} onCriado={recarregarDoInicio} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="gz-kpi gz-kpi-red">
-          <CardContent className="flex flex-col gap-1.5 py-4">
-            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
-              Total de gastos no período
-            </span>
-            <span className="gz-num text-[22px]" style={{ color: "#FF5A5F" }}>
-              {formatValor(totalPeriodo)}
-            </span>
-          </CardContent>
-        </Card>
-        <Card className="gz-kpi gz-kpi-blue">
-          <CardContent className="flex flex-col gap-1.5 py-4">
-            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
-              Quantidade de gastos
-            </span>
-            <span className="gz-num text-[22px]" style={{ color: "#2196F3" }}>
-              {gastosFiltrados.length}
-            </span>
-          </CardContent>
-        </Card>
-        <Card className="gz-kpi gz-kpi-amber">
-          <CardContent className="flex flex-col gap-1.5 py-4">
-            <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
-              Maior gasto
-            </span>
-            <span className="gz-num text-[22px]" style={{ color: "#FFB020" }}>
-              {formatValor(maiorGasto)}
-            </span>
-          </CardContent>
-        </Card>
+      <div>
+        <div className="mb-3 flex items-center justify-end">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setKpisVisiveis((atual) => !atual)}>
+            {kpisVisiveis ? <Eye /> : <EyeOff />}
+            {kpisVisiveis ? "Ocultar valores" : "Mostrar valores"}
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Card className="gz-kpi gz-kpi-red">
+            <CardContent className="flex flex-col gap-1.5 py-4">
+              <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+                Total de gastos no período
+              </span>
+              <span className="gz-num text-[22px]" style={{ color: "#FF5A5F" }}>
+                {kpisVisiveis ? formatValor(totalPeriodo) : VALOR_OCULTO}
+              </span>
+            </CardContent>
+          </Card>
+          <Card className="gz-kpi gz-kpi-blue">
+            <CardContent className="flex flex-col gap-1.5 py-4">
+              <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+                Quantidade de gastos
+              </span>
+              <span className="gz-num text-[22px]" style={{ color: "#2196F3" }}>
+                {gastosFiltrados.length}
+              </span>
+            </CardContent>
+          </Card>
+          <Card className="gz-kpi gz-kpi-amber">
+            <CardContent className="flex flex-col gap-1.5 py-4">
+              <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+                Maior gasto
+              </span>
+              <span className="gz-num text-[22px]" style={{ color: "#FFB020" }}>
+                {kpisVisiveis ? formatValor(maiorGasto) : VALOR_OCULTO}
+              </span>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

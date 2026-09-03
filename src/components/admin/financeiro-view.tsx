@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Eye, Paperclip, Plus, Printer } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, Paperclip, Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   cancelarParcela,
@@ -77,6 +77,12 @@ const STATUS_FILTRO_ITEMS: Record<string, string> = {
   [STATUS_FILTRO_TODOS]: "Todos os status",
   ...PARCELA_STATUS_LABELS,
 };
+
+// Mesmo padrão de toggle Eye/EyeOff + localStorage de
+// dashboard-kpis-financeiros.tsx — chave própria (não afeta o toggle do
+// dashboard, cada tela lembra sua própria preferência).
+const KPIS_VISIVEL_STORAGE_KEY = "genezi-financeiro-kpis-visivel";
+const VALOR_OCULTO = "R$ ••••";
 
 function formatValor(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -731,6 +737,27 @@ export function FinanceiroView({
   const [periodoFim, setPeriodoFim] = useState("");
   const [pagina, setPagina] = useState(1);
   const [limite, setLimite] = useState(LIMITE_PADRAO);
+  const [kpisVisiveis, setKpisVisiveis] = useState(true);
+  const [kpisHydrated, setKpisHydrated] = useState(false);
+
+  // Leitura de localStorage tem que ficar num efeito pós-montagem, não num
+  // inicializador de useState — mesmo motivo já documentado em
+  // dashboard-kpis-financeiros.tsx (evita hydration mismatch).
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem(KPIS_VISIVEL_STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (salvo !== null) setKpisVisiveis(salvo === "true");
+    } catch {}
+    setKpisHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!kpisHydrated) return;
+    try {
+      localStorage.setItem(KPIS_VISIVEL_STORAGE_KEY, String(kpisVisiveis));
+    } catch {}
+  }, [kpisVisiveis, kpisHydrated]);
 
   // Sempre busca com o modo de filtro (mês ou período) e a página/limite
   // atuais — centraliza a lógica que antes estava duplicada em
@@ -943,20 +970,36 @@ export function FinanceiroView({
         <NovaParcelaDialog matriculas={matriculas} onCriada={recarregar} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <KpiCard label="A receber" valor={formatValor(dados.kpis.totalReceber)} cor="amber" />
-        <KpiCard label="Recebido no mês" valor={formatValor(dados.kpis.totalRecebido)} cor="green" />
-        <KpiCard
-          label="Em atraso"
-          valor={formatValor(dados.kpis.totalAtrasado)}
-          cor="red"
-          sublabel={`${dados.kpis.countAtrasado} parcela(s)`}
-        />
-        <KpiCard
-          label="Adimplência"
-          valor={adimplencia === null ? "—" : `${adimplencia.toFixed(0)}%`}
-          cor="blue"
-        />
+      <div>
+        <div className="mb-3 flex items-center justify-end">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setKpisVisiveis((atual) => !atual)}>
+            {kpisVisiveis ? <Eye /> : <EyeOff />}
+            {kpisVisiveis ? "Ocultar valores" : "Mostrar valores"}
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          <KpiCard
+            label="A receber"
+            valor={kpisVisiveis ? formatValor(dados.kpis.totalReceber) : VALOR_OCULTO}
+            cor="amber"
+          />
+          <KpiCard
+            label="Recebido no mês"
+            valor={kpisVisiveis ? formatValor(dados.kpis.totalRecebido) : VALOR_OCULTO}
+            cor="green"
+          />
+          <KpiCard
+            label="Em atraso"
+            valor={kpisVisiveis ? formatValor(dados.kpis.totalAtrasado) : VALOR_OCULTO}
+            cor="red"
+            sublabel={`${dados.kpis.countAtrasado} parcela(s)`}
+          />
+          <KpiCard
+            label="Adimplência"
+            valor={adimplencia === null ? "—" : `${adimplencia.toFixed(0)}%`}
+            cor="blue"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

@@ -27,13 +27,21 @@ export async function enviarMensagemTelegram(mensagem: string, chatId?: string):
   }
 }
 
+// agora.getDate()/getHours() etc. usam o fuso do runtime (UTC nas funções
+// serverless da Vercel), não o horário de Brasília — por isso o
+// Intl.DateTimeFormat abaixo, com timeZone explícito, em vez de ler os
+// componentes da data diretamente.
 function dataHoraAtual(): string {
   const agora = new Date();
-  const dia = String(agora.getDate()).padStart(2, "0");
-  const mes = String(agora.getMonth() + 1).padStart(2, "0");
-  const hora = String(agora.getHours()).padStart(2, "0");
-  const minuto = String(agora.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes}/${agora.getFullYear()} ${hora}:${minuto}`;
+  const formatoBR = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return formatoBR.format(agora);
 }
 
 // Formato padronizado de alerta pontual (um evento) — usado pelos handlers
