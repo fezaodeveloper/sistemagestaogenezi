@@ -26,12 +26,14 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/matriculas", label: "Lista de Matrículas", icon: ClipboardList },
     { href: "/admin/turmas", label: "Turmas", icon: Users },
     { href: "/admin/contratos", label: "Contratos", icon: FileSignature },
+    { href: "/admin/termos", label: "Termos", icon: FileText },
   ]},
   { id: "academico", label: "Acadêmico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
     { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
     { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
     { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },
+    { href: "/admin/chat", label: "Chat", icon: MessagesSquare, badge: "chat" },
   ]},
   { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
     { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },
@@ -45,11 +47,6 @@ const GROUPS: NavGroup[] = [
   { id: "engajamento", label: "Engajamento", icon: Gift, items: [
     { href: "/admin/premios", label: "Prêmios", icon: Gift },
     { href: "/admin/resgates", label: "Resgates", icon: Award },
-    { href: "/admin/chat", label: "Chat", icon: MessagesSquare, badge: "chat" },
-  ]},
-  { id: "relatorios", label: "Relatórios", icon: BarChart2, items: [
-    { href: "/admin/relatorios/academico", label: "Relatórios Acadêmicos", icon: GraduationCap },
-    { href: "/admin/relatorios/financeiro", label: "Relatórios Financeiros", icon: BarChart2 },
   ]},
   { id: "sistema", label: "Sistema", icon: Settings, items: [
     { href: "/admin/automacoes", label: "Log de Automações", icon: Zap },
