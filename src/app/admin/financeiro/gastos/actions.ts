@@ -62,8 +62,6 @@ export async function criarGasto(formData: FormData): Promise<GastoActionResult>
     recorrente: formData.get("recorrente") === "on",
   });
 
-  console.log('parsed result:', JSON.stringify(parsed, null, 2));
-
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
@@ -80,10 +78,8 @@ export async function criarGasto(formData: FormData): Promise<GastoActionResult>
     recorrente: data.recorrente,
   });
 
-  console.log('supabase error:', JSON.stringify(error, null, 2));
-
   if (error) {
-    return { error: `Erro: ${error.message} (código: ${error.code})` };
+    return { error: "Não foi possível registrar o gasto. Tente novamente." };
   }
 
   revalidatePath("/admin/financeiro/gastos");
