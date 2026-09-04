@@ -83,7 +83,7 @@ export async function criarGasto(formData: FormData): Promise<GastoActionResult>
   console.log('supabase error:', JSON.stringify(error, null, 2));
 
   if (error) {
-    return { error: "Não foi possível registrar o gasto. Tente novamente." };
+    return { error: `Erro: ${error.message} (código: ${error.code})` };
   }
 
   revalidatePath("/admin/financeiro/gastos");
