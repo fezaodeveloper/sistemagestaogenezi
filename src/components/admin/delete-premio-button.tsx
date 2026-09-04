@@ -20,10 +20,12 @@ export function DeletePremioButton({
   id,
   nome,
   fotoUrl,
+  arquivoDigitalPath,
 }: {
   id: string;
   nome: string;
   fotoUrl: string | null;
+  arquivoDigitalPath: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function DeletePremioButton({
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await deletePremio(id, fotoUrl);
+      const result = await deletePremio(id, fotoUrl, arquivoDigitalPath);
       if (result.error) {
         setError(result.error);
       } else {

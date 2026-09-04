@@ -40,6 +40,27 @@ export function validarImagem(
   return { arquivo: entry };
 }
 
+export const TIPOS_ARQUIVO_DIGITAL_ACEITOS = ["application/pdf", "application/zip", "application/x-zip-compressed"];
+const TAMANHO_MAXIMO_ARQUIVO_DIGITAL = 20 * 1024 * 1024; // 20MB
+
+// Arquivo de entrega digital de prêmio (TAREFA 11B) — PDF ou ZIP, maior
+// que o limite de imagem porque pode ser um material mais robusto (ebook,
+// pacote de arquivos). uploadImagem() abaixo é genérico o bastante
+// (só faz upload de um File pro bucket) pra ser reaproveitado aqui apesar
+// do nome.
+export function validarArquivoDigital(entry: FormDataEntryValue | null): { erro?: string; arquivo?: File } {
+  if (!(entry instanceof File) || entry.size === 0) {
+    return {};
+  }
+  if (!TIPOS_ARQUIVO_DIGITAL_ACEITOS.includes(entry.type)) {
+    return { erro: "O arquivo de entrega precisa ser PDF ou ZIP." };
+  }
+  if (entry.size > TAMANHO_MAXIMO_ARQUIVO_DIGITAL) {
+    return { erro: "O arquivo de entrega pode ter no máximo 20MB." };
+  }
+  return { arquivo: entry };
+}
+
 export async function uploadImagem(
   supabase: SupabaseServerClient,
   bucket: string,

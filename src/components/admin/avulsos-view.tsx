@@ -350,6 +350,8 @@ function EditarPagamentoDialog({
   );
 }
 
+const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
+
 function ExcluirPagamentoButton({
   pagamento,
   onExcluido,
@@ -358,6 +360,7 @@ function ExcluirPagamentoButton({
   onExcluido: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmacao, setConfirmacao] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -379,6 +382,7 @@ function ExcluirPagamentoButton({
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
+        setConfirmacao("");
         if (nextOpen) setError(null);
       }}
     >
@@ -402,6 +406,18 @@ function ExcluirPagamentoButton({
             Tem certeza que deseja excluir &quot;{pagamento.descricao}&quot;? Esta ação não pode ser desfeita.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`confirmacao-exclusao-${pagamento.id}`} className="text-sm font-normal">
+            Digite <span className="font-mono font-semibold">EXCLUIR</span> para confirmar
+          </Label>
+          <Input
+            id={`confirmacao-exclusao-${pagamento.id}`}
+            value={confirmacao}
+            onChange={(event) => setConfirmacao(event.target.value)}
+            placeholder="Digite EXCLUIR para confirmar"
+            autoComplete="off"
+          />
+        </div>
         {error && (
           <p role="alert" className="text-destructive text-sm">
             {error}
@@ -409,7 +425,11 @@ function ExcluirPagamentoButton({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={isPending || confirmacao !== TEXTO_CONFIRMACAO_EXCLUSAO}
+            onClick={handleExcluir}
+          >
             {isPending ? "Excluindo..." : "Excluir"}
           </AlertDialogAction>
         </AlertDialogFooter>

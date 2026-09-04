@@ -28,7 +28,7 @@ export default async function EditarPremioPage({ params }: { params: Promise<{ i
         <p className="text-muted-foreground text-sm">{premio.nome}</p>
       </div>
       <PremioForm
-        action={updatePremio.bind(null, premio.id, premio.foto_url)}
+        action={updatePremio.bind(null, premio.id, premio.foto_url, premio.entrega_arquivo_path)}
         defaultValues={{
           nome: premio.nome,
           descricao: premio.descricao ?? undefined,
@@ -36,8 +36,12 @@ export default async function EditarPremioPage({ params }: { params: Promise<{ i
           estoque: premio.estoque ?? undefined,
           estoque_minimo: premio.estoque_minimo ?? 5,
           ativo: premio.ativo,
+          tipo: premio.tipo,
+          entrega_email_conteudo: premio.entrega_email_conteudo ?? undefined,
+          entrega_whatsapp_mensagem: premio.entrega_whatsapp_mensagem ?? undefined,
         }}
         fotoAtualUrl={fotoAtualUrl}
+        temArquivoDigital={!!premio.entrega_arquivo_path}
         submitLabel="Salvar alterações"
       />
     </div>

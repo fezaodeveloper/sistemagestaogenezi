@@ -106,7 +106,12 @@ export default async function PremiosPage() {
                     >
                       Editar
                     </Button>
-                    <DeletePremioButton id={premio.id} nome={premio.nome} fotoUrl={premio.foto_url} />
+                    <DeletePremioButton
+                      id={premio.id}
+                      nome={premio.nome}
+                      fotoUrl={premio.foto_url}
+                      arquivoDigitalPath={premio.entrega_arquivo_path}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -125,8 +125,28 @@ export async function buscarParcelasDoParcelamento(installmentId: string): Promi
 }
 
 // Carnê oficial do Asaas (boleto + QR Code Pix de todas as parcelas) — PDF
-// binário, não JSON, então não passa por asaasRequest.
+// binário, não JSON, então a chamada final não passa por asaasRequest. O
+// 400 genérico que o Asaas devolve em /paymentBook não diz o motivo real
+// (parcelamento inexistente vs. parcelamento só com Pix, sem boleto) —
+// os dois GETs abaixo diagnosticam a causa antes, pra devolver uma
+// mensagem que o admin consegue agir (ver ITEM 13).
 export async function gerarCarneAsaas(installmentId: string): Promise<ArrayBuffer> {
+  try {
+    await asaasRequest<unknown>(`/installments/${installmentId}`);
+  } catch {
+    throw new Error("Parcelamento não encontrado no Asaas.");
+  }
+
+  const cobrancas = await asaasRequest<{ data: { billingType: string }[] }>(
+    `/payments?installment=${installmentId}`,
+  );
+  const temBoleto = cobrancas.data.some((cobranca) => cobranca.billingType === "BOLETO");
+  if (!temBoleto) {
+    throw new Error(
+      "Este parcelamento não tem boletos gerados. O carnê só está disponível para cobranças com boleto.",
+    );
+  }
+
   const response = await fetch(`${ASAAS_API_URL}/installments/${installmentId}/paymentBook`, {
     headers: {
       access_token: ASAAS_API_KEY,

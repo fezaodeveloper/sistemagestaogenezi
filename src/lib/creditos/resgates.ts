@@ -24,6 +24,37 @@ export type ResgateAluno = {
   criadoEm: string;
 };
 
+export type EntregaPremioTipo = "email" | "whatsapp" | "fisico" | "manual";
+export type EntregaPremioStatus = "pendente" | "enviado" | "entregue" | "falhou";
+
+export const ENTREGA_TIPO_LABELS: Record<EntregaPremioTipo, string> = {
+  email: "Email",
+  whatsapp: "WhatsApp",
+  fisico: "Físico",
+  manual: "Manual",
+};
+
+export const ENTREGA_STATUS_LABELS: Record<EntregaPremioStatus, string> = {
+  pendente: "Pendente",
+  enviado: "Enviado",
+  entregue: "Entregue",
+  falhou: "Falhou",
+};
+
+export const ENTREGA_STATUS_BADGE_CLASS: Record<EntregaPremioStatus, string> = {
+  pendente: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  enviado: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  entregue: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  falhou: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+};
+
+export type EntregaPremio = {
+  id: string;
+  tipo_entrega: EntregaPremioTipo;
+  status: EntregaPremioStatus;
+  observacoes: string | null;
+};
+
 // RLS já restringe às linhas do próprio aluno — não precisa filtrar por
 // aluno_id aqui (mesmo padrão de aulas_concluidas/badges_conquistados).
 // item_nome é congelado no momento do resgate — não depende de join com
@@ -48,15 +79,21 @@ export async function getMeusResgates(
   }));
 }
 
-export type ResgateAdmin = ResgateAluno & { alunoNome: string | null };
+export type ResgateAdmin = ResgateAluno & { alunoNome: string | null; entregas: EntregaPremio[] };
 
+// entregas_premios ainda não existe no banco (migration
+// 20260904100000_premios_entrega.sql mostrada, não aplicada) — embutida
+// no select mesmo assim, seguindo o padrão já usado no projeto pra telas
+// que dependem de uma migration pendente (ver TAREFA 2B do chat).
 export async function getResgatesAdmin(
   supabase: SupabaseServerClient,
   filtro?: { status?: "pendente" | "entregue" | "concluido"; tipo?: "curso_bonus" | "premio_fisico" },
 ): Promise<ResgateAdmin[]> {
   let query = supabase
     .from("resgates")
-    .select("id, tipo, item_nome, custo_creditos, status, created_at, profiles!resgates_aluno_id_fkey(full_name)")
+    .select(
+      "id, tipo, item_nome, custo_creditos, status, created_at, profiles!resgates_aluno_id_fkey(full_name), entregas_premios(id, tipo_entrega, status, observacoes)",
+    )
     .order("created_at", { ascending: false });
 
   if (filtro?.status) query = query.eq("status", filtro.status);
@@ -72,6 +109,7 @@ export async function getResgatesAdmin(
     status: "pendente" | "entregue" | "concluido";
     created_at: string;
     profiles: { full_name: string | null } | null;
+    entregas_premios: EntregaPremio[] | null;
   }>).map((r) => ({
     id: r.id,
     tipo: r.tipo,
@@ -80,6 +118,7 @@ export async function getResgatesAdmin(
     status: r.status,
     criadoEm: r.created_at,
     alunoNome: r.profiles?.full_name ?? null,
+    entregas: r.entregas_premios ?? [],
   }));
 }
 

@@ -532,7 +532,14 @@ function AcoesParcela({
     try {
       const resultado = await gerarCarne(installmentId);
       if ("error" in resultado) {
-        setError(resultado.error);
+        // ITEM 13: erro de "sem boleto" (comum pra faturas geradas como
+        // Pix) recebe uma mensagem específica — mais fácil do admin
+        // entender que não é um bug, é uma limitação real do carnê.
+        setError(
+          resultado.error.toLowerCase().includes("boleto")
+            ? "O carnê só está disponível para cobranças geradas como boleto. Faturas Pix não geram carnê."
+            : resultado.error,
+        );
         novaAba?.close();
         return;
       }

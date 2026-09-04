@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getResgatesAdmin, RESGATE_STATUS_LABELS, RESGATE_TIPO_LABELS } from "@/lib/creditos/resgates";
 import { MarcarEntregueButton } from "@/components/admin/marcar-entregue-button";
+import { EntregaPremioAcoes } from "@/components/admin/entrega-premio-acoes";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -52,6 +53,7 @@ export default async function ResgatesPage() {
                   <TableHead>Prêmio</TableHead>
                   <TableHead>Custo</TableHead>
                   <TableHead>Data do resgate</TableHead>
+                  <TableHead>Entrega</TableHead>
                   <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
               </TableHeader>
@@ -62,6 +64,13 @@ export default async function ResgatesPage() {
                     <TableCell>{r.itemNome}</TableCell>
                     <TableCell>{r.custoCreditos}</TableCell>
                     <TableCell>{formatDateBR(r.criadoEm)}</TableCell>
+                    <TableCell>
+                      <EntregaPremioAcoes
+                        entregas={r.entregas}
+                        nomeAluno={r.alunoNome ?? "—"}
+                        nomePremio={r.itemNome}
+                      />
+                    </TableCell>
                     <TableCell className="flex justify-end">
                       <MarcarEntregueButton id={r.id} />
                     </TableCell>
@@ -91,6 +100,7 @@ export default async function ResgatesPage() {
                   <TableHead>Tipo</TableHead>
                   <TableHead>Custo</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Entrega</TableHead>
                   <TableHead>Data</TableHead>
                 </TableRow>
               </TableHeader>
@@ -105,6 +115,13 @@ export default async function ResgatesPage() {
                       <Badge variant={r.status === "pendente" ? "outline" : "default"}>
                         {RESGATE_STATUS_LABELS[r.status]}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <EntregaPremioAcoes
+                        entregas={r.entregas}
+                        nomeAluno={r.alunoNome ?? "—"}
+                        nomePremio={r.itemNome}
+                      />
                     </TableCell>
                     <TableCell>{formatDateBR(r.criadoEm)}</TableCell>
                   </TableRow>
