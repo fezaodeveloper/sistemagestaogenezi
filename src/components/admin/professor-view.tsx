@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, Maximize2, MessageCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, Maximize2 } from "lucide-react";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
 import type { AulaPainel, CursoPainel, ModuloPainel } from "@/lib/professor/panel";
 import { PdfViewerButtonAdmin } from "@/components/admin/pdf-viewer-button-admin";
@@ -69,41 +68,6 @@ function ModuloCard({ modulo, onSelecionar }: { modulo: ModuloPainel; onSelecion
         </CardContent>
       </Card>
     </button>
-  );
-}
-
-function TurmasSection({ turmas }: { turmas: CursoPainel["turmas"] }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-muted-foreground text-sm font-medium">Turmas</h3>
-      {turmas.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nenhuma turma ativa.</p>
-      ) : (
-        turmas.map((turma) => (
-          <div key={turma.id} className="flex flex-col gap-1">
-            <p className="text-sm font-medium">{turma.nome}</p>
-            {turma.alunos.length === 0 ? (
-              <p className="text-muted-foreground text-xs">Nenhum aluno matriculado.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {turma.alunos.map((aluno) => (
-                  <Button
-                    key={aluno.id}
-                    render={<Link href={`/admin/chat/${aluno.id}`} />}
-                    nativeButton={false}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <MessageCircle />
-                    {aluno.nome ?? "Aluno"}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))
-      )}
-    </div>
   );
 }
 
@@ -267,8 +231,6 @@ function NivelCurso({
           ))}
         </div>
       )}
-
-      <TurmasSection turmas={curso.turmas} />
     </div>
   );
 }

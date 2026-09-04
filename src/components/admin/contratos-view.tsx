@@ -6,6 +6,7 @@ import { downloadContrato } from "@/app/admin/matriculas/actions";
 import { WhatsappStubButton } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -98,16 +99,29 @@ function BaixarPdfButton({ matriculaId }: { matriculaId: string }) {
 }
 
 export function ContratosView({ contratos }: { contratos: ContratoListItem[] }) {
+  const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
 
   const contratosFiltrados = useMemo(() => {
-    if (statusFiltro === STATUS_FILTRO_TODOS) return contratos;
-    return contratos.filter((contrato) => contrato.status === statusFiltro);
-  }, [contratos, statusFiltro]);
+    const termo = busca.trim().toLowerCase();
+    return contratos.filter((contrato) => {
+      if (statusFiltro !== STATUS_FILTRO_TODOS && contrato.status !== statusFiltro) return false;
+      if (!termo) return true;
+      const nomeAluno = (contrato.alunos?.full_name ?? "").toLowerCase();
+      const nomeCurso = (contrato.matriculas?.turmas?.cursos?.nome ?? "").toLowerCase();
+      return nomeAluno.includes(termo) || nomeCurso.includes(termo);
+    });
+  }, [contratos, statusFiltro, busca]);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <Input
+          placeholder="Buscar por aluno ou curso..."
+          value={busca}
+          onChange={(event) => setBusca(event.target.value)}
+          className="max-w-sm"
+        />
         <Select
           items={STATUS_FILTRO_ITEMS}
           value={statusFiltro}
@@ -128,7 +142,7 @@ export function ContratosView({ contratos }: { contratos: ContratoListItem[] }) 
 
       {contratosFiltrados.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
-          Nenhum contrato encontrado com o filtro aplicado.
+          Nenhum contrato encontrado com os filtros aplicados.
         </p>
       ) : (
         <Table>
