@@ -1,7 +1,7 @@
 import { MessageCircle } from "lucide-react";
 import type { createClient } from "@/lib/supabase/server";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
-import type { Conversa, MensagemChat } from "./schema";
+import type { ArquivoAnexo, Conversa, MensagemChat } from "./schema";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -58,7 +58,7 @@ export async function getMensagens(
   return (data ?? []) as MensagemChat[];
 }
 
-export type AlunoElegivelChat = { id: string; nome: string | null };
+export type AlunoElegivelChat = { id: string; nome: string | null; email: string | null };
 
 // Picker de "nova conversa" do admin — só alunos com matrícula ativa em
 // curso presencial/híbrido (mesmo critério embutido na policy de insert
@@ -69,12 +69,14 @@ export async function getAlunosElegiveisParaChat(
 ): Promise<AlunoElegivelChat[]> {
   const { data } = await supabase
     .from("matriculas")
-    .select("aluno_id, alunos!inner(profiles!alunos_id_fkey(full_name)), turmas!inner(cursos!inner(tipo))")
+    .select(
+      "aluno_id, alunos!inner(email, profiles!alunos_id_fkey(full_name)), turmas!inner(cursos!inner(tipo))",
+    )
     .eq("status", "ativa");
 
   const rows = (data ?? []) as unknown as Array<{
     aluno_id: string;
-    alunos: { profiles: { full_name: string | null } | null } | null;
+    alunos: { email: string; profiles: { full_name: string | null } | null } | null;
     turmas: { cursos: { tipo: string } | null } | null;
   }>;
 
@@ -82,7 +84,11 @@ export async function getAlunosElegiveisParaChat(
   for (const row of rows) {
     if (row.turmas?.cursos?.tipo === "ead") continue;
     if (!porAluno.has(row.aluno_id)) {
-      porAluno.set(row.aluno_id, { id: row.aluno_id, nome: row.alunos?.profiles?.full_name ?? null });
+      porAluno.set(row.aluno_id, {
+        id: row.aluno_id,
+        nome: row.alunos?.profiles?.full_name ?? null,
+        email: row.alunos?.email ?? null,
+      });
     }
   }
   return [...porAluno.values()].sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? ""));
@@ -112,13 +118,58 @@ export async function enviarMensagem(
   conversaId: string,
   remetenteId: string,
   texto: string,
+  arquivo?: ArquivoAnexo,
 ): Promise<{ error?: string }> {
-  const { error } = await supabase
-    .from("mensagens_chat")
-    .insert({ conversa_id: conversaId, remetente_id: remetenteId, texto });
+  const { error } = await supabase.from("mensagens_chat").insert({
+    conversa_id: conversaId,
+    remetente_id: remetenteId,
+    texto,
+    arquivo_url: arquivo?.url ?? null,
+    arquivo_nome: arquivo?.nome ?? null,
+    arquivo_tipo: arquivo?.tipo ?? null,
+  });
 
   if (error) {
     return { error: "Não foi possível enviar a mensagem. Tente novamente." };
+  }
+  return {};
+}
+
+// Editar/excluir (TAREFA 2E) sempre restrito à própria mensagem — o
+// `.eq("remetente_id", remetenteId)` é reforço aqui (a fronteira de
+// verdade é a policy de RLS que só existe depois que a migration
+// 20260903300000_chat_arquivos.sql for aplicada).
+export async function editarMensagem(
+  supabase: SupabaseServerClient,
+  mensagemId: string,
+  remetenteId: string,
+  novoTexto: string,
+): Promise<{ error?: string }> {
+  const { error } = await supabase
+    .from("mensagens_chat")
+    .update({ texto: novoTexto })
+    .eq("id", mensagemId)
+    .eq("remetente_id", remetenteId);
+
+  if (error) {
+    return { error: "Não foi possível editar a mensagem." };
+  }
+  return {};
+}
+
+export async function excluirMensagem(
+  supabase: SupabaseServerClient,
+  mensagemId: string,
+  remetenteId: string,
+): Promise<{ error?: string }> {
+  const { error } = await supabase
+    .from("mensagens_chat")
+    .delete()
+    .eq("id", mensagemId)
+    .eq("remetente_id", remetenteId);
+
+  if (error) {
+    return { error: "Não foi possível excluir a mensagem." };
   }
   return {};
 }

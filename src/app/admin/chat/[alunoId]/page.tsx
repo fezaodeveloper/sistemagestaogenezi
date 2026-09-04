@@ -6,7 +6,9 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { IniciarConversaButton } from "@/components/admin/iniciar-conversa-button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  editarMensagem,
   enviarMensagemAdmin,
+  excluirMensagem,
   iniciarOuAbrirConversaAdmin,
   marcarConversaLidaAdmin,
 } from "../actions";
@@ -61,6 +63,10 @@ export default async function ConversaAdminPage({
         initialMensagens={mensagens}
         enviarAction={enviarMensagemAdmin.bind(null, conversa.id)}
         marcarLidasAction={marcarConversaLidaAdmin.bind(null, conversa.id)}
+        podeAnexarArquivo
+        podeEditarExcluir
+        editarAction={editarMensagem}
+        excluirAction={excluirMensagem}
       />
     </div>
   );

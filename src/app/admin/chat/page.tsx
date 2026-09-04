@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getAlunosElegiveisParaChat, getConversasAdmin } from "@/lib/chat/chat";
 import { NovaConversaSelect } from "@/components/admin/nova-conversa-select";
+import { MensagemEmMassaDialog } from "@/components/admin/mensagem-em-massa-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -30,12 +31,15 @@ export default async function ChatPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Chat</h1>
-        <p className="text-muted-foreground text-sm">
-          Conversas com alunos de cursos presenciais ou híbridos. Uma conversa por aluno,
-          compartilhada entre todos os admins.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Chat</h1>
+          <p className="text-muted-foreground text-sm">
+            Conversas com alunos de cursos presenciais ou híbridos. Uma conversa por aluno,
+            compartilhada entre todos os admins.
+          </p>
+        </div>
+        <MensagemEmMassaDialog alunos={alunosElegiveis} />
       </div>
 
       <Card>
