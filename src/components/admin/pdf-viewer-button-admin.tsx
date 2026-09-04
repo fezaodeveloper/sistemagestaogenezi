@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Maximize2 } from "lucide-react";
 import { getPdfSignedUrlAdmin } from "@/app/admin/professor/actions";
+import { ProfessorFullscreen } from "@/components/admin/professor-fullscreen";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -24,6 +25,7 @@ type ViewerState =
 // origem da signed URL.
 export function PdfViewerButtonAdmin({ materialId, titulo }: { materialId: string; titulo: string }) {
   const [open, setOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [state, setState] = useState<ViewerState>({ status: "idle" });
   const [, startTransition] = useTransition();
 
@@ -43,31 +45,49 @@ export function PdfViewerButtonAdmin({ materialId, titulo }: { materialId: strin
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>
-        <FileText />
-        {titulo}
-      </DialogTrigger>
-      <DialogContent className="flex h-[85vh] w-full flex-col sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>{titulo}</DialogTitle>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-hidden rounded-lg">
-          {state.status === "error" ? (
-            <div className="text-destructive flex h-full items-center justify-center text-center text-sm">
-              {state.message}
-            </div>
-          ) : state.status === "ready" ? (
-            <iframe
-              className="h-full w-full"
-              src={`${state.url}#toolbar=0&navpanes=0`}
-              title={titulo}
-            />
-          ) : (
-            <Skeleton className="h-full w-full" />
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogTrigger render={<Button variant="outline" size="sm" />}>
+          <FileText />
+          {titulo}
+        </DialogTrigger>
+        <DialogContent className="flex h-[85vh] w-full flex-col sm:max-w-4xl">
+          <DialogHeader className="flex-row items-center justify-between space-y-0 pr-8">
+            <DialogTitle>{titulo}</DialogTitle>
+            {state.status === "ready" && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setFullscreen(true)}>
+                <Maximize2 />
+                Tela cheia
+              </Button>
+            )}
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-hidden rounded-lg">
+            {state.status === "error" ? (
+              <div className="text-destructive flex h-full items-center justify-center text-center text-sm">
+                {state.message}
+              </div>
+            ) : state.status === "ready" ? (
+              <iframe
+                className="h-full w-full"
+                src={`${state.url}#toolbar=0&navpanes=0`}
+                title={titulo}
+              />
+            ) : (
+              <Skeleton className="h-full w-full" />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {fullscreen && state.status === "ready" && (
+        <ProfessorFullscreen titulo={titulo} onClose={() => setFullscreen(false)}>
+          <iframe
+            className="h-full w-full rounded-lg bg-white"
+            src={`${state.url}#toolbar=0&navpanes=0`}
+            title={titulo}
+          />
+        </ProfessorFullscreen>
+      )}
+    </>
   );
 }

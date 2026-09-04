@@ -20,6 +20,7 @@ export type ModuloPainel = {
   id: string;
   numero: number;
   titulo: string;
+  capaUrl: string | null;
   aulas: AulaPainel[];
 };
 
@@ -34,6 +35,7 @@ export type TurmaPainel = {
 export type CursoPainel = {
   id: string;
   nome: string;
+  capaUrl: string | null;
   modulos: ModuloPainel[];
   turmas: TurmaPainel[];
 };
@@ -46,7 +48,7 @@ export type CursoPainel = {
 export async function getPainelProfessor(supabase: SupabaseServerClient): Promise<CursoPainel[]> {
   const { data: cursosData } = await supabase
     .from("cursos")
-    .select("id, nome")
+    .select("id, nome, capa_url")
     .eq("status", "ativo")
     .neq("tipo", "ead")
     .order("nome");
@@ -57,7 +59,7 @@ export async function getPainelProfessor(supabase: SupabaseServerClient): Promis
   const [{ data: modulosData }, { data: turmasData }] = await Promise.all([
     supabase
       .from("modulos")
-      .select("id, numero, titulo, curso_id")
+      .select("id, numero, titulo, capa_url, curso_id")
       .in("curso_id", cursoIds)
       .order("numero"),
     supabase
@@ -105,15 +107,25 @@ export async function getPainelProfessor(supabase: SupabaseServerClient): Promis
     alunos: { profiles: { full_name: string | null } | null } | null;
   }>;
 
+  // Capas ficam em buckets públicos (mesma lógica já usada nas páginas do
+  // aluno, ver src/app/aluno/page.tsx e src/app/aluno/cursos/[id]/page.tsx)
+  // — só monta a URL pública a partir do path salvo, sem signed URL.
+  const capaCursoUrl = (path: string | null) =>
+    path ? supabase.storage.from("cursos").getPublicUrl(path).data.publicUrl : null;
+  const capaModuloUrl = (path: string | null) =>
+    path ? supabase.storage.from("modulos").getPublicUrl(path).data.publicUrl : null;
+
   return cursos.map((curso) => ({
     id: curso.id,
     nome: curso.nome,
+    capaUrl: capaCursoUrl(curso.capa_url),
     modulos: modulos
       .filter((m) => m.curso_id === curso.id)
       .map((modulo) => ({
         id: modulo.id,
         numero: modulo.numero,
         titulo: modulo.titulo,
+        capaUrl: capaModuloUrl(modulo.capa_url),
         aulas: aulas
           .filter((a) => a.modulo_id === modulo.id)
           .map((aula) => ({
