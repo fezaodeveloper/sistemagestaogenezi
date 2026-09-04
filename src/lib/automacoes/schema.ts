@@ -41,6 +41,12 @@ export const EVENTO_AUTOMACAO_TIPOS = [
   "whatsapp.stub",
   "premio.estoque_baixo",
   "turma.baixa_frequencia",
+  "contrato.assinado",
+  "contrato.pendente",
+  "parcela.vencendo.amanha",
+  "lead.sem.contato",
+  "resgate.novo",
+  "resumo.mensal",
 ] as const;
 export type EventoAutomacaoTipo = (typeof EVENTO_AUTOMACAO_TIPOS)[number];
 

@@ -5,6 +5,8 @@ import { enviarAlertaTelegram } from "@/lib/telegram/client";
 const LINK_FINANCEIRO = "https://sistemagestaogenezi.vercel.app/admin/financeiro";
 const LINK_LEADS = "https://sistemagestaogenezi.vercel.app/admin/leads";
 const LINK_ALUNOS = "https://sistemagestaogenezi.vercel.app/admin/alunos";
+const LINK_CONTRATOS = "https://sistemagestaogenezi.vercel.app/admin/contratos";
+const LINK_RESGATES = "https://sistemagestaogenezi.vercel.app/admin/resgates";
 
 function formatarReais(valor: unknown): string {
   const numero = typeof valor === "number" ? valor : Number(valor ?? 0);
@@ -166,5 +168,81 @@ export async function notificarErroSistema(payload: Record<string, unknown>): Pr
     "Erro no Sistema",
     [`📍 Local: ${texto(payload.local)}`, `❌ Erro: ${texto(payload.mensagem)}`],
     "🚨",
+  );
+}
+
+export async function notificarContratoAssinado(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Contrato Assinado",
+    [
+      `📝 ${texto(payload.nome_aluno)} assinou o contrato digitalmente`,
+      `📚 Curso: ${texto(payload.nome_curso)}`,
+    ],
+    "✅",
+  );
+}
+
+export async function notificarContratoPendente(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Contrato Pendente",
+    [
+      `📝 ${texto(payload.nome_aluno)} ainda não assinou o contrato`,
+      `📅 Pendente há ${texto(payload.dias)} dias`,
+      `🔗 Ver contratos: ${LINK_CONTRATOS}`,
+    ],
+    "⏳",
+  );
+}
+
+export async function notificarLeadSemContato(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Lead sem contato",
+    [
+      `👤 ${texto(payload.nome)} aguarda contato há ${texto(payload.dias)} dias`,
+      `📞 Telefone: ${texto(payload.telefone)}`,
+      `🔗 Ver CRM: ${LINK_LEADS}`,
+    ],
+    "🎯",
+  );
+}
+
+export async function notificarParcelaVencendoAmanha(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Parcela vencendo amanhã",
+    [
+      `👤 Aluno: ${texto(payload.nome_aluno)}`,
+      `💰 Valor: R$ ${formatarReais(payload.valor)}`,
+      `📅 Vencimento: ${formatarData(payload.data_vencimento)}`,
+    ],
+    "⚠️",
+  );
+}
+
+export async function notificarNovoResgate(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Novo Resgate de Prêmio",
+    [
+      `👤 Aluno: ${texto(payload.nome_aluno)}`,
+      `🏆 Prêmio: ${texto(payload.nome_premio)}`,
+      `💎 Créditos usados: ${texto(payload.creditos)}`,
+      `🔗 Ver resgates: ${LINK_RESGATES}`,
+    ],
+    "🎁",
+  );
+}
+
+export async function notificarResumoMensal(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Resumo Mensal",
+    [
+      `📅 ${texto(payload.mes)}/${texto(payload.ano)}`,
+      `💰 Receita total: R$ ${formatarReais(payload.receita)}`,
+      `📉 Inadimplência: ${texto(payload.parcelas_atrasadas)} parcelas (R$ ${formatarReais(payload.valor_atrasado)})`,
+      `🎓 Novas matrículas: ${texto(payload.novas_matriculas)}`,
+      `🏆 Certificados emitidos: ${texto(payload.certificados_emitidos)}`,
+      `🎯 Leads captados: ${texto(payload.leads_captados)}`,
+      `📊 Saúde da escola: ${texto(payload.pontuacao)}/100`,
+    ],
+    "📊",
   );
 }

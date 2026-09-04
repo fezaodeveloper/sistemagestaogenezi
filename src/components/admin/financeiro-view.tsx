@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, Paperclip, Plus, Printer } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, Paperclip, Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   cancelarParcela,
@@ -17,6 +17,7 @@ import {
   type MatriculaParaParcela,
   type ParcelaComRelacoes,
 } from "@/app/admin/financeiro/actions";
+import { gerarRelatorioMEI } from "@/app/admin/financeiro/mei/actions";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
@@ -297,6 +298,46 @@ function NovaParcelaDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RelatorioMeiButton({ ano, mes }: { ano: number; mes: number }) {
+  const [gerando, setGerando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGerar() {
+    // Abre a aba em branco já no clique (síncrono), antes do await — mesmo
+    // motivo de handleGerarCarne (bloqueio de pop-up).
+    const novaAba = window.open("", "_blank");
+    setError(null);
+    setGerando(true);
+    try {
+      const resultado = await gerarRelatorioMEI(ano, mes);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        novaAba?.close();
+        return;
+      }
+      const blob = base64ParaBlob(resultado.pdf, "application/pdf");
+      const url = URL.createObjectURL(blob);
+      if (novaAba) {
+        novaAba.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+    } finally {
+      setGerando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button type="button" variant="outline" onClick={handleGerar} disabled={gerando}>
+        <FileText />
+        {gerando ? "Gerando..." : "Relatório MEI"}
+      </Button>
+      {error && <span className="text-destructive text-xs">{error}</span>}
+    </div>
   );
 }
 
@@ -967,7 +1008,10 @@ export function FinanceiroView({
           )}
         </div>
 
-        <NovaParcelaDialog matriculas={matriculas} onCriada={recarregar} />
+        <div className="flex flex-wrap items-start gap-2">
+          <RelatorioMeiButton ano={ano} mes={mes} />
+          <NovaParcelaDialog matriculas={matriculas} onCriada={recarregar} />
+        </div>
       </div>
 
       <div>

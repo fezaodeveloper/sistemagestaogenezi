@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
+import { dispararEvento } from "@/lib/automacoes/motor";
 import type { ContratoAssinado } from "@/lib/contratos/schema";
 
 // Um aluno pode ter mais de uma matrícula (logo mais de um contrato) — a
@@ -52,6 +53,21 @@ export async function assinarContrato(matriculaId: string): Promise<{ error?: st
   if (error) {
     return { error: "Não foi possível registrar a assinatura. Tente novamente." };
   }
+
+  const { data: matriculaInfo } = await supabase
+    .from("matriculas")
+    .select("turmas(cursos(nome))")
+    .eq("id", matriculaId)
+    .single();
+  const nomeCurso =
+    (matriculaInfo as unknown as { turmas: { cursos: { nome: string } | null } | null } | null)?.turmas?.cursos
+      ?.nome ?? "—";
+
+  await dispararEvento(
+    "contrato.assinado",
+    { nome_aluno: user.full_name ?? user.email ?? "—", nome_curso: nomeCurso, matricula_id: matriculaId },
+    `contrato-assinado-${matriculaId}`,
+  );
 
   // Best-effort: regenera o PDF com o rodapé de aceite digital. Se falhar,
   // a assinatura já registrada acima continua válida — o aluno só ficaria

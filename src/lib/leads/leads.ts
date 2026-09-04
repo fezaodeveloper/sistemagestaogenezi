@@ -8,6 +8,32 @@ import type { createClient } from "@/lib/supabase/server";
 import type { Lead, LeadFormValues } from "./schema";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
+
+const DIAS_SEM_CONTATO = 7;
+
+export type LeadSemContato = { id: string; nome: string; telefone: string; dias: number };
+
+// Usado pelo cron de verificar-atrasos (TAREFA 9B) — leads que não viraram
+// aluno_ativo (nem foram descartados/desistentes) e não têm nenhuma
+// atualização (contato, mudança de status) há mais de 7 dias.
+export async function verificarLeadsSemContato(admin: SupabaseAdminClient): Promise<LeadSemContato[]> {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - DIAS_SEM_CONTATO);
+
+  const { data } = await admin
+    .from("leads")
+    .select("id, nome, telefone, updated_at")
+    .neq("status", "aluno_ativo")
+    .lt("updated_at", limite.toISOString());
+
+  return ((data ?? []) as { id: string; nome: string; telefone: string; updated_at: string }[]).map((lead) => ({
+    id: lead.id,
+    nome: lead.nome,
+    telefone: lead.telefone,
+    dias: Math.floor((Date.now() - new Date(lead.updated_at).getTime()) / 86400000),
+  }));
+}
 
 export type LeadComCurso = Lead & { nomeCurso: string | null };
 

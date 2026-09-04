@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { reprocessarEventoAction } from "@/app/admin/automacoes/actions";
+import { useState, useTransition } from "react";
+import { getEventosAutomacao, reprocessarEventoAction } from "@/app/admin/automacoes/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO, calcularTotalPaginas } from "@/lib/paginacao";
 import {
   Select,
   SelectContent,
@@ -43,7 +46,13 @@ function formatarData(data: string): string {
   return new Date(data).toLocaleString("pt-BR");
 }
 
-function ReprocessarButton({ eventoId }: { eventoId: string }) {
+function ReprocessarButton({
+  eventoId,
+  onReprocessado,
+}: {
+  eventoId: string;
+  onReprocessado: () => void;
+}) {
   const [isPending, startTransition] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
 
@@ -51,7 +60,11 @@ function ReprocessarButton({ eventoId }: { eventoId: string }) {
     setErro(null);
     startTransition(async () => {
       const resultado = await reprocessarEventoAction(eventoId);
-      if (resultado.error) setErro(resultado.error);
+      if (resultado.error) {
+        setErro(resultado.error);
+        return;
+      }
+      onReprocessado();
     });
   }
 
@@ -66,69 +79,127 @@ function ReprocessarButton({ eventoId }: { eventoId: string }) {
 }
 
 export function AutomacoesLogView({
-  eventos,
-  paginaAtual,
-  totalPaginas,
-  totalRegistros,
-  limite,
+  eventosIniciais,
+  totalInicial,
 }: {
-  eventos: EventoAutomacao[];
-  paginaAtual: number;
-  totalPaginas: number;
-  totalRegistros: number;
-  limite: number;
+  eventosIniciais: EventoAutomacao[];
+  totalInicial: number;
 }) {
+  const [eventos, setEventos] = useState(eventosIniciais);
+  const [total, setTotal] = useState(totalInicial);
+  const [pagina, setPagina] = useState(1);
+  const [limite, setLimite] = useState(LIMITE_PADRAO);
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [tipoFiltro, setTipoFiltro] = useState<string>(TIPO_FILTRO_TODOS);
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [isPending, startTransition] = useTransition();
 
-  const eventosFiltrados = useMemo(() => {
-    return eventos.filter((evento) => {
-      if (statusFiltro !== STATUS_FILTRO_TODOS && evento.status !== statusFiltro) return false;
-      if (tipoFiltro !== TIPO_FILTRO_TODOS && evento.tipo !== tipoFiltro) return false;
-      return true;
+  // Centraliza a busca (mesmo racional de `buscar` em financeiro-view.tsx):
+  // sempre lê os filtros e a página/limite atuais, evita duplicar a lógica
+  // entre o botão "Filtrar" e a paginação.
+  function buscar(novaPagina: number, novoLimite: number) {
+    startTransition(async () => {
+      const resultado = await getEventosAutomacao({
+        page: novaPagina,
+        limit: novoLimite,
+        tipo: tipoFiltro !== TIPO_FILTRO_TODOS ? tipoFiltro : undefined,
+        status: statusFiltro !== STATUS_FILTRO_TODOS ? statusFiltro : undefined,
+        dataInicio: dataInicio || undefined,
+        dataFim: dataFim || undefined,
+      });
+      setEventos(resultado.eventos);
+      setTotal(resultado.total);
+      setPagina(novaPagina);
+      setLimite(novoLimite);
     });
-  }, [eventos, statusFiltro, tipoFiltro]);
+  }
+
+  function handleFiltrar() {
+    buscar(1, limite);
+  }
+
+  function handlePaginar(novaPagina: number, novoLimite: number) {
+    buscar(novaPagina, novoLimite);
+  }
+
+  function handleReprocessado() {
+    buscar(pagina, limite);
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
-        <Select
-          items={STATUS_FILTRO_ITEMS}
-          value={statusFiltro}
-          onValueChange={(value) => setStatusFiltro(value as string)}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.keys(STATUS_FILTRO_ITEMS).map((status) => (
-              <SelectItem key={status} value={status}>
-                {STATUS_FILTRO_ITEMS[status]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          items={TIPO_FILTRO_ITEMS}
-          value={tipoFiltro}
-          onValueChange={(value) => setTipoFiltro(value as string)}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.keys(TIPO_FILTRO_ITEMS).map((tipo) => (
-              <SelectItem key={tipo} value={tipo}>
-                {TIPO_FILTRO_ITEMS[tipo]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Tipo</Label>
+          <Select
+            items={TIPO_FILTRO_ITEMS}
+            value={tipoFiltro}
+            onValueChange={(value) => setTipoFiltro(value as string)}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(TIPO_FILTRO_ITEMS).map((tipo) => (
+                <SelectItem key={tipo} value={tipo}>
+                  {TIPO_FILTRO_ITEMS[tipo]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs">Status</Label>
+          <Select
+            items={STATUS_FILTRO_ITEMS}
+            value={statusFiltro}
+            onValueChange={(value) => setStatusFiltro(value as string)}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(STATUS_FILTRO_ITEMS).map((status) => (
+                <SelectItem key={status} value={status}>
+                  {STATUS_FILTRO_ITEMS[status]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="data_inicio" className="text-xs">
+            De:
+          </Label>
+          <Input
+            id="data_inicio"
+            type="date"
+            value={dataInicio}
+            onChange={(event) => setDataInicio(event.target.value)}
+            className="w-40"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="data_fim" className="text-xs">
+            Até:
+          </Label>
+          <Input
+            id="data_fim"
+            type="date"
+            value={dataFim}
+            onChange={(event) => setDataFim(event.target.value)}
+            className="w-40"
+          />
+        </div>
+        <Button type="button" size="sm" onClick={handleFiltrar} disabled={isPending}>
+          {isPending ? "Filtrando..." : "Filtrar"}
+        </Button>
       </div>
 
-      {eventosFiltrados.length === 0 ? (
+      {eventos.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
-          {eventos.length === 0
+          {total === 0
             ? "Nenhum evento de automação registrado ainda."
             : "Nenhum evento encontrado com os filtros aplicados."}
         </p>
@@ -145,7 +216,7 @@ export function AutomacoesLogView({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {eventosFiltrados.map((evento) => (
+            {eventos.map((evento) => (
               <TableRow key={evento.id}>
                 <TableCell className="whitespace-nowrap">{formatarData(evento.created_at)}</TableCell>
                 <TableCell className="font-mono text-xs">{evento.tipo}</TableCell>
@@ -161,7 +232,9 @@ export function AutomacoesLogView({
                   {evento.erro ?? "—"}
                 </TableCell>
                 <TableCell className="text-right">
-                  {evento.status === "falhou" && <ReprocessarButton eventoId={evento.id} />}
+                  {evento.status === "falhou" && (
+                    <ReprocessarButton eventoId={evento.id} onReprocessado={handleReprocessado} />
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -170,11 +243,11 @@ export function AutomacoesLogView({
       )}
 
       <Paginacao
-        paginaAtual={paginaAtual}
-        totalPaginas={totalPaginas}
-        totalRegistros={totalRegistros}
+        paginaAtual={pagina}
+        totalPaginas={calcularTotalPaginas(total, limite)}
+        totalRegistros={total}
         limite={limite}
-        baseUrl="/admin/automacoes"
+        onNavigate={handlePaginar}
       />
     </div>
   );
