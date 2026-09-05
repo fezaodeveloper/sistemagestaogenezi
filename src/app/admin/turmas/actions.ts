@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { turmaFormSchema } from "@/lib/turmas/schema";
 import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
+import { regenerarCronogramaAoSalvarTurma } from "@/lib/cronograma/gerador";
 
 type TurmaFormValuesEcho = {
   curso_id: string;
@@ -135,27 +136,36 @@ export async function createTurma(
     };
   }
 
-  const { error } = await supabase.from("turmas").insert({
-    curso_id: parsed.data.curso_id,
-    nome: parsed.data.nome,
-    data_inicio: parsed.data.data_inicio,
-    data_fim: parsed.data.data_fim,
-    capacidade_maxima: parsed.data.capacidade_maxima,
-    status: parsed.data.status,
-    cadencia_dias_semana: cadencia.cadenciaDiasSemana,
-    horario_aula: parsed.data.horario_aula ?? null,
-    turno: parsed.data.turno ?? null,
-    local_sala: parsed.data.local_sala ?? null,
-    professor: parsed.data.professor ?? null,
-    horario_fim: parsed.data.horario_fim ?? null,
-    observacoes: parsed.data.observacoes ?? null,
-  });
+  const { data: novaTurma, error } = await supabase
+    .from("turmas")
+    .insert({
+      curso_id: parsed.data.curso_id,
+      nome: parsed.data.nome,
+      data_inicio: parsed.data.data_inicio,
+      data_fim: parsed.data.data_fim,
+      capacidade_maxima: parsed.data.capacidade_maxima,
+      status: parsed.data.status,
+      cadencia_dias_semana: cadencia.cadenciaDiasSemana,
+      horario_aula: parsed.data.horario_aula ?? null,
+      turno: parsed.data.turno ?? null,
+      local_sala: parsed.data.local_sala ?? null,
+      professor: parsed.data.professor ?? null,
+      horario_fim: parsed.data.horario_fim ?? null,
+      observacoes: parsed.data.observacoes ?? null,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !novaTurma) {
     return {
       error: "Não foi possível criar a turma. Tente novamente.",
       values: echoValues(formData),
     };
+  }
+
+  // Best-effort — nunca impede a criação da turma (já concluída acima).
+  if (cadencia.cadenciaDiasSemana) {
+    await regenerarCronogramaAoSalvarTurma(novaTurma.id, supabase);
   }
 
   // Campanha automática de recontato: leads em aberto (novo/contatado)
@@ -231,6 +241,11 @@ export async function updateTurma(
       error: "Não foi possível salvar as alterações. Tente novamente.",
       values: echoValues(formData),
     };
+  }
+
+  // Best-effort — nunca impede o salvamento da turma (já concluído acima).
+  if (cadencia.cadenciaDiasSemana) {
+    await regenerarCronogramaAoSalvarTurma(id, supabase);
   }
 
   revalidatePath("/admin/turmas");

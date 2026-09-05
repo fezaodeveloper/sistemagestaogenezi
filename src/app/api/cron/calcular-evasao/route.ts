@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { calcularIndiceEvasao } from "@/lib/evasao/calculo";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarFrequenciaTurmas } from "@/lib/automacoes/handlers/frequencia-turmas";
+import { atualizarOfensivasAluno } from "@/lib/gamificacao/ofensiva";
 
 const LIMIAR_ALERTA = 70;
 
@@ -100,5 +101,22 @@ export async function GET(request: Request) {
     // Best-effort — o cálculo de evasão acima já concluiu normalmente.
   }
 
-  return NextResponse.json({ processados, alertas, turmasNotificadas });
+  // Ofensiva + badges progressivos (Gamificação avançada) — um aluno pode
+  // ter mais de uma matrícula ativa (várias linhas em `matriculas` acima),
+  // por isso deduplica por aluno_id: atualizarOfensivasAluno já recalcula
+  // TODAS as matrículas ativas do aluno de uma vez, chamar de novo pra cada
+  // matrícula do mesmo aluno seria trabalho repetido à toa. Best-effort por
+  // aluno — uma falha isolada não deve impedir o resto de rodar.
+  let ofensivasAtualizadas = 0;
+  const alunoIdsUnicos = [...new Set(matriculas.map((m) => m.aluno_id))];
+  for (const alunoId of alunoIdsUnicos) {
+    try {
+      await atualizarOfensivasAluno(alunoId);
+      ofensivasAtualizadas += 1;
+    } catch {
+      // Best-effort — segue pro próximo aluno.
+    }
+  }
+
+  return NextResponse.json({ processados, alertas, turmasNotificadas, ofensivasAtualizadas });
 }

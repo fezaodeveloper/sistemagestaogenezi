@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getConversaPorAluno, getContagemNaoLidasAluno } from "@/lib/chat/chat";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -22,6 +23,15 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
       { nome_aluno: user.full_name ?? user.email, email: user.email },
       `aluno-login-${user.id}-${hoje}`,
     );
+  } catch {
+    // Nunca deve impedir o aluno de acessar a própria área.
+  }
+
+  // Best-effort — roda em toda navegação dentro de /aluno (não só no login
+  // em si), mas concederBadges usa upsert com ignoreDuplicates, então
+  // rodar de novo pra um badge já concedido é inofensivo (só idempotente).
+  try {
+    await verificarBadgesProgressivos(user.id);
   } catch {
     // Nunca deve impedir o aluno de acessar a própria área.
   }
