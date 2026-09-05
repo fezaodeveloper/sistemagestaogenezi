@@ -8,24 +8,39 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TurmasTable } from "@/components/admin/turmas-table";
 
+const TURMAS_ORDER_BY_VALIDOS = ["nome", "recente", "inicio"] as const;
+export type TurmasOrderBy = (typeof TURMAS_ORDER_BY_VALIDOS)[number];
+
+function parseTurmasOrderBy(valor: string | undefined): TurmasOrderBy {
+  return (TURMAS_ORDER_BY_VALIDOS as readonly string[]).includes(valor ?? "")
+    ? (valor as TurmasOrderBy)
+    : "nome";
+}
+
 export default async function TurmasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; limit?: string }>;
+  searchParams: Promise<{ page?: string; limit?: string; orderBy?: string }>;
 }) {
   await requireRole("admin");
-  const { page, limit } = await searchParams;
+  const { page, limit, orderBy: orderByRaw } = await searchParams;
 
   const paginaAtual = parsePagina(page);
   const limite = parseLimite(limit);
   const offset = calcularOffset(paginaAtual, limite);
+  const orderBy = parseTurmasOrderBy(orderByRaw);
 
   const supabase = await createClient();
-  const { data, error, count } = await supabase
-    .from("turmas")
-    .select("*, cursos(nome)", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limite - 1);
+  let query = supabase.from("turmas").select("*, cursos(nome)", { count: "exact" });
+  if (orderBy === "recente") {
+    query = query.order("created_at", { ascending: false });
+  } else if (orderBy === "inicio") {
+    query = query.order("data_inicio", { ascending: true });
+  } else {
+    query = query.order("nome", { ascending: true });
+  }
+
+  const { data, error, count } = await query.range(offset, offset + limite - 1);
   const turmas = data as TurmaWithCurso[] | null;
   const totalRegistros = count ?? 0;
   const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
@@ -65,6 +80,7 @@ export default async function TurmasPage({
             totalPaginas={totalPaginas}
             totalRegistros={totalRegistros}
             limite={limite}
+            orderBy={orderBy}
           />
         </Card>
       )}

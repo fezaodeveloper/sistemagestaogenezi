@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AlertTriangle, FileSpreadsheet, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   Select,
   SelectContent,
@@ -66,6 +68,12 @@ const RISCO_FILTRO_ITEMS: Record<string, string> = {
   [RISCO_FILTRO_BAIXO]: "Baixo (< 40)",
   [RISCO_FILTRO_MEDIO]: "Médio (40-69)",
   [RISCO_FILTRO_ALTO]: "Alto (≥ 70)",
+};
+
+const ORDER_BY_ITEMS: Record<string, string> = {
+  nome: "Nome (A-Z)",
+  recente: "Mais recente",
+  risco: "Maior risco de evasão",
 };
 
 function RiscoEvasaoBadge({ indice }: { indice: number | null }) {
@@ -228,13 +236,16 @@ export function AlunosTable({
   totalPaginas,
   totalRegistros,
   limite,
+  orderBy,
 }: {
   alunos: AlunoListItem[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
+  orderBy: string;
 }) {
+  const router = useRouter();
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [faixaFiltro, setFaixaFiltro] = useState<string>(FAIXA_FILTRO_TODAS);
@@ -286,6 +297,17 @@ export function AlunosTable({
       return aluno.cpf.includes(termoDigits) || aluno.telefone.includes(termoDigits);
     });
   }, [alunos, busca, statusFiltro, faixaFiltro, riscoFiltro, dataDe, dataAte]);
+
+  // Mesma convenção de URL "limpa" de construirHref (paginacao.tsx): só
+  // entra na URL o que difere do padrão. Volta pra página 1 ao trocar a
+  // ordenação, preservando o limite atual.
+  function handleOrderByChange(novoOrderBy: string) {
+    const params = new URLSearchParams();
+    if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
+    if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
+    const query = params.toString();
+    router.push(query ? `/admin/alunos?${query}` : "/admin/alunos");
+  }
 
   async function handleImprimir() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -436,6 +458,26 @@ export function AlunosTable({
             className="w-40"
           />
         </div>
+
+        <div className="flex flex-col gap-2">
+          <Label className="text-muted-foreground text-xs">Ordenar por</Label>
+          <Select
+            items={ORDER_BY_ITEMS}
+            value={orderBy}
+            onValueChange={(value) => handleOrderByChange(value as string)}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(ORDER_BY_ITEMS).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {ORDER_BY_ITEMS[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <p className="text-muted-foreground text-xs">
@@ -525,6 +567,7 @@ export function AlunosTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/alunos"
+        searchParams={orderBy !== "nome" ? { orderBy } : {}}
       />
     </div>
   );

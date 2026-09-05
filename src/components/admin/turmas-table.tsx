@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
@@ -8,7 +9,9 @@ import { DeleteTurmaButton } from "@/components/admin/delete-turma-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   Select,
   SelectContent,
@@ -42,6 +45,12 @@ const TURNO_FILTRO_TODOS = "todos";
 const TURNO_FILTRO_ITEMS: Record<string, string> = {
   [TURNO_FILTRO_TODOS]: "Todos os turnos",
   ...TURNO_LABELS,
+};
+
+const ORDER_BY_ITEMS: Record<string, string> = {
+  nome: "Nome (A-Z)",
+  recente: "Mais recente",
+  inicio: "Data de início",
 };
 
 // dd/mm/aaaa a partir de "yyyy-mm-dd" — evita o desvio de fuso de usar
@@ -167,17 +176,31 @@ export function TurmasTable({
   totalPaginas,
   totalRegistros,
   limite,
+  orderBy,
 }: {
   turmas: TurmaWithCurso[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
+  orderBy: string;
 }) {
+  const router = useRouter();
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [turnoFiltro, setTurnoFiltro] = useState<string>(TURNO_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+
+  // Mesma convenção de URL "limpa" de construirHref (paginacao.tsx): só
+  // entra na URL o que difere do padrão. Volta pra página 1 ao trocar a
+  // ordenação, preservando o limite atual.
+  function handleOrderByChange(novoOrderBy: string) {
+    const params = new URLSearchParams();
+    if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
+    if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
+    const query = params.toString();
+    router.push(query ? `/admin/turmas?${query}` : "/admin/turmas");
+  }
 
   // Filtros client-side: a lista já vem inteira do Server Component (sem
   // paginação), mesmo padrão de matriculas-table.tsx — busca e os dois
@@ -261,6 +284,26 @@ export function TurmasTable({
               ))}
             </SelectContent>
           </Select>
+
+          <div className="flex flex-col gap-2">
+            <Label className="text-muted-foreground text-xs">Ordenar por</Label>
+            <Select
+              items={ORDER_BY_ITEMS}
+              value={orderBy}
+              onValueChange={(value) => handleOrderByChange(value as string)}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.keys(ORDER_BY_ITEMS).map((chave) => (
+                  <SelectItem key={chave} value={chave}>
+                    {ORDER_BY_ITEMS[chave]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -360,6 +403,7 @@ export function TurmasTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/turmas"
+        searchParams={orderBy !== "nome" ? { orderBy } : {}}
       />
     </div>
   );

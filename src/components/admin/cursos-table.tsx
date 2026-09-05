@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   Select,
   SelectContent,
@@ -45,6 +48,12 @@ const STATUS_FILTRO_TODOS = "todos";
 const STATUS_FILTRO_ITEMS: Record<string, string> = {
   [STATUS_FILTRO_TODOS]: "Todos os status",
   ...CURSO_STATUS_LABELS,
+};
+
+const ORDER_BY_ITEMS: Record<string, string> = {
+  nome: "Nome (A-Z)",
+  recente: "Mais recente",
+  aulas: "Mais aulas",
 };
 
 function contarAulas(curso: CursoListItem): number {
@@ -153,17 +162,32 @@ export function CursosTable({
   totalPaginas,
   totalRegistros,
   limite,
+  orderBy,
 }: {
   cursos: CursoListItem[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
+  orderBy: string;
 }) {
+  const router = useRouter();
   const [busca, setBusca] = useState("");
   const [modalidadeFiltro, setModalidadeFiltro] = useState<string>(MODALIDADE_FILTRO_TODAS);
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+
+  // Muda o searchParam orderBy e volta pra página 1, preservando o limite
+  // atual — mesma convenção de URL "limpa" usada em construirHref
+  // (src/components/ui/paginacao.tsx): só entra na URL o que difere do
+  // padrão.
+  function handleOrderByChange(novoOrderBy: string) {
+    const params = new URLSearchParams();
+    if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
+    if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
+    const query = params.toString();
+    router.push(query ? `/admin/cursos?${query}` : "/admin/cursos");
+  }
 
   // Filtro client-side simples: a lista de cursos já vem inteira do Server
   // Component (sem paginação hoje), então não há necessidade de ida e volta
@@ -250,6 +274,26 @@ export function CursosTable({
               ))}
             </SelectContent>
           </Select>
+
+          <div className="flex flex-col gap-2">
+            <Label className="text-muted-foreground text-xs">Ordenar por</Label>
+            <Select
+              items={ORDER_BY_ITEMS}
+              value={orderBy}
+              onValueChange={(value) => handleOrderByChange(value as string)}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.keys(ORDER_BY_ITEMS).map((chave) => (
+                  <SelectItem key={chave} value={chave}>
+                    {ORDER_BY_ITEMS[chave]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -325,6 +369,7 @@ export function CursosTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/cursos"
+        searchParams={orderBy !== "nome" ? { orderBy } : {}}
       />
     </div>
   );
