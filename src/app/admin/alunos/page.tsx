@@ -31,26 +31,18 @@ export default async function AlunosPage({
 
   const supabase = await createClient();
 
-  // Ordenar por nome exige embutir profiles com !inner (só assim
-  // referencedTable afeta a ordem das linhas de "alunos", não só a ordem
-  // dentro de cada embed — ver docs do postgrest-js) — seguro aqui porque
-  // todo aluno tem profile (mesmo id, FK obrigatória).
-  const selectClause =
-    orderBy === "nome"
-      ? "*, profiles!alunos_id_fkey!inner(full_name), matriculas(status, turmas(nome))"
-      : "*, profiles!alunos_id_fkey(full_name), matriculas(status, turmas(nome))";
-
-  let alunosQuery = supabase.from("alunos").select(selectClause, { count: "exact" });
-  if (orderBy === "nome") {
-    alunosQuery = alunosQuery.order("full_name", { referencedTable: "profiles", ascending: true });
-  } else if (orderBy === "recente") {
+  let alunosQuery = supabase
+    .from("alunos")
+    .select("*, profiles!alunos_id_fkey(full_name), matriculas(status, turmas(nome))", { count: "exact" });
+  if (orderBy === "recente") {
     alunosQuery = alunosQuery.order("created_at", { ascending: false });
   }
-  // "risco" não tem coluna/agregação nativa pra ordenar no banco (o índice
-  // é o MAIOR valor entre as linhas de indices_evasao do aluno, calculado
-  // em memória logo abaixo) — busca a lista inteira nesse caso, sem
-  // .range(), pra ordenar e paginar depois em JS.
-  if (orderBy !== "risco") {
+  // "nome" e "risco" não têm ordenação aplicável direto no banco do jeito
+  // que os dados estão embutidos (nome vem de profiles via embed, risco é
+  // o MAIOR índice entre linhas de indices_evasao do aluno) — busca a
+  // lista inteira nesses dois casos, sem .range(), pra ordenar e paginar
+  // depois em JS.
+  if (orderBy === "recente") {
     alunosQuery = alunosQuery.range(offset, offset + limite - 1);
   }
 
@@ -73,6 +65,14 @@ export default async function AlunosPage({
     ...aluno,
     indiceEvasao: indicePorAluno.get(aluno.id) ?? null,
   }));
+
+  if (orderBy === "nome" && alunos) {
+    alunos = [...alunos].sort((a, b) =>
+      (a.profiles?.full_name ?? "").localeCompare(b.profiles?.full_name ?? "", "pt-BR"),
+    );
+    totalRegistros = alunos.length;
+    alunos = alunos.slice(offset, offset + limite);
+  }
 
   if (orderBy === "risco" && alunos) {
     alunos = [...alunos].sort((a, b) => (b.indiceEvasao ?? -1) - (a.indiceEvasao ?? -1));
