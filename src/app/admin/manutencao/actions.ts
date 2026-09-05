@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { calcularOffset, LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   manutencaoChamadoFormSchema,
   manutencaoResolucaoFormSchema,
@@ -12,16 +13,32 @@ import {
   type ManutencaoStatus,
 } from "@/lib/manutencao/schema";
 
-export async function getManutencaoChamados(): Promise<ManutencaoChamado[]> {
+export async function getManutencaoChamados(options?: {
+  query?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ chamados: ManutencaoChamado[]; total: number }> {
   await requireRole("admin");
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("manutencao_chamados")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const pagina = options?.page ?? 1;
+  const limite = options?.limit ?? LIMITE_PADRAO;
+  const offset = calcularOffset(pagina, limite);
 
-  return (data as ManutencaoChamado[] | null) ?? [];
+  const supabase = await createClient();
+  let query = supabase.from("manutencao_chamados").select("*", { count: "exact" });
+  if (options?.query) {
+    // Vírgula quebraria a sintaxe do .or() do PostgREST (separador de
+    // condições) — troca por espaço, suficiente pra esse campo de busca
+    // livre não travar a query.
+    const termo = options.query.replace(/,/g, " ");
+    query = query.or(`titulo.ilike.%${termo}%,local.ilike.%${termo}%`);
+  }
+
+  const { data, count } = await query
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limite - 1);
+
+  return { chamados: (data as ManutencaoChamado[] | null) ?? [], total: count ?? 0 };
 }
 
 export async function createManutencaoChamado(formData: FormData): Promise<{ error?: string }> {

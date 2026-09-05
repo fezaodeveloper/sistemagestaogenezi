@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { DeleteTurmaButton } from "@/components/admin/delete-turma-button";
+import { DuplicarTurmaButton } from "@/components/admin/duplicar-turma-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -389,6 +390,7 @@ export function TurmasTable({
                   >
                     Editar
                   </Button>
+                  <DuplicarTurmaButton id={turma.id} nome={turma.nome} />
                   <DeleteTurmaButton id={turma.id} nome={turma.nome} />
                 </TableCell>
               </TableRow>

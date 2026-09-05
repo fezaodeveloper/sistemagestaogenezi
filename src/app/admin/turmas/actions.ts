@@ -250,3 +250,46 @@ export async function deleteTurma(id: string): Promise<{ error?: string }> {
   revalidatePath("/admin/turmas");
   return {};
 }
+
+// Cópia criada como "planejada" (não existe status "inativa" no enum de
+// turmas — TURMA_STATUSES é planejada/ativa/encerrada/cancelada) pra não
+// ativar a turma nova por acidente antes do admin revisar/ajustar os dados.
+// vagas_ocupadas não é copiado (nem faz parte do insert, igual createTurma)
+// porque a cópia começa sem nenhum aluno matriculado.
+export async function duplicarTurma(turmaId: string): Promise<{ id: string } | { error: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data: turma } = await supabase.from("turmas").select("*").eq("id", turmaId).single();
+
+  if (!turma) {
+    return { error: "Turma não encontrada." };
+  }
+
+  const { data: novaTurma, error } = await supabase
+    .from("turmas")
+    .insert({
+      curso_id: turma.curso_id,
+      nome: `${turma.nome} (cópia)`,
+      data_inicio: turma.data_inicio,
+      data_fim: turma.data_fim,
+      capacidade_maxima: turma.capacidade_maxima,
+      status: "planejada",
+      cadencia_dias_semana: turma.cadencia_dias_semana,
+      horario_aula: turma.horario_aula,
+      turno: turma.turno,
+      local_sala: turma.local_sala,
+      professor: turma.professor,
+      horario_fim: turma.horario_fim,
+      observacoes: turma.observacoes,
+    })
+    .select("id")
+    .single();
+
+  if (error || !novaTurma) {
+    return { error: "Não foi possível duplicar a turma." };
+  }
+
+  revalidatePath("/admin/turmas");
+  return { id: novaTurma.id };
+}

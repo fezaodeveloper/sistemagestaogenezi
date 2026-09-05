@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { deleteTreinamento } from "@/app/admin/treinamentos/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -103,21 +104,34 @@ function ExcluirTreinamentoButton({ treinamento }: { treinamento: Treinamento })
 }
 
 export function TreinamentosView({ treinamentos }: { treinamentos: Treinamento[] }) {
+  const [busca, setBusca] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>(CATEGORIA_FILTRO_TODAS);
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
 
   const treinamentosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+
     return treinamentos.filter((treinamento) => {
       if (categoriaFiltro !== CATEGORIA_FILTRO_TODAS && treinamento.categoria !== categoriaFiltro) return false;
       if (statusFiltro !== STATUS_FILTRO_TODOS && treinamento.status !== statusFiltro) return false;
-      return true;
+      if (!termo) return true;
+
+      const titulo = treinamento.titulo.toLowerCase();
+      const descricao = (treinamento.descricao ?? "").toLowerCase();
+      return titulo.includes(termo) || descricao.includes(termo);
     });
-  }, [treinamentos, categoriaFiltro, statusFiltro]);
+  }, [treinamentos, busca, categoriaFiltro, statusFiltro]);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
+          <Input
+            placeholder="Buscar por título ou descrição..."
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            className="max-w-sm"
+          />
           <Select
             items={CATEGORIA_FILTRO_ITEMS}
             value={categoriaFiltro}

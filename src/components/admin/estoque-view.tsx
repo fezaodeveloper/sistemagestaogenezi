@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
 import { Plus } from "lucide-react";
-import { deleteEstoqueItem, registrarMovimentacao } from "@/app/admin/estoque/actions";
+import { deleteEstoqueItem, getEstoqueItens, registrarMovimentacao } from "@/app/admin/estoque/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO, calcularTotalPaginas } from "@/lib/paginacao";
 import {
   Select,
   SelectContent,
@@ -54,9 +57,11 @@ import {
 function MovimentacaoDialog({
   item,
   tipoInicial,
+  onRegistrado,
 }: {
   item: EstoqueItem;
   tipoInicial: EstoqueMovimentacaoTipo;
+  onRegistrado: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +77,7 @@ function MovimentacaoDialog({
         return;
       }
       setOpen(false);
+      onRegistrado();
     });
   }
 
@@ -138,7 +144,7 @@ function MovimentacaoDialog({
   );
 }
 
-function ExcluirItemButton({ item }: { item: EstoqueItem }) {
+function ExcluirItemButton({ item, onExcluido }: { item: EstoqueItem; onExcluido: () => void }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -152,6 +158,7 @@ function ExcluirItemButton({ item }: { item: EstoqueItem }) {
         return;
       }
       setOpen(false);
+      onExcluido();
     });
   }
 
@@ -187,13 +194,81 @@ function ExcluirItemButton({ item }: { item: EstoqueItem }) {
   );
 }
 
-export function EstoqueView({ itens }: { itens: EstoqueItem[] }) {
+export function EstoqueView({
+  itensIniciais,
+  totalInicial,
+  paginaInicial,
+  limiteInicial,
+  queryInicial,
+}: {
+  itensIniciais: EstoqueItem[];
+  totalInicial: number;
+  paginaInicial: number;
+  limiteInicial: number;
+  queryInicial: string;
+}) {
+  const router = useRouter();
+  const [itens, setItens] = useState(itensIniciais);
+  const [total, setTotal] = useState(totalInicial);
+  const [pagina, setPagina] = useState(paginaInicial);
+  const [limite, setLimite] = useState(limiteInicial);
+  const [busca, setBusca] = useState(queryInicial);
+  const [, startTransition] = useTransition();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (valor.trim()) params.set("q", valor.trim());
+      if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
+      const query = params.toString();
+      router.push(query ? `/admin/estoque?${query}` : "/admin/estoque");
+    }, 500);
+  }
+
+  // Paginação client-side via Server Action (mesmo padrão de
+  // gastos/avulsos) — não passa pela URL, por isso não conflita com a busca
+  // acima, que é a única coisa refletida em searchParams.
+  function handlePaginar(novaPagina: number, novoLimite: number) {
+    startTransition(async () => {
+      const resultado = await getEstoqueItens({
+        query: busca.trim() || undefined,
+        page: novaPagina,
+        limit: novoLimite,
+      });
+      setItens(resultado.itens);
+      setTotal(resultado.total);
+      setPagina(novaPagina);
+      setLimite(novoLimite);
+    });
+  }
+
+  // Recarrega a página atual (usado após excluir ou registrar uma
+  // movimentação de estoque — nenhum dos dois muda o total de páginas o
+  // suficiente pra justificar voltar pra página 1).
+  function handleAtualizado() {
+    startTransition(async () => {
+      const resultado = await getEstoqueItens({
+        query: busca.trim() || undefined,
+        page: pagina,
+        limit: limite,
+      });
+      setItens(resultado.itens);
+      setTotal(resultado.total);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <p className="text-muted-foreground text-sm">
-          {itens.length} ite{itens.length === 1 ? "m" : "ns"} cadastrado{itens.length === 1 ? "" : "s"}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <Input
+          placeholder="Buscar item..."
+          value={busca}
+          onChange={(event) => handleBuscaChange(event.target.value)}
+          className="max-w-sm"
+        />
         <Button render={<Link href="/admin/estoque/novo" />} nativeButton={false}>
           <Plus />
           Novo item
@@ -201,7 +276,11 @@ export function EstoqueView({ itens }: { itens: EstoqueItem[] }) {
       </div>
 
       {itens.length === 0 ? (
-        <p className="text-muted-foreground py-10 text-center text-sm">Nenhum item cadastrado ainda.</p>
+        <p className="text-muted-foreground py-10 text-center text-sm">
+          {busca
+            ? "Nenhum item encontrado com os filtros aplicados."
+            : "Nenhum item cadastrado ainda."}
+        </p>
       ) : (
         <Table>
           <TableHeader>
@@ -242,8 +321,8 @@ export function EstoqueView({ itens }: { itens: EstoqueItem[] }) {
                     </Badge>
                   </TableCell>
                   <TableCell className="flex flex-wrap justify-end gap-1">
-                    <MovimentacaoDialog item={item} tipoInicial="entrada" />
-                    <MovimentacaoDialog item={item} tipoInicial="saida" />
+                    <MovimentacaoDialog item={item} tipoInicial="entrada" onRegistrado={handleAtualizado} />
+                    <MovimentacaoDialog item={item} tipoInicial="saida" onRegistrado={handleAtualizado} />
                     <Button
                       render={<Link href={`/admin/estoque/${item.id}/editar`} />}
                       nativeButton={false}
@@ -252,7 +331,7 @@ export function EstoqueView({ itens }: { itens: EstoqueItem[] }) {
                     >
                       Editar
                     </Button>
-                    <ExcluirItemButton item={item} />
+                    <ExcluirItemButton item={item} onExcluido={handleAtualizado} />
                   </TableCell>
                 </TableRow>
               );
@@ -260,6 +339,14 @@ export function EstoqueView({ itens }: { itens: EstoqueItem[] }) {
           </TableBody>
         </Table>
       )}
+
+      <Paginacao
+        paginaAtual={pagina}
+        totalPaginas={calcularTotalPaginas(total, limite)}
+        totalRegistros={total}
+        limite={limite}
+        onNavigate={handlePaginar}
+      />
     </div>
   );
 }

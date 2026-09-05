@@ -4,19 +4,33 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { calcularOffset, LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   estoqueItemFormSchema,
   estoqueMovimentacaoFormSchema,
   type EstoqueItem,
 } from "@/lib/estoque/schema";
 
-export async function getEstoqueItens(): Promise<EstoqueItem[]> {
+export async function getEstoqueItens(options?: {
+  query?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ itens: EstoqueItem[]; total: number }> {
   await requireRole("admin");
 
-  const supabase = await createClient();
-  const { data } = await supabase.from("estoque_itens").select("*").order("nome");
+  const pagina = options?.page ?? 1;
+  const limite = options?.limit ?? LIMITE_PADRAO;
+  const offset = calcularOffset(pagina, limite);
 
-  return (data as EstoqueItem[] | null) ?? [];
+  const supabase = await createClient();
+  let query = supabase.from("estoque_itens").select("*", { count: "exact" });
+  if (options?.query) {
+    query = query.ilike("nome", `%${options.query}%`);
+  }
+
+  const { data, count } = await query.order("nome").range(offset, offset + limite - 1);
+
+  return { itens: (data as EstoqueItem[] | null) ?? [], total: count ?? 0 };
 }
 
 export async function getEstoqueItem(id: string): Promise<EstoqueItem | null> {
