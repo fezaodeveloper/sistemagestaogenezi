@@ -37,6 +37,7 @@ export default async function EditarCursoPage({ params }: { params: Promise<{ id
           tipo: curso.tipo,
           status: curso.status,
           carga_horaria_horas: curso.carga_horaria_horas ?? undefined,
+          valor: curso.valor ?? undefined,
         }}
         capaAtualUrl={capaAtualUrl}
         submitLabel="Salvar alterações"
