@@ -8,6 +8,7 @@ import { calcularOffset, LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   estoqueItemFormSchema,
   estoqueMovimentacaoFormSchema,
+  type EstoqueEntrega,
   type EstoqueItem,
 } from "@/lib/estoque/schema";
 
@@ -202,11 +203,20 @@ export async function registrarMovimentacao(
     return { error: "Não foi possível atualizar a quantidade." };
   }
 
+  // aluno_id/aluno_nome_cache só fazem sentido numa saída (entrega pro
+  // aluno) — ignorados silenciosamente pra entrada/ajuste, mesmo se
+  // vierem preenchidos no FormData por engano.
+  const alunoId = formData.get("aluno_id");
+  const alunoNomeCache = formData.get("aluno_nome_cache");
+  const ehEntregaParaAluno = parsed.data.tipo === "saida" && alunoId;
+
   const { error: movError } = await supabase.from("estoque_movimentacoes").insert({
     item_id: itemId,
     tipo: parsed.data.tipo,
     quantidade: parsed.data.quantidade,
     motivo: parsed.data.motivo ?? null,
+    aluno_id: ehEntregaParaAluno ? String(alunoId) : null,
+    aluno_nome_cache: ehEntregaParaAluno ? String(alunoNomeCache ?? "") || null : null,
   });
 
   if (movError) {
@@ -214,5 +224,108 @@ export async function registrarMovimentacao(
   }
 
   revalidatePath("/admin/estoque");
+  return {};
+}
+
+// Alunos ativos por nome — mesmo padrão de buscarAlunosParaWizard
+// (src/app/admin/matriculas/actions.ts): só dispara com 2+ caracteres,
+// LIMIT 10, usado no campo "Aluno (opcional)" da saída de estoque.
+export async function buscarAlunosParaEntrega(
+  query: string,
+): Promise<{ id: string; full_name: string | null }[]> {
+  await requireRole("admin");
+
+  const termo = query.trim();
+  if (termo.length < 2) return [];
+
+  const termoSeguro = termo.replace(/[,()]/g, "").trim();
+  if (!termoSeguro) return [];
+  const termoLike = `%${termoSeguro}%`;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("alunos")
+    .select("id, full_name")
+    .eq("status_aluno", "ativo")
+    .ilike("full_name", termoLike)
+    .order("full_name")
+    .limit(10);
+
+  return data ?? [];
+}
+
+export async function getEstoqueEntregas(options?: {
+  query?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ entregas: EstoqueEntrega[]; total: number }> {
+  await requireRole("admin");
+
+  const pagina = options?.page ?? 1;
+  const limite = options?.limit ?? LIMITE_PADRAO;
+  const offset = calcularOffset(pagina, limite);
+
+  const supabase = await createClient();
+  // !inner no embed de estoque_itens permite filtrar por estoque_itens.nome
+  // dentro do .or() abaixo — sem inner join, o PostgREST não aplica esse
+  // filtro embutido ao conjunto de linhas retornado.
+  let query = supabase
+    .from("estoque_movimentacoes")
+    .select("*, estoque_itens!inner(nome, categoria)", { count: "exact" })
+    .eq("tipo", "saida")
+    .not("aluno_id", "is", null);
+
+  if (options?.query) {
+    const termoSeguro = options.query.replace(/[,()]/g, "").trim();
+    if (termoSeguro) {
+      const termoLike = `%${termoSeguro}%`;
+      query = query.or(
+        `aluno_nome_cache.ilike.${termoLike},estoque_itens.nome.ilike.${termoLike}`,
+      );
+    }
+  }
+
+  const { data, count } = await query
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limite - 1);
+
+  return { entregas: (data as EstoqueEntrega[] | null) ?? [], total: count ?? 0 };
+}
+
+export async function atualizarObservacaoEntrega(
+  id: string,
+  motivo: string,
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("estoque_movimentacoes")
+    .update({ motivo: motivo.trim() || null })
+    .eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível salvar a observação." };
+  }
+
+  revalidatePath("/admin/estoque/entregas");
+  return {};
+}
+
+// Exclui só o registro histórico da entrega — não repõe a quantidade no
+// estoque (a saída já aconteceu de fato; reverter automaticamente a
+// quantidade poderia mascarar um ajuste manual feito à parte). Se o item
+// tiver que voltar pro estoque, use "Entrada" na tela de Estoque.
+export async function excluirEntrega(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("estoque_movimentacoes").delete().eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível excluir o registro." };
+  }
+
+  revalidatePath("/admin/estoque/entregas");
   return {};
 }

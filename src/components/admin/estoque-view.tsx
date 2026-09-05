@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
-import { Plus } from "lucide-react";
-import { deleteEstoqueItem, getEstoqueItens, registrarMovimentacao } from "@/app/admin/estoque/actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { ArrowRight, Plus } from "lucide-react";
+import {
+  buscarAlunosParaEntrega,
+  deleteEstoqueItem,
+  getEstoqueItens,
+  registrarMovimentacao,
+} from "@/app/admin/estoque/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +72,36 @@ function MovimentacaoDialog({
   const [error, setError] = useState<string | null>(null);
   const [tipo, setTipo] = useState<string>(tipoInicial);
   const [isPending, startTransition] = useTransition();
+  const [buscaAluno, setBuscaAluno] = useState("");
+  const [alunoSelecionado, setAlunoSelecionado] = useState<{
+    id: string;
+    full_name: string | null;
+  } | null>(null);
+  const [resultadosAluno, setResultadosAluno] = useState<{ id: string; full_name: string | null }[]>(
+    [],
+  );
+  const [buscandoAluno, setBuscandoAluno] = useState(false);
+
+  // Busca sob demanda com debounce de 300ms — só dispara com 2+ caracteres,
+  // mesmo padrão de buscarAlunosParaWizard (matricula-wizard.tsx).
+  useEffect(() => {
+    const termo = buscaAluno.trim();
+
+    const timeoutId = setTimeout(() => {
+      if (termo.length < 2) {
+        setResultadosAluno([]);
+        setBuscandoAluno(false);
+        return;
+      }
+
+      setBuscandoAluno(true);
+      buscarAlunosParaEntrega(termo)
+        .then((resultado) => setResultadosAluno(resultado))
+        .finally(() => setBuscandoAluno(false));
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [buscaAluno]);
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -89,6 +124,9 @@ function MovimentacaoDialog({
         if (nextOpen) {
           setError(null);
           setTipo(tipoInicial);
+          setBuscaAluno("");
+          setAlunoSelecionado(null);
+          setResultadosAluno([]);
         }
       }}
     >
@@ -128,6 +166,65 @@ function MovimentacaoDialog({
             <Label htmlFor="motivo">Motivo</Label>
             <Input id="motivo" name="motivo" placeholder="Opcional" />
           </div>
+          {tipo === "saida" && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="busca_aluno">Aluno (opcional)</Label>
+              <input type="hidden" name="aluno_id" value={alunoSelecionado?.id ?? ""} />
+              <input
+                type="hidden"
+                name="aluno_nome_cache"
+                value={alunoSelecionado?.full_name ?? ""}
+              />
+              {alunoSelecionado ? (
+                <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                  <span>{alunoSelecionado.full_name}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAlunoSelecionado(null)}
+                  >
+                    Remover
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    id="busca_aluno"
+                    placeholder="Nome do aluno..."
+                    value={buscaAluno}
+                    onChange={(event) => setBuscaAluno(event.target.value)}
+                  />
+                  {buscaAluno.trim().length >= 2 && (
+                    <div className="flex max-h-40 flex-col overflow-y-auto rounded-md border">
+                      {buscandoAluno ? (
+                        <p className="text-muted-foreground p-2 text-center text-xs">Buscando...</p>
+                      ) : resultadosAluno.length === 0 ? (
+                        <p className="text-muted-foreground p-2 text-center text-xs">
+                          Nenhum aluno encontrado.
+                        </p>
+                      ) : (
+                        resultadosAluno.map((candidato) => (
+                          <button
+                            key={candidato.id}
+                            type="button"
+                            onClick={() => {
+                              setAlunoSelecionado(candidato);
+                              setBuscaAluno("");
+                              setResultadosAluno([]);
+                            }}
+                            className="hover:bg-accent px-3 py-2 text-left text-sm"
+                          >
+                            {candidato.full_name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           {error && (
             <p role="alert" className="text-destructive text-sm">
               {error}
@@ -269,10 +366,16 @@ export function EstoqueView({
           onChange={(event) => handleBuscaChange(event.target.value)}
           className="max-w-sm"
         />
-        <Button render={<Link href="/admin/estoque/novo" />} nativeButton={false}>
-          <Plus />
-          Novo item
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button render={<Link href="/admin/estoque/entregas" />} nativeButton={false} variant="outline">
+            Ver entregas
+            <ArrowRight />
+          </Button>
+          <Button render={<Link href="/admin/estoque/novo" />} nativeButton={false}>
+            <Plus />
+            Novo item
+          </Button>
+        </div>
       </div>
 
       {itens.length === 0 ? (

@@ -89,6 +89,16 @@ export type EstoqueMovimentacao = {
   quantidade: number;
   motivo: string | null;
   referencia_id: string | null;
+  aluno_id: string | null;
+  aluno_nome_cache: string | null;
   created_by: string;
   created_at: string;
+};
+
+// Saída de estoque vinculada a um aluno (entrega) — usada na tela
+// /admin/estoque/entregas. aluno_nome_cache (não o join com alunos) é a
+// fonte de verdade pro nome exibido, já que sobrevive à exclusão do aluno
+// (aluno_id vira null via on delete set null).
+export type EstoqueEntrega = EstoqueMovimentacao & {
+  estoque_itens: { nome: string; categoria: EstoqueCategoria } | null;
 };
