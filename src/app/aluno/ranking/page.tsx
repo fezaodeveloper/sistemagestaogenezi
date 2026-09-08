@@ -13,9 +13,11 @@ import {
   type NivelBadge,
 } from "@/lib/gamificacao/badges-progressivos";
 import { isAvatarId } from "@/lib/avatares/catalog";
+import { cn } from "@/lib/utils";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -25,7 +27,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type CategoriaProgressiva = { titulo: string; niveis: NivelBadge[]; valor: number };
+type CategoriaProgressiva = { chave: string; titulo: string; niveis: NivelBadge[]; valor: number };
+
+// "21/08/2026" — mesmo padrão de data usado em outras telas (ver
+// termos-view.tsx, contratos-view.tsx).
+function formatDataConquista(isoString: string): string {
+  return new Date(isoString).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
 
 export default async function RankingPage() {
   const user = await requireRole("aluno");
@@ -60,17 +68,70 @@ export default async function RankingPage() {
 
   const catalogoPorId = new Map(catalogoBadges.map((b) => [b.id, b]));
   const conquistadosSet = new Set(meusBadges.map((b) => b.badgeId));
+  const conquistadoEmPorId = new Map(meusBadges.map((b) => [b.badgeId, b.conquistadoEm]));
 
   const proximoMarcoOfensiva = OFENSIVA_NIVEIS.find((nivel) => ofensivaAtual < nivel.limiar);
   const marcoMaximoOfensiva = OFENSIVA_NIVEIS[OFENSIVA_NIVEIS.length - 1].limiar;
 
   const categoriasProgressivas: CategoriaProgressiva[] = [
-    { titulo: "Ofensiva", niveis: OFENSIVA_NIVEIS, valor: progresso.ofensivaMaxima },
-    { titulo: "Frequência", niveis: FREQUENCIA_NIVEIS, valor: progresso.frequenciaCount },
-    { titulo: "Estudioso", niveis: MODULOS_NIVEIS, valor: progresso.modulosConcluidos },
-    { titulo: "Quiz", niveis: QUIZ_NIVEIS, valor: progresso.quizCount },
-    { titulo: "Colecionador", niveis: PONTOS_NIVEIS, valor: progresso.totalPontos },
+    { chave: "ofensiva", titulo: "🔥 Ofensiva", niveis: OFENSIVA_NIVEIS, valor: progresso.ofensivaMaxima },
+    { chave: "frequencia", titulo: "✅ Frequência", niveis: FREQUENCIA_NIVEIS, valor: progresso.frequenciaCount },
+    { chave: "modulos", titulo: "📚 Estudioso", niveis: MODULOS_NIVEIS, valor: progresso.modulosConcluidos },
+    { chave: "quiz", titulo: "🎯 Quiz", niveis: QUIZ_NIVEIS, valor: progresso.quizCount },
+    { chave: "pontos", titulo: "💰 Colecionador", niveis: PONTOS_NIVEIS, valor: progresso.totalPontos },
   ];
+
+  function renderGradeCategoria(categoria: CategoriaProgressiva) {
+    return (
+      <div key={categoria.chave} className="flex flex-col gap-2">
+        <span className="text-sm font-medium">{categoria.titulo}</span>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {categoria.niveis.map((nivel) => {
+            const conquistado = conquistadosSet.has(nivel.badgeId);
+            const info = catalogoPorId.get(nivel.badgeId);
+            const valorExibido = Math.min(categoria.valor, nivel.limiar);
+            const pct = Math.min(100, (categoria.valor / nivel.limiar) * 100);
+            const conquistadoEm = conquistadoEmPorId.get(nivel.badgeId);
+            return (
+              <Card
+                key={nivel.badgeId}
+                className={cn(
+                  "relative overflow-hidden transition-shadow",
+                  conquistado
+                    ? "border-amber-400/60 bg-amber-500/10 hover:shadow-[0_0_18px_2px_rgba(250,204,21,0.35)]"
+                    : "grayscale opacity-70",
+                )}
+              >
+                {conquistado && (
+                  <span className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-green-500 text-[10px] text-white">
+                    ✅
+                  </span>
+                )}
+                <CardContent className="flex flex-col items-center gap-1 py-4 text-center">
+                  <span className="text-2xl">{info?.icone ?? "🏅"}</span>
+                  <span className="text-xs font-medium">{info?.nome ?? nivel.badgeId}</span>
+                  {conquistado && conquistadoEm ? (
+                    <span className="text-muted-foreground text-[11px]">
+                      Conquistada em {formatDataConquista(conquistadoEm)}
+                    </span>
+                  ) : (
+                    <div className="flex w-full flex-col gap-1">
+                      <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
+                        <div className="bg-primary h-full rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-muted-foreground text-[11px]">
+                        {valorExibido}/{nivel.limiar}
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -188,38 +249,26 @@ export default async function RankingPage() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <Tabs defaultValue="todas">
+          <TabsList>
+            <TabsTrigger value="todas">Todas</TabsTrigger>
+            {categoriasProgressivas.map((categoria) => (
+              <TabsTrigger key={categoria.chave} value={categoria.chave}>
+                {categoria.titulo}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <TabsContent value="todas" className="flex flex-col gap-4 pt-4">
+            {categoriasProgressivas.map((categoria) => renderGradeCategoria(categoria))}
+          </TabsContent>
+
           {categoriasProgressivas.map((categoria) => (
-            <div key={categoria.titulo} className="flex flex-col gap-2">
-              <span className="text-sm font-medium">{categoria.titulo}</span>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {categoria.niveis.map((nivel) => {
-                  const conquistado = conquistadosSet.has(nivel.badgeId);
-                  const info = catalogoPorId.get(nivel.badgeId);
-                  const valorExibido = Math.min(categoria.valor, nivel.limiar);
-                  return (
-                    <Card
-                      key={nivel.badgeId}
-                      className={
-                        conquistado
-                          ? "border-amber-400/50 bg-amber-500/5 transition-transform hover:scale-[1.02]"
-                          : "opacity-60 grayscale"
-                      }
-                    >
-                      <CardContent className="flex flex-col items-center gap-1 py-4 text-center">
-                        <span className="text-2xl">{info?.icone ?? "🏅"}</span>
-                        <span className="text-xs font-medium">{info?.nome ?? nivel.badgeId}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {conquistado ? "✅" : "⬜"} {valorExibido}/{nivel.limiar}
-                        </span>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
+            <TabsContent key={categoria.chave} value={categoria.chave} className="pt-4">
+              {renderGradeCategoria(categoria)}
+            </TabsContent>
           ))}
-        </div>
+        </Tabs>
       </div>
     </div>
   );

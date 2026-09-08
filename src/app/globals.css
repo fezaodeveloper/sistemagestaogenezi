@@ -197,3 +197,21 @@
 .admin-dark .gz-tag-cyan { background: rgb(34 211 238 / 0.10); color: #22D3EE; }
 .admin-dark .gz-tag-violet { background: rgb(167 139 250 / 0.12); color: #A78BFA; }
 .admin-dark .gz-tag-neutral { background: rgb(255 255 255 / 0.05); color: var(--muted-foreground); }
+
+/* Animação de conquista (ConquistaModal) — CSS puro, sem biblioteca. */
+@keyframes conquista-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes conquista-glow {
+  0%, 100% { box-shadow: 0 0 20px 6px rgba(250, 204, 21, 0.45); }
+  50% { box-shadow: 0 0 40px 14px rgba(250, 204, 21, 0.75); }
+}
+@keyframes conquista-confete {
+  0% { transform: translateY(-10%) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110%) rotate(360deg); opacity: 0; }
+}
+.animate-conquista-pop { animation: conquista-pop 600ms ease-out; }
+.animate-conquista-glow { animation: conquista-glow 1.8s ease-in-out infinite; }
+.animate-conquista-confete { animation: conquista-confete linear infinite; }

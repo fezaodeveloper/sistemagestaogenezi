@@ -48,6 +48,7 @@ const GROUPS: NavGroup[] = [
   { id: "engajamento", label: "Engajamento", icon: Gift, items: [
     { href: "/admin/premios", label: "Prêmios", icon: Gift },
     { href: "/admin/resgates", label: "Resgates", icon: Award },
+    { href: "/admin/engajamento/recompensas", label: "Recompensas", icon: Gift },
   ]},
   { id: "sistema", label: "Sistema", icon: Settings, items: [
     { href: "/admin/automacoes", label: "Log de Automações", icon: Zap },

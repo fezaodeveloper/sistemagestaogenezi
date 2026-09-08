@@ -131,19 +131,186 @@ async function calcularContadores(admin: Admin, alunoId: string): Promise<Contad
   };
 }
 
+// Retorna só os badge_id que foram DE FATO inseridos agora (não os que já
+// existiam) — ignoreDuplicates vira "on conflict do nothing" no Postgres,
+// então .select() aqui devolve apenas as linhas realmente novas. Usado por
+// concederRecompensasDeBadges pra só processar recompensa de badge recém
+// conquistado, nunca reprocessar um badge antigo a cada verificação.
 async function concederBadges(
   admin: Admin,
   alunoId: string,
   valor: number,
   niveis: NivelBadge[],
-): Promise<void> {
+): Promise<string[]> {
   const badgeIds = niveis.filter((nivel) => valor >= nivel.limiar).map((nivel) => nivel.badgeId);
-  if (badgeIds.length === 0) return;
+  if (badgeIds.length === 0) return [];
 
-  await admin.from("badges_conquistados").upsert(
-    badgeIds.map((badgeId) => ({ aluno_id: alunoId, badge_id: badgeId, created_by: alunoId })),
-    { onConflict: "aluno_id,badge_id", ignoreDuplicates: true },
+  const { data } = await admin
+    .from("badges_conquistados")
+    .upsert(
+      badgeIds.map((badgeId) => ({ aluno_id: alunoId, badge_id: badgeId, created_by: alunoId })),
+      { onConflict: "aluno_id,badge_id", ignoreDuplicates: true },
+    )
+    .select("badge_id");
+
+  return (data ?? []).map((row) => row.badge_id as string);
+}
+
+type MedalhaRecompensa = {
+  id: string;
+  badge_id: string;
+  tipo: "premio" | "curso";
+  premio_id: string | null;
+  curso_id: string | null;
+  prazo_entrega_dias: number | null;
+};
+
+// 1 crédito = 50 pontos (mesma proporção de creditos_saldo, migration
+// 20260823100000) — pra "adicionar créditos suficientes" (opção escolhida
+// em revisão, em vez de resgatar automaticamente), lança um bônus de
+// pontos equivalente ao custo do prêmio em créditos. O aluno resgata o
+// prêmio manualmente depois, quando quiser, com o saldo já disponível.
+const PONTOS_POR_CREDITO = 50;
+
+async function concederRecompensaPremio(
+  admin: Admin,
+  alunoId: string,
+  recompensa: MedalhaRecompensa,
+): Promise<void> {
+  if (!recompensa.premio_id) return;
+
+  const { data: premio } = await admin
+    .from("premios")
+    .select("custo_creditos")
+    .eq("id", recompensa.premio_id)
+    .maybeSingle();
+  if (!premio) return;
+
+  // pontos_eventos exige uma matrícula — a recompensa é do aluno, não de
+  // um curso específico, então usa a matrícula mais recente dele (os
+  // pontos entram no total agregado por aluno em ranking_geral/
+  // creditos_saldo de qualquer forma, independente de qual matrícula
+  // "hospeda" o evento).
+  const { data: matricula } = await admin
+    .from("matriculas")
+    .select("id")
+    .eq("aluno_id", alunoId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!matricula) return;
+
+  const pontosCreditados = premio.custo_creditos * PONTOS_POR_CREDITO;
+
+  await admin.from("pontos_eventos").upsert(
+    {
+      matricula_id: matricula.id,
+      tipo_evento: "recompensa_medalha",
+      pontos: pontosCreditados,
+      referencia_id: recompensa.id,
+    },
+    { onConflict: "matricula_id,tipo_evento,referencia_id", ignoreDuplicates: true },
   );
+
+  // prazo_entrega_dias só é preenchido pelo admin quando o prêmio vinculado
+  // é físico ou híbrido (ver AdicionarRecompensaDialog) — quando ausente
+  // (prêmio digital), prazo_entrega_ate fica null.
+  let prazoEntregaAte: string | null = null;
+  if (recompensa.prazo_entrega_dias) {
+    const data = new Date();
+    data.setDate(data.getDate() + recompensa.prazo_entrega_dias);
+    prazoEntregaAte = data.toISOString().slice(0, 10);
+  }
+
+  await admin.from("medalha_recompensas_resgatadas").upsert(
+    {
+      aluno_id: alunoId,
+      recompensa_id: recompensa.id,
+      badge_id: recompensa.badge_id,
+      tipo: "premio",
+      pontos_creditados: pontosCreditados,
+      prazo_entrega_ate: prazoEntregaAte,
+    },
+    { onConflict: "aluno_id,recompensa_id", ignoreDuplicates: true },
+  );
+}
+
+// Mesma lógica de seleção de turma de resgatar_curso_bonus (migration
+// 20260823100000): turma ativa mais recente do curso. Diferente do resgate
+// por créditos, aqui não há checagem de saldo/limite — é uma recompensa
+// grátis por ter conquistado o badge.
+async function concederRecompensaCurso(
+  admin: Admin,
+  alunoId: string,
+  recompensa: MedalhaRecompensa,
+): Promise<void> {
+  if (!recompensa.curso_id) return;
+
+  const { data: turma } = await admin
+    .from("turmas")
+    .select("id")
+    .eq("curso_id", recompensa.curso_id)
+    .eq("status", "ativa")
+    .order("data_inicio", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!turma) return;
+
+  const { data: matriculaExistente } = await admin
+    .from("matriculas")
+    .select("id")
+    .eq("aluno_id", alunoId)
+    .eq("turma_id", turma.id)
+    .eq("status", "ativa")
+    .maybeSingle();
+  if (matriculaExistente) return;
+
+  const { data: novaMatricula } = await admin
+    .from("matriculas")
+    .insert({ aluno_id: alunoId, turma_id: turma.id, status: "ativa" })
+    .select("id")
+    .single();
+  if (!novaMatricula) return;
+
+  await admin.from("medalha_recompensas_resgatadas").upsert(
+    {
+      aluno_id: alunoId,
+      recompensa_id: recompensa.id,
+      badge_id: recompensa.badge_id,
+      tipo: "curso",
+      matricula_criada_id: novaMatricula.id,
+    },
+    { onConflict: "aluno_id,recompensa_id", ignoreDuplicates: true },
+  );
+}
+
+// Chamado só com badge_id que acabaram de ser concedidos agora (ver
+// concederBadges) — nunca reprocessa um badge antigo. Best-effort por
+// recompensa: uma falha isolada (prêmio excluído, curso sem turma ativa)
+// não deve derrubar as demais nem o badge já concedido.
+async function concederRecompensasDeBadges(
+  admin: Admin,
+  alunoId: string,
+  badgeIdsNovos: string[],
+): Promise<void> {
+  if (badgeIdsNovos.length === 0) return;
+
+  const { data: recompensasData } = await admin
+    .from("medalha_recompensas")
+    .select("id, badge_id, tipo, premio_id, curso_id, prazo_entrega_dias")
+    .in("badge_id", badgeIdsNovos);
+
+  for (const recompensa of (recompensasData ?? []) as MedalhaRecompensa[]) {
+    try {
+      if (recompensa.tipo === "premio") {
+        await concederRecompensaPremio(admin, alunoId, recompensa);
+      } else {
+        await concederRecompensaCurso(admin, alunoId, recompensa);
+      }
+    } catch {
+      // Best-effort — segue pra próxima recompensa.
+    }
+  }
 }
 
 // Verifica e concede automaticamente os badges progressivos (ofensiva,
@@ -157,13 +324,18 @@ export async function verificarBadgesProgressivos(alunoId: string): Promise<void
   const admin = createAdminClient();
   const contadores = await calcularContadores(admin, alunoId);
 
-  await Promise.all([
+  const resultados = await Promise.all([
     concederBadges(admin, alunoId, contadores.ofensivaMaxima, OFENSIVA_NIVEIS),
     concederBadges(admin, alunoId, contadores.frequenciaCount, FREQUENCIA_NIVEIS),
     concederBadges(admin, alunoId, contadores.modulosConcluidos, MODULOS_NIVEIS),
     concederBadges(admin, alunoId, contadores.quizCount, QUIZ_NIVEIS),
     concederBadges(admin, alunoId, contadores.totalPontos, PONTOS_NIVEIS),
   ]);
+
+  const badgeIdsNovos = resultados.flat();
+  if (badgeIdsNovos.length > 0) {
+    await concederRecompensasDeBadges(admin, alunoId, badgeIdsNovos);
+  }
 }
 
 // Mesmas 5 contagens, só leitura — usado pra desenhar a barra de progresso

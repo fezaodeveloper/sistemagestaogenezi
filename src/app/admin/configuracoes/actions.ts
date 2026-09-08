@@ -34,6 +34,53 @@ export async function updateEadGamificacao(ativo: boolean): Promise<{ error?: st
   return {};
 }
 
+export type ConfigGamificacaoValues = {
+  pts_aula_concluida: number;
+  pts_quiz_concluido: number;
+  pts_nota_maxima: number;
+  pts_presenca: number;
+  pts_modulo_concluido: number;
+  pts_curso_concluido: number;
+  limite_pts_dia: number;
+};
+
+const CAMPOS_CONFIG_GAMIFICACAO = [
+  "pts_aula_concluida",
+  "pts_quiz_concluido",
+  "pts_nota_maxima",
+  "pts_presenca",
+  "pts_modulo_concluido",
+  "pts_curso_concluido",
+  "limite_pts_dia",
+] as const;
+
+export async function salvarConfigGamificacao(formData: FormData): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const valores: Record<string, number> = {};
+  for (const campo of CAMPOS_CONFIG_GAMIFICACAO) {
+    const bruto = formData.get(campo);
+    const numero = Number(bruto);
+    if (bruto === null || !Number.isInteger(numero) || numero < 0) {
+      return { error: "Todos os valores precisam ser números inteiros e não negativos." };
+    }
+    valores[campo] = numero;
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ ...valores, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar as configurações de gamificação. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
 export async function updateCriteriosCertificado(
   notaMinima: number,
   frequenciaMinima: number,

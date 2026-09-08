@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getBannersLoginAdmin } from "@/app/admin/configuracoes/actions";
 import { AssinaturaDiretorForm } from "@/components/admin/assinatura-diretor-form";
 import { ConfiguracoesForm } from "@/components/admin/configuracoes-form";
+import { ConfiguracoesGamificacaoForm } from "@/components/admin/configuracoes-gamificacao-form";
 import { CriteriosCertificadoForm } from "@/components/admin/criterios-certificado-form";
 import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
 import { ConfiguracoesNotificacoesForm } from "@/components/admin/configuracoes-notificacoes-form";
@@ -24,7 +25,7 @@ export default async function ConfiguracoesPage() {
     supabase
       .from("configuracoes")
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -40,6 +41,7 @@ export default async function ConfiguracoesPage() {
       <Tabs defaultValue="geral">
         <TabsList>
           <TabsTrigger value="geral">Geral</TabsTrigger>
+          <TabsTrigger value="gamificacao">Gamificação</TabsTrigger>
           <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           <TabsTrigger value="banners">Banners do Login</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
@@ -124,6 +126,27 @@ export default async function ConfiguracoesPage() {
               >
                 Editar template do certificado
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="gamificacao">
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>Pontuações de Gamificação</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ConfiguracoesGamificacaoForm
+                defaultValues={{
+                  pts_aula_concluida: data?.pts_aula_concluida ?? 10,
+                  pts_quiz_concluido: data?.pts_quiz_concluido ?? 5,
+                  pts_nota_maxima: data?.pts_nota_maxima ?? 20,
+                  pts_presenca: data?.pts_presenca ?? 15,
+                  pts_modulo_concluido: data?.pts_modulo_concluido ?? 50,
+                  pts_curso_concluido: data?.pts_curso_concluido ?? 200,
+                  limite_pts_dia: data?.limite_pts_dia ?? 100,
+                }}
+              />
             </CardContent>
           </Card>
         </TabsContent>

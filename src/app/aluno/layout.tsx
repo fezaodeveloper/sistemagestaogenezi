@@ -5,6 +5,7 @@ import { getConversaPorAluno, getContagemNaoLidasAluno } from "@/lib/chat/chat";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
+import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -56,6 +57,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
 
   return (
     <div className="dark bg-background text-foreground min-h-svh">
+      <ConquistasProvider alunoId={user.id} />
       <SidebarProvider>
         <AlunoSidebar
           user={user}
