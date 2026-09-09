@@ -53,6 +53,7 @@ export type EntregaPremio = {
   tipo_entrega: EntregaPremioTipo;
   status: EntregaPremioStatus;
   observacoes: string | null;
+  prazo_entrega_ate: string | null;
 };
 
 // RLS já restringe às linhas do próprio aluno — não precisa filtrar por
@@ -92,7 +93,7 @@ export async function getResgatesAdmin(
   let query = supabase
     .from("resgates")
     .select(
-      "id, tipo, item_nome, custo_creditos, status, created_at, profiles!resgates_aluno_id_fkey(full_name), entregas_premios(id, tipo_entrega, status, observacoes)",
+      "id, tipo, item_nome, custo_creditos, status, created_at, profiles!resgates_aluno_id_fkey(full_name), entregas_premios(id, tipo_entrega, status, observacoes, prazo_entrega_ate)",
     )
     .order("created_at", { ascending: false });
 

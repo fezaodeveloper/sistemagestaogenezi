@@ -8,7 +8,9 @@ import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
+import { BannerSlideshowPortal } from "@/components/aluno/banner-slideshow-portal";
 import { Capa } from "@/components/aluno/capa";
+import { CursoBloqueadoCard, type CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -108,8 +110,34 @@ export default async function AlunoDashboardPage() {
     });
   }
 
+  // Cursos ativos que o aluno ainda não cursa — mesmo critério de "já
+  // matriculado" usado em cursosBrutos (status ativa/concluida), reaproveitado
+  // daqui em vez de uma segunda query em matriculas. Limitado a 6 no banco
+  // (LIMIT), não em memória.
+  const cursoIdsMatriculados = cursosBrutos?.map((curso) => curso.id) ?? [];
+  let queryCursosBloqueados = supabase
+    .from("cursos")
+    .select("id, nome, tipo, capa_url, descricao")
+    .eq("status", "ativo")
+    .order("nome")
+    .limit(6);
+  if (cursoIdsMatriculados.length > 0) {
+    queryCursosBloqueados = queryCursosBloqueados.not("id", "in", `(${cursoIdsMatriculados.join(",")})`);
+  }
+  const { data: cursosBloqueadosData } = await queryCursosBloqueados;
+
+  const cursosBloqueados: CursoBloqueado[] = (cursosBloqueadosData ?? []).map((curso) => ({
+    id: curso.id,
+    nome: curso.nome,
+    tipo: curso.tipo,
+    descricao: curso.descricao,
+    capaUrl: curso.capa_url ? supabase.storage.from("cursos").getPublicUrl(curso.capa_url).data.publicUrl : null,
+  }));
+
   return (
     <div className="flex flex-col gap-6">
+      <BannerSlideshowPortal />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <AlunoAvatar avatarId={isAvatarId(user.avatar_id) ? user.avatar_id : "raposa"} size="lg" />
@@ -196,6 +224,17 @@ export default async function AlunoDashboardPage() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {cursosBloqueados.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Conheça outros cursos</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {cursosBloqueados.map((curso) => (
+              <CursoBloqueadoCard key={curso.id} curso={curso} alunoId={user.id} />
+            ))}
+          </div>
         </div>
       )}
     </div>

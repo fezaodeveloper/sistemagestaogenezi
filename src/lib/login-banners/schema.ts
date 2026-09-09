@@ -1,18 +1,21 @@
 import { z } from "zod";
 
-export const LOGIN_BANNER_TIPOS = ["admin", "aluno"] as const;
+export const LOGIN_BANNER_TIPOS = ["admin", "aluno", "portal"] as const;
 export type LoginBannerTipo = (typeof LOGIN_BANNER_TIPOS)[number];
 
 export const LOGIN_BANNER_TIPO_LABELS: Record<LoginBannerTipo, string> = {
   admin: "Admin",
   aluno: "Aluno",
+  portal: "Portal",
 };
 
 // Mesmo padrão de cores fixas via className usado em outros badges do
-// projeto — azul pro admin, verde pro aluno (pedido explícito da tarefa).
+// projeto — azul pro admin, verde pro aluno, roxo pro portal (pedido
+// explícito da tarefa).
 export const LOGIN_BANNER_TIPO_BADGE_CLASS: Record<LoginBannerTipo, string> = {
   admin: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
   aluno: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  portal: "bg-purple-500/10 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400",
 };
 
 export const LOGIN_BANNER_TAMANHOS = ["pequeno", "medio", "grande"] as const;

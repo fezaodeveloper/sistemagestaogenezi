@@ -231,6 +231,19 @@ export async function notificarNovoResgate(payload: Record<string, unknown>): Pr
   );
 }
 
+export async function notificarInteresseCurso(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Interesse em Curso!",
+    [
+      `👤 Aluno: ${texto(payload.nome_aluno)}`,
+      `📞 Telefone: ${texto(payload.telefone)}`,
+      `📚 Curso de interesse: ${texto(payload.nome_curso)}`,
+      `🔗 Ver aluno: ${LINK_ALUNOS}`,
+    ],
+    "🎯",
+  );
+}
+
 export async function notificarResumoMensal(payload: Record<string, unknown>): Promise<boolean> {
   return enviarAlertaTelegram(
     "Resumo Mensal",

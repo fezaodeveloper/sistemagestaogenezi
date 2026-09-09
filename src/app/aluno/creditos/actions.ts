@@ -85,6 +85,18 @@ type PremioParaEntrega = {
   entrega_whatsapp_mensagem: string | null;
 };
 
+// Prazo padrão pra entrega física — o prêmio (diferente de medalha_recompensas)
+// ainda não tem um prazo configurável por item, então usa um valor fixo
+// (mesmo default de "Prazo de entrega (dias)" no modal de recompensas por
+// medalha, ver src/components/admin/recompensas-medalhas-view.tsx).
+const PRAZO_ENTREGA_FISICA_DIAS = 7;
+
+function calcularPrazoEntregaAte(): string {
+  const data = new Date();
+  data.setDate(data.getDate() + PRAZO_ENTREGA_FISICA_DIAS);
+  return data.toISOString().slice(0, 10);
+}
+
 async function processarEntregaPremio(
   resgateId: string,
   premioId: string,
@@ -137,6 +149,7 @@ async function processarEntregaPremio(
       aluno_id: user.id,
       tipo_entrega: "fisico",
       status: "pendente",
+      prazo_entrega_ate: calcularPrazoEntregaAte(),
     });
   }
 }

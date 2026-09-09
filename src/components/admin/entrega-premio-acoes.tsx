@@ -29,6 +29,37 @@ import {
 const MENSAGEM_WHATSAPP_STUB =
   "Integração com WhatsApp em breve. Esta funcionalidade será habilitada com a API Evolution.";
 
+// Compara só a parte de data (YYYY-MM-DD) — prazo_entrega_ate é uma coluna
+// `date`, sem componente de hora, então comparar string já é seguro e evita
+// fuso-horário mexer com "hoje" vindo de new Date().
+function BadgePrazoEntrega({ prazoEntregaAte }: { prazoEntregaAte: string | null }) {
+  if (!prazoEntregaAte) return null;
+
+  const prazo = prazoEntregaAte.slice(0, 10);
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  if (prazo > hoje) {
+    const [, mes, dia] = prazo.split("-");
+    return (
+      <Badge className="bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+        Entregar até {dia}/{mes}
+      </Badge>
+    );
+  }
+
+  if (prazo === hoje) {
+    return (
+      <Badge className="bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400">Entregar HOJE</Badge>
+    );
+  }
+
+  return (
+    <Badge className="animate-pulse bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400">
+      ⚠️ PRAZO VENCIDO
+    </Badge>
+  );
+}
+
 function MarcarEntregueDialog({ entregaId }: { entregaId: string }) {
   const [open, setOpen] = useState(false);
   const [observacoes, setObservacoes] = useState("");
@@ -165,7 +196,10 @@ export function EntregaPremioAcoes({
             </Badge>
           </div>
           {entrega.tipo_entrega === "fisico" && entrega.status === "pendente" && (
-            <MarcarEntregueDialog entregaId={entrega.id} />
+            <>
+              <BadgePrazoEntrega prazoEntregaAte={entrega.prazo_entrega_ate} />
+              <MarcarEntregueDialog entregaId={entrega.id} />
+            </>
           )}
           {entrega.tipo_entrega === "email" && entrega.status === "falhou" && (
             <ReenviarEmailButton entregaId={entrega.id} />

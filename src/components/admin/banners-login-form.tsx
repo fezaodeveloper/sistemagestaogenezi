@@ -58,6 +58,7 @@ import {
 const TELA_DESTINO_LABELS: Record<LoginBannerTipo, string> = {
   admin: "Tela do Admin (/login)",
   aluno: "Tela do Aluno (/entrar)",
+  portal: "Portal do Aluno (home)",
 };
 
 // Classes de tamanho da pré-visualização (TAREFA 3): a caixa de preview é
