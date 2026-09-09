@@ -57,32 +57,65 @@ export function extrairYoutubeId(url: string): string | null {
   return match ? match[1] : null;
 }
 
-const youtubeUrlSchema = z
-  .string({ error: "Informe a URL do vídeo." })
-  .trim()
-  .min(1, { error: "Informe a URL do vídeo." })
-  .refine((value) => /youtube\.com|youtu\.be/.test(value), {
-    error: "Informe uma URL válida do YouTube.",
-  })
-  .refine((value) => extrairYoutubeId(value) !== null, {
-    error: "Não foi possível identificar o vídeo nessa URL.",
-  });
+// vimeo.com/123456789 ou vimeo.com/video/123456789 — Vimeo não tem um
+// formato de thumbnail estático previsível como o YouTube (exigiria chamar
+// a API de oEmbed pra isso), então o preview usado no form é um iframe do
+// player oficial (https://player.vimeo.com/video/{id}), não uma imagem.
+const VIMEO_ID_REGEX = /vimeo\.com\/(?:video\/)?(\d+)/;
 
-export const treinamentoFormSchema = z.object({
-  titulo: z
-    .string({ error: "Informe o título." })
-    .trim()
-    .min(1, { error: "Informe o título." })
-    .max(200, { error: "Título muito longo." }),
-  descricao: z.string().trim().max(2000, { error: "Descrição muito longa." }).optional(),
-  categoria: z.enum(TREINAMENTO_CATEGORIAS, { error: "Selecione a categoria." }),
-  youtube_url: youtubeUrlSchema,
-  status: z.enum(TREINAMENTO_STATUSES, { error: "Selecione o status." }),
-  ordem: z.coerce
-    .number({ error: "Informe um número." })
-    .int({ error: "Informe um número inteiro." })
-    .min(0, { error: "Não pode ser negativo." }),
-});
+export function extrairVimeoId(url: string): string | null {
+  const match = VIMEO_ID_REGEX.exec(url);
+  return match ? match[1] : null;
+}
+
+export const TREINAMENTO_TIPOS_VIDEO = ["youtube", "vimeo", "embed"] as const;
+export type TreinamentoTipoVideo = (typeof TREINAMENTO_TIPOS_VIDEO)[number];
+
+export const TREINAMENTO_TIPO_VIDEO_LABELS: Record<TreinamentoTipoVideo, string> = {
+  youtube: "YouTube",
+  vimeo: "Vimeo",
+  embed: "Embed HTML",
+};
+
+export const treinamentoFormSchema = z
+  .object({
+    titulo: z
+      .string({ error: "Informe o título." })
+      .trim()
+      .min(1, { error: "Informe o título." })
+      .max(200, { error: "Título muito longo." }),
+    descricao: z.string().trim().max(2000, { error: "Descrição muito longa." }).optional(),
+    categoria: z.enum(TREINAMENTO_CATEGORIAS, { error: "Selecione a categoria." }),
+    tipo_video: z.enum(TREINAMENTO_TIPOS_VIDEO, { error: "Selecione o tipo de vídeo." }),
+    youtube_url: z.string().trim().optional(),
+    embed_codigo: z.string().trim().optional(),
+    status: z.enum(TREINAMENTO_STATUSES, { error: "Selecione o status." }),
+    ordem: z.coerce
+      .number({ error: "Informe um número." })
+      .int({ error: "Informe um número inteiro." })
+      .min(0, { error: "Não pode ser negativo." }),
+  })
+  // youtube_url e embed_codigo são opcionais no schema base porque só um
+  // dos dois é obrigatório, dependendo de tipo_video — validado aqui.
+  .superRefine((data, ctx) => {
+    if (data.tipo_video === "youtube") {
+      if (!data.youtube_url || !/youtube\.com|youtu\.be/.test(data.youtube_url)) {
+        ctx.addIssue({ code: "custom", path: ["youtube_url"], message: "Informe uma URL válida do YouTube." });
+      } else if (!extrairYoutubeId(data.youtube_url)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["youtube_url"],
+          message: "Não foi possível identificar o vídeo nessa URL.",
+        });
+      }
+    } else if (data.tipo_video === "vimeo") {
+      if (!data.youtube_url || !extrairVimeoId(data.youtube_url)) {
+        ctx.addIssue({ code: "custom", path: ["youtube_url"], message: "Informe uma URL válida do Vimeo." });
+      }
+    } else if (!data.embed_codigo) {
+      ctx.addIssue({ code: "custom", path: ["embed_codigo"], message: "Informe o código de embed." });
+    }
+  });
 
 export type TreinamentoFormValues = z.infer<typeof treinamentoFormSchema>;
 
@@ -91,7 +124,9 @@ export type Treinamento = {
   titulo: string;
   descricao: string | null;
   categoria: TreinamentoCategoria;
+  tipo_video: TreinamentoTipoVideo;
   youtube_url: string;
+  embed_codigo: string | null;
   status: TreinamentoStatus;
   ordem: number;
   created_by: string;

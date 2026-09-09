@@ -29,7 +29,9 @@ export default async function EditarTreinamentoPage({
           titulo: treinamento.titulo,
           descricao: treinamento.descricao ?? "",
           categoria: treinamento.categoria,
+          tipo_video: treinamento.tipo_video,
           youtube_url: treinamento.youtube_url,
+          embed_codigo: treinamento.embed_codigo ?? "",
           status: treinamento.status,
           ordem: treinamento.ordem,
         }}

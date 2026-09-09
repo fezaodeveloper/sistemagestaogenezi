@@ -21,6 +21,8 @@ import {
   notificarNovoResgate,
   notificarResumoMensal,
   notificarInteresseCurso,
+  notificarSenhaTrocadaAluno,
+  notificarTermoAceito,
 } from "@/lib/automacoes/handlers/telegram";
 import { gerarResumoDiario } from "@/lib/automacoes/handlers/resumo-diario";
 import { gerarRelatorioSemanal } from "@/lib/automacoes/handlers/relatorio-semanal";
@@ -85,6 +87,12 @@ async function executarHandler(tipo: string, payload: EventoPayload): Promise<vo
       return;
     case "interesse.curso":
       await notificarInteresseCurso(payload);
+      return;
+    case "senha.trocada.admin":
+      await notificarSenhaTrocadaAluno(payload);
+      return;
+    case "termo.aceito":
+      await notificarTermoAceito(payload);
       return;
     case "resumo.diario":
       await gerarResumoDiario();

@@ -32,6 +32,8 @@ export type RelatorioMEI = {
   industriaComNota: number;
   totalIndustria: number;
 
+  servicosSemNotaParcelas: number;
+  servicosSemNotaAvulsos: number;
   servicosSemNota: number;
   servicosComNota: number;
   totalServicos: number;
@@ -74,10 +76,12 @@ export async function calcularRelatorioMEI(
   const parcelas = (parcelasPagas ?? []) as { valor: number; nota_fiscal_emitida: boolean }[];
 
   // Pagamentos avulsos não têm campo de controle de nota fiscal — entram
-  // inteiramente em "sem nota" (ver src/lib/financeiro/schema.ts).
-  const servicosSemNota =
-    somarValores(parcelas.filter((parcela) => !parcela.nota_fiscal_emitida)) +
-    somarValores(avulsos as { valor: number }[] | null);
+  // inteiramente em "sem nota" (ver src/lib/financeiro/schema.ts). Breakdown
+  // (parcelas vs. avulsos) mantido separado pra exibir no PDF do MEI —
+  // servicosSemNota continua sendo a soma dos dois, como já era.
+  const servicosSemNotaParcelas = somarValores(parcelas.filter((parcela) => !parcela.nota_fiscal_emitida));
+  const servicosSemNotaAvulsos = somarValores(avulsos as { valor: number }[] | null);
+  const servicosSemNota = servicosSemNotaParcelas + servicosSemNotaAvulsos;
   const servicosComNota = somarValores(parcelas.filter((parcela) => parcela.nota_fiscal_emitida));
   const totalServicos = servicosSemNota + servicosComNota;
 
@@ -94,6 +98,8 @@ export async function calcularRelatorioMEI(
     industriaComNota: 0,
     totalIndustria: 0,
 
+    servicosSemNotaParcelas,
+    servicosSemNotaAvulsos,
     servicosSemNota,
     servicosComNota,
     totalServicos,

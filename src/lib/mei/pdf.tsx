@@ -37,6 +37,12 @@ const styles = StyleSheet.create({
   primeiraLinha: { borderTopWidth: 0 },
   itemLabel: { flexShrink: 1, paddingRight: 8 },
   itemValor: { fontFamily: "Helvetica-Bold" },
+  breakdownLinha: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingLeft: 20,
+  },
+  breakdownTexto: { fontSize: 8, color: "#555555" },
   totalGeral: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -119,6 +125,14 @@ function RelatorioMEIDocument({ relatorio }: { relatorio: RelatorioMEI }) {
         <Text style={styles.secaoTitulo}>RECEITA BRUTA MENSAL – PRESTAÇÃO DE SERVIÇOS</Text>
         <View style={styles.tabela}>
           <ItemLinha numero="VII" label="Serviços sem documento fiscal" valor={relatorio.servicosSemNota} primeira />
+          {(relatorio.servicosSemNotaParcelas > 0 || relatorio.servicosSemNotaAvulsos > 0) && (
+            <View style={styles.breakdownLinha}>
+              <Text style={styles.breakdownTexto}>
+                Serviços sem NF: {formatValor(relatorio.servicosSemNotaParcelas)} (parcelas) +{" "}
+                {formatValor(relatorio.servicosSemNotaAvulsos)} (avulsos) = {formatValor(relatorio.servicosSemNota)}
+              </Text>
+            </View>
+          )}
           <ItemLinha numero="VIII" label="Serviços com documento fiscal" valor={relatorio.servicosComNota} />
           <ItemLinha numero="IX" label="Total serviços" valor={relatorio.totalServicos} />
         </View>

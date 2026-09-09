@@ -1,22 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
-import { atualizarTermo, criarTermo, excluirTermo, getTermos } from "@/app/admin/termos/actions";
+import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { excluirTermo, gerarTermoPdf } from "@/app/admin/termos/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -25,14 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { TERMO_TIPOS, TERMO_TIPO_LABELS, type Termo } from "@/lib/termos/schema";
+import { TERMO_TIPO_LABELS, type Termo } from "@/lib/termos/schema";
 
 const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
 
@@ -61,102 +45,45 @@ function formatDataHora(isoString: string): string {
   return `${data} às ${hora}`;
 }
 
-function EditarTermoDialog({
-  termo,
-  onSalvo,
-}: {
-  termo: Termo;
-  onSalvo: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [tipo, setTipo] = useState<string>(termo.tipo);
-  const [ativo, setAtivo] = useState(termo.ativo);
-  const [error, setError] = useState<string | null>(null);
+// Abre a aba em branco já no clique (síncrono), antes do await — mesmo
+// padrão de handleImprimirComprovante em matricula-detalhes.tsx — evita
+// bloqueio de pop-up em navegadores que só permitem window.open() disparado
+// direto por um evento de clique.
+function VisualizarPdfButton({ termoId }: { termoId: string }) {
   const [isPending, startTransition] = useTransition();
 
-  function handleOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
-    if (nextOpen) {
-      setTipo(termo.tipo);
-      setAtivo(termo.ativo);
-      setError(null);
-    }
-  }
-
-  function handleSubmit(formData: FormData) {
-    setError(null);
+  function handleClick() {
+    const novaAba = window.open("", "_blank");
     startTransition(async () => {
-      const resultado = await atualizarTermo(termo.id, formData);
+      const resultado = await gerarTermoPdf(termoId);
       if ("error" in resultado) {
-        setError(resultado.error);
+        novaAba?.close();
+        window.alert(resultado.error);
         return;
       }
-      setOpen(false);
-      onSalvo();
+      const byteCharacters = atob(resultado.pdf);
+      const byteNumbers = Array.from(byteCharacters, (char) => char.charCodeAt(0));
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      if (novaAba) {
+        novaAba.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Editar termo">
-            <Pencil />
-          </Button>
-        }
-      />
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Editar termo</DialogTitle>
-        </DialogHeader>
-        <form action={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`titulo-${termo.id}`}>Título</Label>
-            <Input id={`titulo-${termo.id}`} name="titulo" defaultValue={termo.titulo} required />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`tipo-${termo.id}`}>Tipo</Label>
-            <Select
-              name="tipo"
-              items={TERMO_TIPO_LABELS}
-              value={tipo}
-              onValueChange={(value) => setTipo(value as string)}
-            >
-              <SelectTrigger id={`tipo-${termo.id}`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TERMO_TIPOS.map((tipoOpcao) => (
-                  <SelectItem key={tipoOpcao} value={tipoOpcao}>
-                    {TERMO_TIPO_LABELS[tipoOpcao]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`conteudo-${termo.id}`}>Conteúdo</Label>
-            <Textarea id={`conteudo-${termo.id}`} name="conteudo" defaultValue={termo.conteudo} rows={8} required />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor={`ativo-${termo.id}`} className="font-normal">
-              Ativo
-            </Label>
-            <Switch id={`ativo-${termo.id}`} name="ativo" checked={ativo} onCheckedChange={setAtivo} />
-          </div>
-          {error && (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : "Salvar alterações"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Visualizar PDF"
+      disabled={isPending}
+      onClick={handleClick}
+    >
+      <FileText />
+    </Button>
   );
 }
 
@@ -240,105 +167,8 @@ function ExcluirTermoButton({ termo, onExcluido }: { termo: Termo; onExcluido: (
   );
 }
 
-function NovoTermoDialog({ onCriado }: { onCriado: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [tipo, setTipo] = useState<string>("");
-  const [ativo, setAtivo] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  function handleOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
-    if (nextOpen) {
-      setTipo("");
-      setAtivo(true);
-      setError(null);
-    }
-  }
-
-  function handleSubmit(formData: FormData) {
-    setError(null);
-    startTransition(async () => {
-      const resultado = await criarTermo(formData);
-      if ("error" in resultado) {
-        setError(resultado.error);
-        return;
-      }
-      setOpen(false);
-      onCriado();
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <Button>
-            <Plus />
-            Novo termo
-          </Button>
-        }
-      />
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Novo termo</DialogTitle>
-        </DialogHeader>
-        <form action={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="titulo">Título</Label>
-            <Input id="titulo" name="titulo" required />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="tipo">Tipo</Label>
-            <Select name="tipo" items={TERMO_TIPO_LABELS} value={tipo} onValueChange={(value) => setTipo(value as string)}>
-              <SelectTrigger id="tipo" className="w-full">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {TERMO_TIPOS.map((tipoOpcao) => (
-                  <SelectItem key={tipoOpcao} value={tipoOpcao}>
-                    {TERMO_TIPO_LABELS[tipoOpcao]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="conteudo">Conteúdo</Label>
-            <Textarea id="conteudo" name="conteudo" rows={8} placeholder="Texto do termo" required />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="ativo" className="font-normal">
-              Ativo
-            </Label>
-            <Switch id="ativo" name="ativo" checked={ativo} onCheckedChange={setAtivo} />
-          </div>
-          {error && (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
-          )}
-          <DialogFooter>
-            <Button type="submit" disabled={isPending || !tipo}>
-              {isPending ? "Salvando..." : "Criar termo"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function TermosView({ termosIniciais }: { termosIniciais: Termo[] }) {
   const [termos, setTermos] = useState(termosIniciais);
-  const [, startTransition] = useTransition();
-
-  function recarregar() {
-    startTransition(async () => {
-      const resultado = await getTermos();
-      setTermos(resultado);
-    });
-  }
 
   function handleExcluido(id: string) {
     setTermos((prev) => prev.filter((termo) => termo.id !== id));
@@ -347,7 +177,10 @@ export function TermosView({ termosIniciais }: { termosIniciais: Termo[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex justify-end">
-        <NovoTermoDialog onCriado={recarregar} />
+        <Button render={<Link href="/admin/termos/novo" />} nativeButton={false}>
+          <Plus />
+          Novo termo
+        </Button>
       </div>
 
       {termos.length === 0 ? (
@@ -377,7 +210,16 @@ export function TermosView({ termosIniciais }: { termosIniciais: Termo[] }) {
                 </TableCell>
                 <TableCell>{formatDataHora(termo.created_at)}</TableCell>
                 <TableCell className="flex justify-end gap-1">
-                  <EditarTermoDialog termo={termo} onSalvo={recarregar} />
+                  <VisualizarPdfButton termoId={termo.id} />
+                  <Button
+                    render={<Link href={`/admin/termos/${termo.id}/editar`} />}
+                    nativeButton={false}
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Editar termo"
+                  >
+                    <Pencil />
+                  </Button>
                   <ExcluirTermoButton termo={termo} onExcluido={() => handleExcluido(termo.id)} />
                 </TableCell>
               </TableRow>

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { alunoFormSchema, alunoEditFormSchema, isMinor } from "@/lib/alunos/schema";
 import { registrarAlteracao } from "@/lib/historico/registrar";
+import { dispararEvento } from "@/lib/automacoes/motor";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -433,6 +434,47 @@ export async function removerFotoAluno(alunoId: string): Promise<{ error?: strin
   revalidatePath("/admin/alunos");
   revalidatePath(`/admin/alunos/${alunoId}/editar`);
   return {};
+}
+
+// ===== Redefinir senha (Melhoria 1) =====
+
+export async function trocarSenhaAluno(
+  alunoId: string,
+  novaSenha: string,
+): Promise<{ success?: true; error?: string }> {
+  await requireRole("admin");
+
+  if (novaSenha.length < 6) {
+    return { error: "A nova senha precisa ter pelo menos 6 caracteres." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(alunoId, { password: novaSenha });
+
+  if (error) {
+    return { error: "Não foi possível redefinir a senha. Tente novamente." };
+  }
+
+  // Best-effort — a senha já foi trocada com sucesso acima, uma falha aqui
+  // (busca do nome, notificação) não deve reportar erro pro admin.
+  try {
+    const supabase = await createClient();
+    const { data: aluno } = await supabase
+      .from("alunos")
+      .select("full_name")
+      .eq("id", alunoId)
+      .maybeSingle();
+
+    await dispararEvento(
+      "senha.trocada.admin",
+      { nome_aluno: aluno?.full_name ?? "—" },
+      `senha-trocada-admin-${alunoId}-${Date.now()}`,
+    );
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+
+  return { success: true };
 }
 
 export async function deleteAluno(id: string): Promise<{ error?: string }> {

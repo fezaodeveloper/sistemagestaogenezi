@@ -270,6 +270,22 @@ export async function notificarInteresseCurso(payload: Record<string, unknown>):
   );
 }
 
+export async function notificarSenhaTrocadaAluno(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Senha Redefinida",
+    [`👤 Aluno: ${texto(payload.nome_aluno)}`, `👨‍💼 Redefinida pelo admin`],
+    "🔐",
+  );
+}
+
+export async function notificarTermoAceito(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Termo Aceito",
+    [`👤 Aluno: ${texto(payload.nome_aluno)}`, `📄 Termo: ${texto(payload.nome_termo)}`],
+    "📋",
+  );
+}
+
 export async function notificarResumoMensal(payload: Record<string, unknown>): Promise<boolean> {
   return enviarAlertaTelegram(
     "Resumo Mensal",

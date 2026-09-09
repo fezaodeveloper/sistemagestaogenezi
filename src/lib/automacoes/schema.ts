@@ -48,6 +48,8 @@ export const EVENTO_AUTOMACAO_TIPOS = [
   "resgate.novo",
   "resumo.mensal",
   "interesse.curso",
+  "senha.trocada.admin",
+  "termo.aceito",
 ] as const;
 export type EventoAutomacaoTipo = (typeof EVENTO_AUTOMACAO_TIPOS)[number];
 

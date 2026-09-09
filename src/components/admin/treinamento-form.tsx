@@ -16,13 +16,17 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  extrairVimeoId,
   extrairYoutubeId,
   TREINAMENTO_CATEGORIAS,
   TREINAMENTO_CATEGORIA_LABELS,
   TREINAMENTO_STATUSES,
   TREINAMENTO_STATUS_LABELS,
+  TREINAMENTO_TIPOS_VIDEO,
+  TREINAMENTO_TIPO_VIDEO_LABELS,
   type TreinamentoCategoria,
   type TreinamentoStatus,
+  type TreinamentoTipoVideo,
 } from "@/lib/treinamentos/schema";
 import type { TreinamentoFormState } from "@/app/admin/treinamentos/actions";
 
@@ -45,7 +49,9 @@ export function TreinamentoForm({
     titulo: string;
     descricao: string;
     categoria: TreinamentoCategoria;
+    tipo_video: TreinamentoTipoVideo;
     youtube_url: string;
+    embed_codigo: string;
     status: TreinamentoStatus;
     ordem: number;
   };
@@ -57,16 +63,21 @@ export function TreinamentoForm({
     titulo: defaultValues?.titulo ?? "",
     descricao: defaultValues?.descricao ?? "",
     categoria: defaultValues?.categoria ?? "geral",
+    tipo_video: defaultValues?.tipo_video ?? "youtube",
     youtube_url: defaultValues?.youtube_url ?? "",
+    embed_codigo: defaultValues?.embed_codigo ?? "",
     status: defaultValues?.status ?? "ativo",
     ordem: String(defaultValues?.ordem ?? 0),
   };
 
   const [categoria, setCategoria] = useState<string>(values.categoria);
   const [status, setStatus] = useState<string>(values.status);
+  const [tipoVideo, setTipoVideo] = useState<string>(values.tipo_video);
   const [youtubeUrl, setYoutubeUrl] = useState(values.youtube_url);
+  const [embedCodigo, setEmbedCodigo] = useState(values.embed_codigo);
 
-  const videoId = extrairYoutubeId(youtubeUrl);
+  const videoId = tipoVideo === "youtube" ? extrairYoutubeId(youtubeUrl) : null;
+  const vimeoId = tipoVideo === "vimeo" ? extrairVimeoId(youtubeUrl) : null;
 
   return (
     <form
@@ -132,29 +143,78 @@ export function TreinamentoForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="youtube_url">URL do YouTube</Label>
-            <Input
-              id="youtube_url"
-              name="youtube_url"
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
-              required
-            />
-            {videoId && (
-              // eslint-disable-next-line @next/next/no-img-element -- thumbnail externa do YouTube, não passa por upload
-              <img
-                src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
-                alt="Prévia do vídeo"
-                className="w-full max-w-xs rounded-lg border"
-              />
-            )}
-            {state?.errors?.youtube_url && (
-              <p role="alert" className="text-destructive text-sm">
-                {state.errors.youtube_url[0]}
-              </p>
-            )}
+            <Label htmlFor="tipo_video">Tipo de vídeo</Label>
+            <Select
+              name="tipo_video"
+              items={TREINAMENTO_TIPO_VIDEO_LABELS}
+              value={tipoVideo}
+              onValueChange={(value) => setTipoVideo(value as string)}
+            >
+              <SelectTrigger id="tipo_video" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TREINAMENTO_TIPOS_VIDEO.map((opcao) => (
+                  <SelectItem key={opcao} value={opcao}>
+                    {TREINAMENTO_TIPO_VIDEO_LABELS[opcao]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {tipoVideo === "embed" ? (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="embed_codigo">Código de embed</Label>
+              <Textarea
+                id="embed_codigo"
+                name="embed_codigo"
+                rows={4}
+                value={embedCodigo}
+                onChange={(e) => setEmbedCodigo(e.target.value)}
+                placeholder='<iframe src="..." ...></iframe>'
+              />
+              {state?.errors?.embed_codigo && (
+                <p role="alert" className="text-destructive text-sm">
+                  {state.errors.embed_codigo[0]}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="youtube_url">{tipoVideo === "vimeo" ? "URL do Vimeo" : "URL do YouTube"}</Label>
+              <Input
+                id="youtube_url"
+                name="youtube_url"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder={
+                  tipoVideo === "vimeo" ? "https://vimeo.com/..." : "https://www.youtube.com/watch?v=..."
+                }
+              />
+              {videoId && (
+                // eslint-disable-next-line @next/next/no-img-element -- thumbnail externa do YouTube, não passa por upload
+                <img
+                  src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+                  alt="Prévia do vídeo"
+                  className="w-full max-w-xs rounded-lg border"
+                />
+              )}
+              {vimeoId && (
+                <iframe
+                  src={`https://player.vimeo.com/video/${vimeoId}`}
+                  className="aspect-video w-full max-w-xs rounded-lg border"
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  title="Prévia do vídeo"
+                />
+              )}
+              {state?.errors?.youtube_url && (
+                <p role="alert" className="text-destructive text-sm">
+                  {state.errors.youtube_url[0]}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">

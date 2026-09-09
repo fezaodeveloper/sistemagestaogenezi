@@ -5,6 +5,8 @@ import { AlunoEditForm } from "@/components/admin/aluno-edit-form";
 import { MatriculasSection } from "@/components/admin/matriculas-section";
 import { LiberacoesManuaisSection } from "@/components/admin/liberacoes-manuais-section";
 import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
+import { TrocarSenhaAlunoForm } from "@/components/admin/trocar-senha-aluno-form";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AlunoWithRelations, Responsavel } from "@/lib/alunos/schema";
 import type { MatriculaWithTurma } from "@/lib/matriculas/schema";
 
@@ -165,6 +167,14 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
         liberacoes={liberacoesExistentes}
       />
       <HistoricoAlteracoesSection tabela="alunos" registroId={aluno.id} />
+      <Card className="max-w-sm">
+        <CardHeader>
+          <CardTitle>Redefinir senha</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrocarSenhaAlunoForm alunoId={aluno.id} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

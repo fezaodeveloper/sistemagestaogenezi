@@ -28,7 +28,9 @@ type TreinamentoFormValuesEcho = {
   titulo: string;
   descricao: string;
   categoria: string;
+  tipo_video: string;
   youtube_url: string;
+  embed_codigo: string;
   status: string;
   ordem: string;
 };
@@ -46,7 +48,9 @@ function echoValues(formData: FormData): TreinamentoFormValuesEcho {
     titulo: String(formData.get("titulo") ?? ""),
     descricao: String(formData.get("descricao") ?? ""),
     categoria: String(formData.get("categoria") ?? ""),
+    tipo_video: String(formData.get("tipo_video") ?? ""),
     youtube_url: String(formData.get("youtube_url") ?? ""),
+    embed_codigo: String(formData.get("embed_codigo") ?? ""),
     status: String(formData.get("status") ?? ""),
     ordem: String(formData.get("ordem") ?? ""),
   };
@@ -57,7 +61,9 @@ function parseTreinamentoForm(formData: FormData) {
     titulo: formData.get("titulo"),
     descricao: formData.get("descricao") || undefined,
     categoria: formData.get("categoria"),
-    youtube_url: formData.get("youtube_url"),
+    tipo_video: formData.get("tipo_video"),
+    youtube_url: formData.get("youtube_url") || undefined,
+    embed_codigo: formData.get("embed_codigo") || undefined,
     status: formData.get("status"),
     ordem: formData.get("ordem"),
   });
@@ -80,7 +86,9 @@ export async function createTreinamento(
     titulo: data.titulo,
     descricao: data.descricao ?? null,
     categoria: data.categoria,
-    youtube_url: data.youtube_url,
+    tipo_video: data.tipo_video,
+    youtube_url: data.youtube_url ?? "",
+    embed_codigo: data.embed_codigo ?? null,
     status: data.status,
     ordem: data.ordem,
   });
@@ -116,7 +124,9 @@ export async function updateTreinamento(
       titulo: data.titulo,
       descricao: data.descricao ?? null,
       categoria: data.categoria,
-      youtube_url: data.youtube_url,
+      tipo_video: data.tipo_video,
+      youtube_url: data.youtube_url ?? "",
+      embed_codigo: data.embed_codigo ?? null,
       status: data.status,
       ordem: data.ordem,
     })

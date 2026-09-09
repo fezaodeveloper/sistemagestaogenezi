@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { deleteTreinamento } from "@/app/admin/treinamentos/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -52,6 +53,47 @@ const STATUS_FILTRO_ITEMS: Record<string, string> = {
   [STATUS_FILTRO_TODOS]: "Todos",
   ...TREINAMENTO_STATUS_LABELS,
 };
+
+// tipo 'embed' abre num modal com o iframe já renderizado — o código vem do
+// próprio admin (mesma fronteira de confiança de requireRole("admin") em
+// todas as mutações desta tabela), então dangerouslySetInnerHTML aqui tem o
+// mesmo risco de um bloco de embed num CMS tradicional, não conteúdo de
+// aluno/usuário final.
+function AssistirButton({ treinamento }: { treinamento: Treinamento }) {
+  const [modalAberto, setModalAberto] = useState(false);
+
+  if (treinamento.tipo_video === "embed") {
+    return (
+      <>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setModalAberto(true)}>
+          Assistir
+        </Button>
+        <Dialog open={modalAberto} onOpenChange={setModalAberto}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{treinamento.titulo}</DialogTitle>
+            </DialogHeader>
+            <div
+              className="aspect-video w-full overflow-hidden rounded-lg [&_iframe]:h-full [&_iframe]:w-full"
+              dangerouslySetInnerHTML={{ __html: treinamento.embed_codigo ?? "" }}
+            />
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  return (
+    <Button
+      render={<a href={treinamento.youtube_url} target="_blank" rel="noopener noreferrer" />}
+      nativeButton={false}
+      variant="ghost"
+      size="sm"
+    >
+      Assistir
+    </Button>
+  );
+}
 
 function ExcluirTreinamentoButton({ treinamento }: { treinamento: Treinamento }) {
   const [open, setOpen] = useState(false);
@@ -204,14 +246,7 @@ export function TreinamentosView({ treinamentos }: { treinamentos: Treinamento[]
                 </TableCell>
                 <TableCell>{treinamento.ordem}</TableCell>
                 <TableCell className="flex justify-end gap-1">
-                  <Button
-                    render={<a href={treinamento.youtube_url} target="_blank" rel="noopener noreferrer" />}
-                    nativeButton={false}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    Assistir
-                  </Button>
+                  <AssistirButton treinamento={treinamento} />
                   <Button
                     render={<Link href={`/admin/treinamentos/${treinamento.id}/editar`} />}
                     nativeButton={false}
