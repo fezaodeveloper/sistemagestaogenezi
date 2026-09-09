@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getSaldoCreditos } from "@/lib/creditos/saldo";
 import { getMeusResgates, RESGATE_STATUS_LABELS, RESGATE_TIPO_LABELS } from "@/lib/creditos/resgates";
+import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import type { Curso } from "@/lib/cursos/schema";
 import type { Premio } from "@/lib/premios/schema";
 import { ResgateItemCard } from "@/components/aluno/resgate-item-card";
@@ -24,6 +25,7 @@ function formatDateBR(iso: string) {
 
 export default async function CreditosPage() {
   const user = await requireRole("aluno");
+  const recursos = await getRecursosHabilitadosAluno(user.id);
   const supabase = await createClient();
 
   const [saldo, meusResgates, { data: configData }, { data: cursosBonusData }, { data: premiosData }] =
@@ -121,40 +123,42 @@ export default async function CreditosPage() {
         )}
       </div>
 
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">Prêmios</h2>
-        {premios.length === 0 ? (
-          <Card>
-            <CardContent className="text-muted-foreground py-8 text-center text-sm">
-              Nenhum prêmio disponível no momento.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {premios.map((premio) => {
-              const semEstoque = premio.estoque !== null && premio.estoque <= 0;
-              return (
-                <ResgateItemCard
-                  key={premio.id}
-                  titulo={premio.nome}
-                  descricao={premio.descricao}
-                  custoCreditos={premio.custo_creditos}
-                  imagemUrl={premio.foto_url}
-                  bloqueado={semEstoque || saldo.creditosDisponiveis < premio.custo_creditos}
-                  motivoBloqueio={
-                    semEstoque
-                      ? "Fora de estoque."
-                      : saldo.creditosDisponiveis < premio.custo_creditos
-                        ? "Créditos insuficientes."
-                        : undefined
-                  }
-                  onConfirmar={resgatarPremioFisico.bind(null, premio.id)}
-                />
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {recursos.premios && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">Prêmios</h2>
+          {premios.length === 0 ? (
+            <Card>
+              <CardContent className="text-muted-foreground py-8 text-center text-sm">
+                Nenhum prêmio disponível no momento.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {premios.map((premio) => {
+                const semEstoque = premio.estoque !== null && premio.estoque <= 0;
+                return (
+                  <ResgateItemCard
+                    key={premio.id}
+                    titulo={premio.nome}
+                    descricao={premio.descricao}
+                    custoCreditos={premio.custo_creditos}
+                    imagemUrl={premio.foto_url}
+                    bloqueado={semEstoque || saldo.creditosDisponiveis < premio.custo_creditos}
+                    motivoBloqueio={
+                      semEstoque
+                        ? "Fora de estoque."
+                        : saldo.creditosDisponiveis < premio.custo_creditos
+                          ? "Créditos insuficientes."
+                          : undefined
+                    }
+                    onConfirmar={resgatarPremioFisico.bind(null, premio.id)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">Histórico de resgates</h2>

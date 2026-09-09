@@ -8,6 +8,7 @@ import { CERTIFICADO_STATUS_LABELS } from "@/lib/certificados/certificados";
 import { PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
 import { PRESENCA_STATUS_LABELS, type PRESENCA_STATUSES } from "@/lib/presencas/schema";
 import { BANNER_BUCKET } from "@/lib/storage/banners";
+import { gerarVapidKeys } from "@/lib/push/enviar";
 import {
   bannerLoginUpdateSchema,
   LOGIN_BANNER_TIPOS,
@@ -661,6 +662,91 @@ export async function salvarNomeDiretor(nome: string): Promise<{ error?: string 
 
   if (error) {
     return { error: "Não foi possível salvar o nome. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+// ===== Notificações push no navegador (TAREFA 4) =====
+
+export async function gerarChavesVapid(): Promise<{ error?: string; publicKey?: string }> {
+  await requireRole("admin");
+
+  try {
+    const { publicKey } = await gerarVapidKeys();
+    revalidatePath("/admin/configuracoes");
+    return { publicKey };
+  } catch {
+    return { error: "Não foi possível gerar as chaves VAPID. Tente novamente." };
+  }
+}
+
+// ignoreDuplicates (não upsert de verdade) de propósito: push_subscriptions
+// só tem grant de select/insert/delete pra authenticated (sem update) — um
+// "on conflict do update" exigiria grant de update, que essa tabela não tem.
+// Uma subscription que já existe (mesmo endpoint) não precisa ser
+// atualizada, só ignorada.
+export async function salvarPushSubscription(subscription: {
+  endpoint: string;
+  p256dh: string;
+  auth_key: string;
+}): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .upsert(subscription, { onConflict: "endpoint", ignoreDuplicates: true });
+
+  if (error) {
+    return { error: "Não foi possível ativar as notificações push. Tente novamente." };
+  }
+
+  return {};
+}
+
+// ===== Controle de recursos por tipo de curso (TAREFA 5) =====
+
+const CAMPOS_RECURSOS = [
+  "recurso_gamificacao_presencial",
+  "recurso_gamificacao_ead",
+  "recurso_gamificacao_hibrido",
+  "recurso_premios_presencial",
+  "recurso_premios_ead",
+  "recurso_premios_hibrido",
+  "recurso_ranking_presencial",
+  "recurso_ranking_ead",
+  "recurso_ranking_hibrido",
+  "recurso_chat_presencial",
+  "recurso_chat_ead",
+  "recurso_chat_hibrido",
+  "recurso_certificados_presencial",
+  "recurso_certificados_ead",
+  "recurso_certificados_hibrido",
+] as const;
+
+export type ConfigRecursosValues = Record<(typeof CAMPOS_RECURSOS)[number], boolean>;
+
+// Recebe o estado completo dos 15 switches a cada toggle (não só o que
+// mudou) — mais simples que um PATCH parcial, e o form já mantém o estado
+// inteiro no client (ver configuracoes-recursos-form.tsx).
+export async function salvarRecursos(formData: FormData): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const valores: Record<string, boolean> = {};
+  for (const campo of CAMPOS_RECURSOS) {
+    valores[campo] = formData.get(campo) === "true";
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ ...valores, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar as configurações de recursos. Tente novamente." };
   }
 
   revalidatePath("/admin/configuracoes");

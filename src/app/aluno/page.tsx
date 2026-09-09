@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getCursoProgresso, type CursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { getMeusPontos } from "@/lib/gamificacao/ranking";
+import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { isAvatarId } from "@/lib/avatares/catalog";
@@ -79,6 +80,7 @@ function agruparPorCurso(rows: MatriculaCursoRow[]): CursoAluno[] {
 
 export default async function AlunoDashboardPage() {
   const user = await requireRole("aluno");
+  const recursos = await getRecursosHabilitadosAluno(user.id);
 
   const supabase = await createClient();
   const [{ data, error }, meusPontos] = await Promise.all([
@@ -151,15 +153,17 @@ export default async function AlunoDashboardPage() {
             </p>
           </div>
         </div>
-        <Link
-          href="/aluno/ranking"
-          className="hover:bg-accent/50 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-        >
-          <Trophy className="text-muted-foreground size-4" />
-          <span>
-            Seus pontos: <span className="font-semibold">{meusPontos}</span>
-          </span>
-        </Link>
+        {recursos.gamificacao && (
+          <Link
+            href="/aluno/ranking"
+            className="hover:bg-accent/50 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+          >
+            <Trophy className="text-muted-foreground size-4" />
+            <span>
+              Seus pontos: <span className="font-semibold">{meusPontos}</span>
+            </span>
+          </Link>
+        )}
       </div>
 
       {error ? (

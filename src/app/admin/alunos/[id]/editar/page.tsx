@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AlunoEditForm } from "@/components/admin/aluno-edit-form";
 import { MatriculasSection } from "@/components/admin/matriculas-section";
 import { LiberacoesManuaisSection } from "@/components/admin/liberacoes-manuais-section";
+import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
 import type { AlunoWithRelations, Responsavel } from "@/lib/alunos/schema";
 import type { MatriculaWithTurma } from "@/lib/matriculas/schema";
 
@@ -163,6 +164,7 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
         modulos={modulosOptions}
         liberacoes={liberacoesExistentes}
       />
+      <HistoricoAlteracoesSection tabela="alunos" registroId={aluno.id} />
     </div>
   );
 }

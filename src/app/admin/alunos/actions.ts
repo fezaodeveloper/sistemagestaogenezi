@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { alunoFormSchema, alunoEditFormSchema, isMinor } from "@/lib/alunos/schema";
+import { registrarAlteracao } from "@/lib/historico/registrar";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -230,7 +231,7 @@ export async function updateAluno(
   _prevState: AlunoEditFormState,
   formData: FormData,
 ): Promise<AlunoEditFormState> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
 
   const parsed = alunoEditFormSchema.safeParse(parseCommonFields(formData));
 
@@ -242,6 +243,14 @@ export async function updateAluno(
   const supabase = await createClient();
 
   const echoedValues = echoEditValues(formData);
+
+  // Snapshot pré-alteração (TAREFA 3) — precisa vir antes dos updates
+  // abaixo, senão os valores "anteriores" já teriam sido sobrescritos.
+  const { data: alunoAntes } = await supabase
+    .from("alunos")
+    .select("full_name, status_aluno, telefone, email, cpf")
+    .eq("id", id)
+    .maybeSingle();
 
   const { error: profileError } = await supabase
     .from("profiles")
@@ -307,6 +316,54 @@ export async function updateAluno(
         values: echoedValues,
       };
     }
+  }
+
+  // Histórico de alterações (TAREFA 3) — best-effort, depois de tudo já
+  // salvo com sucesso acima; registrarAlteracao só grava o que realmente
+  // mudou (comparação feita ali dentro).
+  if (alunoAntes) {
+    await Promise.all([
+      registrarAlteracao({
+        tabela: "alunos",
+        registroId: id,
+        campo: "full_name",
+        valorAnterior: alunoAntes.full_name,
+        valorNovo: data.full_name,
+        alteradoPor: user.id,
+      }),
+      registrarAlteracao({
+        tabela: "alunos",
+        registroId: id,
+        campo: "status_aluno",
+        valorAnterior: alunoAntes.status_aluno,
+        valorNovo: data.status_aluno,
+        alteradoPor: user.id,
+      }),
+      registrarAlteracao({
+        tabela: "alunos",
+        registroId: id,
+        campo: "telefone",
+        valorAnterior: alunoAntes.telefone,
+        valorNovo: data.telefone,
+        alteradoPor: user.id,
+      }),
+      registrarAlteracao({
+        tabela: "alunos",
+        registroId: id,
+        campo: "email",
+        valorAnterior: alunoAntes.email,
+        valorNovo: alunoAntes.email,
+        alteradoPor: user.id,
+      }),
+      registrarAlteracao({
+        tabela: "alunos",
+        registroId: id,
+        campo: "cpf",
+        valorAnterior: alunoAntes.cpf,
+        valorNovo: data.cpf,
+        alteradoPor: user.id,
+      }),
+    ]);
   }
 
   revalidatePath("/admin/alunos");

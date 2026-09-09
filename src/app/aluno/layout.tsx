@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getConversaPorAluno, getContagemNaoLidasAluno } from "@/lib/chat/chat";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
+import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
 import { Separator } from "@/components/ui/separator";
@@ -37,6 +38,11 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
     // Nunca deve impedir o aluno de acessar a própria área.
   }
 
+  // Recursos habilitados pro tipo de curso do aluno (TAREFA 5) — cache()
+  // por request, então a página filha (ranking, créditos) pode chamar de
+  // novo sem duplicar a query (ver src/lib/configuracoes/recursos.ts).
+  const recursos = await getRecursosHabilitadosAluno(user.id);
+
   const supabase = await createClient();
   const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }] = await Promise.all([
     getConversaPorAluno(supabase, user.id),
@@ -65,6 +71,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           mensagensNaoLidas={mensagensNaoLidas}
           parcelasAtrasadas={parcelasAtrasadas ?? 0}
           contratosPendentes={contratosPendentes ?? 0}
+          recursos={recursos}
         />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">

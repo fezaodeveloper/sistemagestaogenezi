@@ -1,12 +1,14 @@
 import "server-only";
 
 import { enviarAlertaTelegram } from "@/lib/telegram/client";
+import { enviarPushAdmin } from "@/lib/push/enviar";
 
 const LINK_FINANCEIRO = "https://sistemagestaogenezi.vercel.app/admin/financeiro";
 const LINK_LEADS = "https://sistemagestaogenezi.vercel.app/admin/leads";
 const LINK_ALUNOS = "https://sistemagestaogenezi.vercel.app/admin/alunos";
 const LINK_CONTRATOS = "https://sistemagestaogenezi.vercel.app/admin/contratos";
 const LINK_RESGATES = "https://sistemagestaogenezi.vercel.app/admin/resgates";
+const LINK_MATRICULAS = "https://sistemagestaogenezi.vercel.app/admin/matriculas";
 
 function formatarReais(valor: unknown): string {
   const numero = typeof valor === "number" ? valor : Number(valor ?? 0);
@@ -24,7 +26,7 @@ function texto(valor: unknown): string {
 }
 
 export async function notificarPagamentoRecebido(payload: Record<string, unknown>): Promise<boolean> {
-  return enviarAlertaTelegram(
+  const resultado = await enviarAlertaTelegram(
     "Pagamento Recebido",
     [
       `💰 Valor: R$ ${formatarReais(payload.valor)}`,
@@ -34,6 +36,12 @@ export async function notificarPagamentoRecebido(payload: Record<string, unknown
     ],
     "🟢",
   );
+  await enviarPushAdmin(
+    "Pagamento Recebido",
+    `${texto(payload.nome_aluno)} — R$ ${formatarReais(payload.valor)}`,
+    LINK_FINANCEIRO,
+  );
+  return resultado;
 }
 
 export async function notificarPagamentoAtrasado(payload: Record<string, unknown>): Promise<boolean> {
@@ -50,7 +58,7 @@ export async function notificarPagamentoAtrasado(payload: Record<string, unknown
 }
 
 export async function notificarMatriculaCriada(payload: Record<string, unknown>): Promise<boolean> {
-  return enviarAlertaTelegram(
+  const resultado = await enviarAlertaTelegram(
     "Nova Matrícula",
     [
       `👤 Aluno: ${texto(payload.nome_aluno)}`,
@@ -60,6 +68,12 @@ export async function notificarMatriculaCriada(payload: Record<string, unknown>)
     ],
     "🎓",
   );
+  await enviarPushAdmin(
+    "Nova Matrícula",
+    `${texto(payload.nome_aluno)} — ${texto(payload.nome_curso)}`,
+    LINK_MATRICULAS,
+  );
+  return resultado;
 }
 
 export async function notificarCertificadoEmitido(payload: Record<string, unknown>): Promise<boolean> {
@@ -75,7 +89,7 @@ export async function notificarCertificadoEmitido(payload: Record<string, unknow
 }
 
 export async function notificarLeadNovo(payload: Record<string, unknown>): Promise<boolean> {
-  return enviarAlertaTelegram(
+  const resultado = await enviarAlertaTelegram(
     "Novo Lead",
     [
       `👤 Nome: ${texto(payload.nome)}`,
@@ -85,6 +99,12 @@ export async function notificarLeadNovo(payload: Record<string, unknown>): Promi
     ],
     "🎯",
   );
+  await enviarPushAdmin(
+    "Novo Lead",
+    `${texto(payload.nome)} — ${texto(payload.telefone)}`,
+    LINK_LEADS,
+  );
+  return resultado;
 }
 
 export async function notificarAlunoLogin(payload: Record<string, unknown>): Promise<boolean> {
@@ -120,7 +140,7 @@ export async function notificarCursoConcluido(payload: Record<string, unknown>):
 
 export async function notificarEvasaoRisco(payload: Record<string, unknown>): Promise<boolean> {
   const motivos = Array.isArray(payload.motivos) ? payload.motivos.join(", ") : texto(payload.motivos);
-  return enviarAlertaTelegram(
+  const resultado = await enviarAlertaTelegram(
     "RISCO DE EVASÃO",
     [
       `👤 Aluno: ${texto(payload.nome_aluno)}`,
@@ -131,6 +151,12 @@ export async function notificarEvasaoRisco(payload: Record<string, unknown>): Pr
     ],
     "⚠️",
   );
+  await enviarPushAdmin(
+    "Risco de Evasão",
+    `${texto(payload.nome_aluno)} — índice ${texto(payload.indice)}/100`,
+    LINK_ALUNOS,
+  );
+  return resultado;
 }
 
 export async function notificarPremioEstoqueBaixo(payload: Record<string, unknown>): Promise<boolean> {

@@ -13,6 +13,7 @@ import {
   type NivelBadge,
 } from "@/lib/gamificacao/badges-progressivos";
 import { isAvatarId } from "@/lib/avatares/catalog";
+import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { cn } from "@/lib/utils";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,24 @@ function formatDataConquista(isoString: string): string {
 
 export default async function RankingPage() {
   const user = await requireRole("aluno");
+
+  const recursos = await getRecursosHabilitadosAluno(user.id);
+  if (!recursos.ranking) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Ranking geral</h1>
+        </div>
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-muted-foreground text-sm">
+              Ranking não disponível para seu tipo de curso.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const supabase = await createClient();
   const ranking = await getRankingGeral(supabase);

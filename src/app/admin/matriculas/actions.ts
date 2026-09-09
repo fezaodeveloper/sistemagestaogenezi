@@ -11,6 +11,7 @@ import {
   type MatriculaWizardInput,
 } from "@/lib/matriculas/schema";
 import { notificarMatriculaWhatsApp } from "@/lib/matriculas/notificacoes";
+import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
@@ -343,7 +344,7 @@ export async function updateMatriculaDetalhes(
   id: string,
   formData: FormData,
 ): Promise<UpdateMatriculaDetalhesResult> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
 
   const previsaoConclusaoRaw = String(formData.get("previsao_conclusao") ?? "");
   const observacoesRaw = String(formData.get("observacoes") ?? "");
@@ -364,6 +365,16 @@ export async function updateMatriculaDetalhes(
   const data = parsed.data;
 
   const supabase = await createClient();
+
+  // Snapshot pré-alteração (TAREFA 3) — só "status" faz parte do histórico
+  // pedido (valor_final/data_expiracao não são editáveis nesta tela, só no
+  // wizard de criação; não há update-path pra registrar mudança neles).
+  const { data: matriculaAntes } = await supabase
+    .from("matriculas")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("matriculas")
     .update({
@@ -379,6 +390,17 @@ export async function updateMatriculaDetalhes(
 
   if (error) {
     return { error: "Não foi possível salvar as alterações. Tente novamente." };
+  }
+
+  if (matriculaAntes) {
+    await registrarAlteracao({
+      tabela: "matriculas",
+      registroId: id,
+      campo: "status",
+      valorAnterior: matriculaAntes.status,
+      valorNovo: data.status,
+      alteradoPor: user.id,
+    });
   }
 
   revalidatePath("/admin/matriculas");

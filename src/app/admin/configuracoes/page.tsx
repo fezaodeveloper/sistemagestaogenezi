@@ -8,6 +8,8 @@ import { ConfiguracoesGamificacaoForm } from "@/components/admin/configuracoes-g
 import { CriteriosCertificadoForm } from "@/components/admin/criterios-certificado-form";
 import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
 import { ConfiguracoesNotificacoesForm } from "@/components/admin/configuracoes-notificacoes-form";
+import { PushNotificacoesForm } from "@/components/admin/push-notificacoes-form";
+import { ConfiguracoesRecursosForm } from "@/components/admin/configuracoes-recursos-form";
 import { BannersLoginForm } from "@/components/admin/banners-login-form";
 import { LogoEscolaForm } from "@/components/admin/logo-escola-form";
 import { RodapeLoginForm } from "@/components/admin/rodape-login-form";
@@ -25,7 +27,7 @@ export default async function ConfiguracoesPage() {
     supabase
       .from("configuracoes")
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -43,6 +45,7 @@ export default async function ConfiguracoesPage() {
           <TabsTrigger value="geral">Geral</TabsTrigger>
           <TabsTrigger value="gamificacao">Gamificação</TabsTrigger>
           <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
+          <TabsTrigger value="recursos">Recursos</TabsTrigger>
           <TabsTrigger value="banners">Banners do Login</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
           <TabsTrigger value="log">Log do sistema</TabsTrigger>
@@ -151,7 +154,7 @@ export default async function ConfiguracoesPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="notificacoes">
+        <TabsContent value="notificacoes" className="flex flex-col gap-6">
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle>Notificações</CardTitle>
@@ -163,6 +166,44 @@ export default async function ConfiguracoesPage() {
                   notif_certificados_pendentes: data?.notif_certificados_pendentes ?? true,
                   notif_eventos_hoje: data?.notif_eventos_hoje ?? true,
                   notif_eventos_amanha: data?.notif_eventos_amanha ?? true,
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>Notificações Push no Navegador</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PushNotificacoesForm vapidPublicKeyInicial={data?.push_vapid_public_key ?? null} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="recursos">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recursos por tipo de curso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ConfiguracoesRecursosForm
+                defaultValues={{
+                  recurso_gamificacao_presencial: data?.recurso_gamificacao_presencial ?? true,
+                  recurso_gamificacao_ead: data?.recurso_gamificacao_ead ?? true,
+                  recurso_gamificacao_hibrido: data?.recurso_gamificacao_hibrido ?? true,
+                  recurso_premios_presencial: data?.recurso_premios_presencial ?? true,
+                  recurso_premios_ead: data?.recurso_premios_ead ?? true,
+                  recurso_premios_hibrido: data?.recurso_premios_hibrido ?? true,
+                  recurso_ranking_presencial: data?.recurso_ranking_presencial ?? true,
+                  recurso_ranking_ead: data?.recurso_ranking_ead ?? true,
+                  recurso_ranking_hibrido: data?.recurso_ranking_hibrido ?? true,
+                  recurso_chat_presencial: data?.recurso_chat_presencial ?? true,
+                  recurso_chat_ead: data?.recurso_chat_ead ?? true,
+                  recurso_chat_hibrido: data?.recurso_chat_hibrido ?? true,
+                  recurso_certificados_presencial: data?.recurso_certificados_presencial ?? true,
+                  recurso_certificados_ead: data?.recurso_certificados_ead ?? true,
+                  recurso_certificados_hibrido: data?.recurso_certificados_hibrido ?? true,
                 }}
               />
             </CardContent>

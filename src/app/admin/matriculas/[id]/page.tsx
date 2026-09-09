@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { getMatricula } from "@/app/admin/matriculas/actions";
 import { MatriculaDetalhes } from "@/components/admin/matricula-detalhes";
+import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
 
 export default async function MatriculaDetalhesPage({
   params,
@@ -17,5 +18,10 @@ export default async function MatriculaDetalhesPage({
     notFound();
   }
 
-  return <MatriculaDetalhes matricula={matricula} />;
+  return (
+    <div className="flex flex-col gap-6">
+      <MatriculaDetalhes matricula={matricula} />
+      <HistoricoAlteracoesSection tabela="matriculas" registroId={id} />
+    </div>
+  );
 }

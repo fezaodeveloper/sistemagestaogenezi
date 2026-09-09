@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Banknote, Coins, FileBadge, FileText, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
+import type { RecursosHabilitados } from "@/lib/configuracoes/recursos";
 import { UserMenu } from "@/components/auth/user-menu";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 import { getContagemNaoLidasAlunoAction } from "@/lib/chat/badge-actions";
@@ -24,12 +25,14 @@ export function AlunoSidebar({
   mensagensNaoLidas,
   parcelasAtrasadas,
   contratosPendentes,
+  recursos,
 }: {
   user: CurrentUser;
   conversaId: string | null;
   mensagensNaoLidas: number;
   parcelasAtrasadas: number;
   contratosPendentes: number;
+  recursos: RecursosHabilitados;
 }) {
   return (
     <Sidebar>
@@ -66,34 +69,38 @@ export function AlunoSidebar({
                   </SidebarMenuBadge>
                 )}
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/aluno/mensagens">
-                      <MessagesSquare />
-                      <span>Mensagens</span>
-                    </Link>
-                  }
-                />
-                {conversaId && (
-                  <BadgeChatNaoLidas
-                    key={mensagensNaoLidas}
-                    initialCount={mensagensNaoLidas}
-                    realtimeFilter={`conversa_id=eq.${conversaId}`}
-                    refetchAction={getContagemNaoLidasAlunoAction.bind(null, conversaId)}
+              {recursos.chat && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link href="/aluno/mensagens">
+                        <MessagesSquare />
+                        <span>Mensagens</span>
+                      </Link>
+                    }
                   />
-                )}
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/aluno/ranking">
-                      <Trophy />
-                      <span>Ranking</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
+                  {conversaId && (
+                    <BadgeChatNaoLidas
+                      key={mensagensNaoLidas}
+                      initialCount={mensagensNaoLidas}
+                      realtimeFilter={`conversa_id=eq.${conversaId}`}
+                      refetchAction={getContagemNaoLidasAlunoAction.bind(null, conversaId)}
+                    />
+                  )}
+                </SidebarMenuItem>
+              )}
+              {recursos.ranking && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link href="/aluno/ranking">
+                        <Trophy />
+                        <span>Ranking</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton
                   render={
@@ -104,26 +111,30 @@ export function AlunoSidebar({
                   }
                 />
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/aluno/creditos">
-                      <Coins />
-                      <span>Créditos</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/aluno/certificados">
-                      <FileBadge />
-                      <span>Certificados</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
+              {recursos.premios && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link href="/aluno/creditos">
+                        <Coins />
+                        <span>Créditos</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
+              )}
+              {recursos.certificados && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link href="/aluno/certificados">
+                        <FileBadge />
+                        <span>Certificados</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton
                   render={
