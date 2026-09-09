@@ -9,6 +9,7 @@ import {
   getMatriculaAtivaComTurma,
 } from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso, type AulaLiberacao } from "@/lib/cronograma/liberacao";
+import { getAulasConcluidasIds } from "@/lib/aulas-concluidas/progresso";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -112,6 +113,15 @@ export default async function ModuloAulasPage({
     dataLiberacao: null,
   };
 
+  // Status de conclusão (✅/⭕) por aula — mesma linguagem visual introduzida
+  // na lista de aulas do player (aulas/[aulaId]/page.tsx), pra consistência
+  // entre as duas telas.
+  const aulasConcluidasIds = await getAulasConcluidasIds(
+    supabase,
+    (aulas ?? []).map((aula) => aula.id),
+    matricula?.id ?? null,
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -125,9 +135,16 @@ export default async function ModuloAulasPage({
           <ArrowLeft />
           {modulo.cursos?.nome ?? "Curso"}
         </Button>
-        <h1 className="text-2xl font-semibold">
-          Módulo {modulo.numero} — {modulo.titulo}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">
+            Módulo {modulo.numero} — {modulo.titulo}
+          </h1>
+          {aulas && aulas.length > 0 && (
+            <Badge variant="secondary">
+              {aulasConcluidasIds.size}/{aulas.length}
+            </Badge>
+          )}
+        </div>
       </div>
 
       {error ? (
@@ -158,7 +175,7 @@ export default async function ModuloAulasPage({
                     <div className="flex items-center gap-2">
                       <Lock className="text-muted-foreground size-4 shrink-0" />
                       <p className="font-medium">
-                        Aula {aula.numero} — {aula.titulo}
+                        {aulasConcluidasIds.has(aula.id) ? "✅" : "⭕"} Aula {aula.numero} — {aula.titulo}
                       </p>
                     </div>
                     <p className="text-muted-foreground text-sm">
@@ -179,7 +196,7 @@ export default async function ModuloAulasPage({
                 <Card className="hover:bg-accent/50 transition-colors">
                   <CardContent className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium">
-                      Aula {aula.numero} — {aula.titulo}
+                      {aulasConcluidasIds.has(aula.id) ? "✅" : "⭕"} Aula {aula.numero} — {aula.titulo}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {totalMateriais > 0 && (

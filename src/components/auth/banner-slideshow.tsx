@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getBannersLogin } from "@/app/login/actions";
 import type {
   LoginBanner,
@@ -46,6 +47,7 @@ type Slide = {
   tituloCor: string;
   subtituloCor: string;
   textoPosicao: LoginBannerTextoPosicao;
+  linkUrl: string | null;
 };
 
 // Placeholders com a identidade visual da Gênezi — usados só enquanto não
@@ -66,6 +68,7 @@ const PLACEHOLDERS: Slide[] = [
     tituloCor: "#FFFFFF",
     subtituloCor: "#FFFFFF",
     textoPosicao: "centro",
+    linkUrl: null,
   },
   {
     key: "placeholder-2",
@@ -79,6 +82,7 @@ const PLACEHOLDERS: Slide[] = [
     tituloCor: "#FFFFFF",
     subtituloCor: "#FFFFFF",
     textoPosicao: "centro",
+    linkUrl: null,
   },
   {
     key: "placeholder-3",
@@ -92,6 +96,7 @@ const PLACEHOLDERS: Slide[] = [
     tituloCor: "#FFFFFF",
     subtituloCor: "#FFFFFF",
     textoPosicao: "centro",
+    linkUrl: null,
   },
 ];
 
@@ -127,6 +132,7 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
         tituloCor: banner.titulo_cor,
         subtituloCor: banner.subtitulo_cor,
         textoPosicao: banner.texto_posicao,
+        linkUrl: banner.link_url,
       }));
     }
     return PLACEHOLDERS;
@@ -159,14 +165,18 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
       {slides.map((slide, posicao) => (
         <div
           key={slide.key}
-          className="absolute inset-0 transition-opacity duration-1000"
+          className={`absolute inset-0 transition-opacity duration-1000 ${slide.linkUrl ? "cursor-pointer" : ""}`}
           style={{
             opacity: posicao === indiceSeguro ? 1 : 0,
+            pointerEvents: posicao === indiceSeguro ? "auto" : "none",
             backgroundImage: slide.imagemUrl ? `url(${slide.imagemUrl})` : slide.gradiente ?? undefined,
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
           aria-hidden={posicao !== indiceSeguro}
+          onClick={() => {
+            if (slide.linkUrl) window.open(slide.linkUrl, "_blank", "noopener,noreferrer");
+          }}
         >
           {slide.gradiente && (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
@@ -202,6 +212,33 @@ export function BannerSlideshow({ tipo }: { tipo: LoginBannerTipo }) {
           )}
         </div>
       ))}
+
+      {slides.length > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Slide anterior"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIndice((atual) => (atual - 1 + slides.length) % slides.length);
+            }}
+            className="absolute top-1/2 left-3 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/70 sm:size-10"
+          >
+            <ChevronLeft className="size-5 sm:size-6" />
+          </button>
+          <button
+            type="button"
+            aria-label="Próximo slide"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIndice((atual) => (atual + 1) % slides.length);
+            }}
+            className="absolute top-1/2 right-3 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/70 sm:size-10"
+          >
+            <ChevronRight className="size-5 sm:size-6" />
+          </button>
+        </>
+      )}
 
       {/* Logo em overlay, canto superior esquerdo */}
       <div className="absolute top-6 left-6 flex items-center gap-2">

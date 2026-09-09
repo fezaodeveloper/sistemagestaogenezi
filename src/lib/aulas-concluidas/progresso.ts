@@ -35,3 +35,23 @@ export async function getCursoProgresso(
 
   return { total: aulaIds.length, concluidas: concluidasUnicas.size };
 }
+
+// Ids das aulas (dentre um conjunto dado) já concluídas por uma matrícula —
+// usado tanto pra decidir "módulo 100% concluído" (aulas/[aulaId]/page.tsx,
+// gate de exibição do pill da prova) quanto pra marcar ✅/⭕ na lista de
+// aulas do módulo (aulas/[aulaId]/page.tsx e modulos/[moduloId]/page.tsx).
+export async function getAulasConcluidasIds(
+  supabase: SupabaseServerClient,
+  aulaIds: string[],
+  matriculaId: string | null,
+): Promise<Set<string>> {
+  if (!matriculaId || aulaIds.length === 0) return new Set();
+
+  const { data } = await supabase
+    .from("aulas_concluidas")
+    .select("aula_id")
+    .in("aula_id", aulaIds)
+    .eq("matricula_id", matriculaId);
+
+  return new Set((data ?? []).map((row) => row.aula_id as string));
+}

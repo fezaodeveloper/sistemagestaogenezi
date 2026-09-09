@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Plus } from "lucide-react";
+import { Copy, Plus } from "lucide-react";
 import {
   deleteBannerLogin,
+  duplicarBannerLogin,
   updateBannerLogin,
   uploadBannerLogin,
 } from "@/app/admin/configuracoes/actions";
@@ -149,9 +150,12 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
   const [tituloCor, setTituloCor] = useState(banner.titulo_cor);
   const [subtituloCor, setSubtituloCor] = useState(banner.subtitulo_cor);
   const [textoPosicao, setTextoPosicao] = useState<LoginBannerTextoPosicao>(banner.texto_posicao);
+  const [linkUrl, setLinkUrl] = useState(banner.link_url ?? "");
+  const [intervaloSegundos, setIntervaloSegundos] = useState(banner.intervalo_segundos);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [excluirOpen, setExcluirOpen] = useState(false);
+  const [confirmacaoExcluir, setConfirmacaoExcluir] = useState("");
 
   function salvar(
     dados: Partial<{
@@ -164,6 +168,8 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
       titulo_cor: string;
       subtitulo_cor: string;
       texto_posicao: LoginBannerTextoPosicao;
+      link_url: string;
+      intervalo_segundos: number;
     }>,
   ) {
     setError(null);
@@ -178,6 +184,8 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
         titulo_cor: tituloCor,
         subtitulo_cor: subtituloCor,
         texto_posicao: textoPosicao,
+        link_url: linkUrl,
+        intervalo_segundos: intervaloSegundos,
         ...dados,
       });
       if (resultado.error) setError(resultado.error);
@@ -193,6 +201,14 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
         return;
       }
       setExcluirOpen(false);
+    });
+  }
+
+  function handleDuplicar() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await duplicarBannerLogin(banner.id);
+      if (resultado.error) setError(resultado.error);
     });
   }
 
@@ -336,6 +352,26 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex min-w-48 flex-1 flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Link (opcional)</Label>
+            <Input
+              type="url"
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              onBlur={() => salvar({ link_url: linkUrl })}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="flex w-40 flex-col gap-1">
+            <Label className="text-muted-foreground text-xs">Tempo de exibição de cada banner</Label>
+            <Input
+              type="number"
+              min={3}
+              value={intervaloSegundos}
+              onChange={(event) => setIntervaloSegundos(Number(event.target.value))}
+              onBlur={() => salvar({ intervalo_segundos: intervaloSegundos })}
+            />
+          </div>
           <div className="flex flex-col items-center gap-1">
             <Label className="text-muted-foreground text-xs">Ativo</Label>
             <Switch checked={banner.ativo} onCheckedChange={(checked) => salvar({ ativo: checked === true })} />
@@ -356,19 +392,40 @@ function BannerRow({ banner }: { banner: LoginBanner }) {
           />
         </div>
 
-        <AlertDialog open={excluirOpen} onOpenChange={setExcluirOpen}>
+        <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleDuplicar}>
+          <Copy />
+          Duplicar
+        </Button>
+
+        <AlertDialog
+          open={excluirOpen}
+          onOpenChange={(nextOpen) => {
+            setExcluirOpen(nextOpen);
+            if (nextOpen) setConfirmacaoExcluir("");
+          }}
+        >
           <AlertDialogTrigger render={<Button variant="ghost" size="sm">Excluir</Button>} />
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir banner</AlertDialogTitle>
               <AlertDialogDescription>
                 Tem certeza que deseja excluir este banner? O arquivo também será removido do Storage. Essa
-                ação não pode ser desfeita.
+                ação não pode ser desfeita. Digite <strong>EXCLUIR</strong> para confirmar.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <Input
+              value={confirmacaoExcluir}
+              onChange={(event) => setConfirmacaoExcluir(event.target.value)}
+              placeholder="EXCLUIR"
+              autoComplete="off"
+            />
             <AlertDialogFooter>
               <AlertDialogCancel>Voltar</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={isPending || confirmacaoExcluir !== "EXCLUIR"}
+                onClick={handleExcluir}
+              >
                 {isPending ? "Excluindo..." : "Excluir"}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -386,6 +443,8 @@ function AdicionarBannerDialog() {
   const [titulo, setTitulo] = useState("");
   const [subtitulo, setSubtitulo] = useState("");
   const [tipo, setTipo] = useState<LoginBannerTipo>("admin");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [intervaloSegundos, setIntervaloSegundos] = useState(6);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -394,6 +453,8 @@ function AdicionarBannerDialog() {
     setTitulo("");
     setSubtitulo("");
     setTipo("admin");
+    setLinkUrl("");
+    setIntervaloSegundos(6);
     setArquivo(null);
     setError(null);
   }
@@ -446,6 +507,8 @@ function AdicionarBannerDialog() {
       formData.set("titulo", titulo);
       formData.set("subtitulo", subtitulo);
       formData.set("tipo", tipo);
+      formData.set("link_url", linkUrl);
+      formData.set("intervalo_segundos", String(intervaloSegundos));
 
       const resultado = await uploadBannerLogin(formData);
       if (resultado.error) {
@@ -525,6 +588,26 @@ function AdicionarBannerDialog() {
               value={subtitulo}
               onChange={(event) => setSubtitulo(event.target.value)}
               placeholder="Opcional"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="banner-link">Link (opcional)</Label>
+            <Input
+              id="banner-link"
+              type="url"
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="banner-intervalo">Tempo de exibição de cada banner</Label>
+            <Input
+              id="banner-intervalo"
+              type="number"
+              min={3}
+              value={intervaloSegundos}
+              onChange={(event) => setIntervaloSegundos(Number(event.target.value))}
             />
           </div>
           {error && (

@@ -9,8 +9,13 @@ import {
   getMatriculaAtivaComTurma,
 } from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso, type AulaLiberacao } from "@/lib/cronograma/liberacao";
+import { getAulasConcluidasIds } from "@/lib/aulas-concluidas/progresso";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
+import { getMeusPontos } from "@/lib/gamificacao/ranking";
+import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
+import { AulaListaModulo } from "@/components/aluno/aula-lista-modulo";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -150,25 +155,6 @@ async function getNextAula(
   return { moduloId: proximoModulo.id, aulaId: primeiraAula.id };
 }
 
-// Ids das aulas do módulo que já têm conclusão registrada pra essa
-// matrícula — usado pra decidir se o módulo está 100% concluído (ver
-// isModuloCompleto), o gate de exibição do pill da prova.
-async function getAulasConcluidasIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  aulaIds: string[],
-  matriculaId: string | null,
-): Promise<Set<string>> {
-  if (!matriculaId || aulaIds.length === 0) return new Set();
-
-  const { data } = await supabase
-    .from("aulas_concluidas")
-    .select("aula_id")
-    .in("aula_id", aulaIds)
-    .eq("matricula_id", matriculaId);
-
-  return new Set((data ?? []).map((row) => row.aula_id as string));
-}
-
 export default async function AulaConteudoPage({
   params,
 }: {
@@ -278,10 +264,10 @@ export default async function AulaConteudoPage({
 
   const { data: aulasDoModuloData } = await supabase
     .from("aulas")
-    .select("id, numero")
+    .select("id, numero, titulo")
     .eq("modulo_id", moduloId)
     .order("numero");
-  const aulasDoModulo = (aulasDoModuloData ?? []) as { id: string; numero: number }[];
+  const aulasDoModulo = (aulasDoModuloData ?? []) as { id: string; numero: number; titulo: string }[];
 
   const [
     { data: materiaisData, error: materiaisError },
@@ -291,6 +277,9 @@ export default async function AulaConteudoPage({
     quizResumo,
     provaResumo,
     aulasConcluidasIds,
+    recursos,
+    pontos,
+    { data: ofensivaData },
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -309,6 +298,15 @@ export default async function AulaConteudoPage({
       aulasDoModulo.map((a) => a.id),
       matriculaId,
     ),
+    getRecursosHabilitadosAluno(user.id),
+    getMeusPontos(supabase, user.id),
+    supabase
+      .from("ofensivas")
+      .select("ofensiva_atual")
+      .eq("aluno_id", user.id)
+      .order("ofensiva_atual", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
@@ -316,9 +314,10 @@ export default async function AulaConteudoPage({
   const concluidaInicial = !!concluidaData;
   const isModuloCompleto =
     aulasDoModulo.length > 0 && aulasDoModulo.every((a) => aulasConcluidasIds.has(a.id));
+  const ofensivaAtual = (ofensivaData?.ofensiva_atual as number | undefined) ?? 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+    <div className="flex w-full flex-col gap-6">
       <div>
         <Button
           render={<Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}`} />}
@@ -330,65 +329,89 @@ export default async function AulaConteudoPage({
           <ArrowLeft />
           Módulo {modulo.numero} — {modulo.titulo}
         </Button>
-        <h1 className="text-2xl font-semibold">
-          Aula {aula.numero} — {aula.titulo}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold">
+            Aula {aula.numero} — {aula.titulo}
+          </h1>
+          {recursos.gamificacao && (
+            <div className="flex gap-2">
+              <Badge variant="secondary">🔥 {ofensivaAtual} dias</Badge>
+              <Badge variant="secondary">⭐ {pontos} pts</Badge>
+            </div>
+          )}
+        </div>
       </div>
 
-      {materiaisError ? (
-        <Card>
-          <CardContent className="text-destructive py-10 text-center text-sm">
-            Não foi possível carregar o vídeo desta aula. Tente recarregar a página.
-          </CardContent>
-        </Card>
-      ) : videoId ? (
-        <div className="aspect-video w-full overflow-hidden rounded-xl">
-          <iframe
-            className="h-full w-full"
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&iv_load_policy=3`}
-            title={`Vídeo da aula: ${aula.titulo}`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-          />
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <p className="text-muted-foreground text-sm">
-              Nenhum vídeo disponível para esta aula ainda.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <AulaAcoesBar
-        cursoId={cursoId}
-        moduloId={moduloId}
-        aulaId={aulaId}
-        pdfs={pdfs}
-        pdfsError={pdfsError}
-        quizResumo={quizResumo}
-        quizHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}
-        provaResumo={isModuloCompleto ? provaResumo : null}
-        provaHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/prova`}
-        concluidaInicial={concluidaInicial}
-      />
-
-      {nextAula && (
-        <div className="flex justify-end">
-          <Button
-            render={
-              <Link
-                href={`/aluno/cursos/${cursoId}/modulos/${nextAula.moduloId}/aulas/${nextAula.aulaId}`}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[7fr_3fr]">
+        <div className="flex min-w-0 flex-col gap-6">
+          {materiaisError ? (
+            <Card>
+              <CardContent className="text-destructive py-10 text-center text-sm">
+                Não foi possível carregar o vídeo desta aula. Tente recarregar a página.
+              </CardContent>
+            </Card>
+          ) : videoId ? (
+            <div className="aspect-video w-full overflow-hidden rounded-xl">
+              <iframe
+                className="h-full w-full"
+                src={`https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&iv_load_policy=3`}
+                title={`Vídeo da aula: ${aula.titulo}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
               />
-            }
-            nativeButton={false}
-          >
-            Próxima aula
-            <ArrowRight />
-          </Button>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-10 text-center">
+                <p className="text-muted-foreground text-sm">
+                  Nenhum vídeo disponível para esta aula ainda.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          <AulaAcoesBar
+            cursoId={cursoId}
+            moduloId={moduloId}
+            aulaId={aulaId}
+            pdfs={pdfs}
+            pdfsError={pdfsError}
+            quizResumo={quizResumo}
+            quizHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}
+            provaResumo={isModuloCompleto ? provaResumo : null}
+            provaHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/prova`}
+            concluidaInicial={concluidaInicial}
+          />
+
+          {nextAula && (
+            <div className="flex justify-end">
+              <Button
+                render={
+                  <Link
+                    href={`/aluno/cursos/${cursoId}/modulos/${nextAula.moduloId}/aulas/${nextAula.aulaId}`}
+                  />
+                }
+                nativeButton={false}
+              >
+                Próxima aula
+                <ArrowRight />
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+
+        <AulaListaModulo
+          cursoId={cursoId}
+          moduloId={moduloId}
+          aulaAtualId={aulaId}
+          aulas={aulasDoModulo.map((aulaItem) => ({
+            id: aulaItem.id,
+            numero: aulaItem.numero,
+            titulo: aulaItem.titulo,
+            concluida: aulasConcluidasIds.has(aulaItem.id),
+          }))}
+        />
+      </div>
     </div>
   );
 }

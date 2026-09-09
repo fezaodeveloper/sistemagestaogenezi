@@ -155,12 +155,36 @@ export default async function AlunoDashboardPage() {
     console.error('Erro ao buscar cursos bloqueados:', erroBloqueados);
   }
 
+  // Vagas disponíveis por curso — calculado em JS a partir das turmas ativas
+  // (supabase-js não expressa MIN()/GROUP BY nativamente); só turmas com
+  // vaga sobrando entram no cálculo, mesmo critério da junção pedida
+  // originalmente em SQL. Sem turma com vaga: vagasDisponiveis fica null
+  // (vira "lista de espera" no card).
+  const cursoIdsBloqueados = (cursosBloqueadosData ?? []).map((curso) => curso.id);
+  const { data: turmasVagasData } =
+    cursoIdsBloqueados.length > 0
+      ? await supabase
+          .from("turmas")
+          .select("curso_id, vagas_total, vagas_ocupadas")
+          .in("curso_id", cursoIdsBloqueados)
+          .eq("status", "ativa")
+      : { data: [] as { curso_id: string; vagas_total: number; vagas_ocupadas: number }[] };
+
+  const vagasPorCurso = new Map<string, number>();
+  for (const turma of turmasVagasData ?? []) {
+    const disponiveis = turma.vagas_total - turma.vagas_ocupadas;
+    if (disponiveis <= 0) continue;
+    const atual = vagasPorCurso.get(turma.curso_id);
+    vagasPorCurso.set(turma.curso_id, atual === undefined ? disponiveis : Math.min(atual, disponiveis));
+  }
+
   const cursosBloqueados: CursoBloqueado[] = (cursosBloqueadosData ?? []).map((curso) => ({
     id: curso.id,
     nome: curso.nome,
     tipo: curso.tipo,
     descricao: curso.descricao,
     capaUrl: curso.capa_url ? supabase.storage.from("cursos").getPublicUrl(curso.capa_url).data.publicUrl : null,
+    vagasDisponiveis: vagasPorCurso.get(curso.id) ?? null,
   }));
 
   return (

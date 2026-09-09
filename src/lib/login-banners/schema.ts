@@ -50,6 +50,8 @@ export type LoginBanner = {
   titulo_cor: string;
   subtitulo_cor: string;
   texto_posicao: LoginBannerTextoPosicao;
+  link_url: string | null;
+  intervalo_segundos: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -70,6 +72,11 @@ export const bannerLoginUpdateSchema = z.object({
   titulo_cor: corHexSchema,
   subtitulo_cor: corHexSchema,
   texto_posicao: z.enum(LOGIN_BANNER_POSICOES),
+  link_url: z.string().trim().max(2000, { error: "Link muito longo." }).optional(),
+  intervalo_segundos: z.coerce
+    .number()
+    .int({ error: "O intervalo deve ser um número inteiro." })
+    .min(3, { error: "O intervalo mínimo é de 3 segundos." }),
 });
 
 export type BannerLoginUpdateValues = z.infer<typeof bannerLoginUpdateSchema>;

@@ -6,6 +6,7 @@ import { alunoTemCursoPresencialOuHibrido } from "@/lib/matriculas/access";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AvatarPicker } from "@/components/aluno/avatar-picker";
 import { FotoPerfilUpload } from "@/components/aluno/foto-perfil-upload";
+import { TrocarSenhaForm } from "@/components/aluno/trocar-senha-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +93,15 @@ export default async function PerfilPage() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Segurança</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrocarSenhaForm />
         </CardContent>
       </Card>
     </div>

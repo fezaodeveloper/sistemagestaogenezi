@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { demonstrarInteresse } from "@/app/aluno/actions";
 import { CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
-import type { CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
+import { BadgeVagas, type CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
 import { Capa } from "@/components/aluno/capa";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,9 +53,10 @@ export function InteresseCursoModal({
 
         <div className="flex flex-col gap-4">
           <Capa capaUrl={curso.capaUrl} nome={curso.nome} aspect="16/9" className="w-full" />
-          <Badge variant="secondary" className="w-fit">
-            {CURSO_TIPO_LABELS[curso.tipo]}
-          </Badge>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
+            <BadgeVagas vagasDisponiveis={curso.vagasDisponiveis} />
+          </div>
           {curso.descricao && <p className="text-muted-foreground text-sm">{curso.descricao}</p>}
 
           {enviado ? (

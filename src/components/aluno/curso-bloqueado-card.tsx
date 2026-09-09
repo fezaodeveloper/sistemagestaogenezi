@@ -14,7 +14,19 @@ export type CursoBloqueado = {
   tipo: (typeof CURSO_TIPOS)[number];
   capaUrl: string | null;
   descricao: string | null;
+  vagasDisponiveis: number | null;
 };
+
+export function BadgeVagas({ vagasDisponiveis }: { vagasDisponiveis: number | null }) {
+  if (vagasDisponiveis && vagasDisponiveis > 0) {
+    return (
+      <Badge className="bg-green-500/90 text-white">
+        {vagasDisponiveis} {vagasDisponiveis === 1 ? "vaga disponível" : "vagas disponíveis"}
+      </Badge>
+    );
+  }
+  return <Badge className="bg-amber-500/90 text-white">Entre em lista de espera</Badge>;
+}
 
 // Cartão inteiro continua sendo um único <button> (mesma lógica de sempre —
 // clicar em qualquer parte abre o modal de interesse); o card só troca de
@@ -53,9 +65,12 @@ export function CursoBloqueadoCard({ curso, alunoId }: { curso: CursoBloqueado; 
             </h3>
           </div>
           <CardContent className="flex flex-col gap-3 p-4">
-            <Badge variant="secondary" className="w-fit text-xs">
-              {CURSO_TIPO_LABELS[curso.tipo]}
-            </Badge>
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="secondary" className="text-xs">
+                {CURSO_TIPO_LABELS[curso.tipo]}
+              </Badge>
+              <BadgeVagas vagasDisponiveis={curso.vagasDisponiveis} />
+            </div>
             <div className="bg-muted text-muted-foreground relative flex h-9 items-center justify-center overflow-hidden rounded-md text-sm font-medium opacity-70 transition-all duration-300 ease-in-out group-hover:bg-green-600 group-hover:text-white group-hover:opacity-100">
               <span className="transition-opacity duration-300 ease-in-out group-hover:opacity-0">
                 Tenho interesse

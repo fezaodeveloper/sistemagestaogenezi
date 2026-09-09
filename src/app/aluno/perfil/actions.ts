@@ -88,3 +88,42 @@ export async function removerFotoPropria(): Promise<{ error?: string }> {
   revalidatePath("/aluno/perfil");
   return {};
 }
+
+// ===== Trocar senha (Segurança) =====
+//
+// Verifica a senha atual reautenticando com signInWithPassword antes de
+// trocar — mesmo client/sessão do próprio aluno, sem precisar do client
+// admin: um signInWithPassword bem-sucedido pra essa conta apenas renova a
+// sessão atual (mesmo usuário), não desloga ninguém.
+export async function trocarSenha(
+  senhaAtual: string,
+  novaSenha: string,
+): Promise<{ success?: true; error?: string }> {
+  const user = await requireRole("aluno");
+
+  if (!user.email) {
+    return { error: "Não foi possível identificar o e-mail desta conta." };
+  }
+  if (novaSenha.length < 6) {
+    return { error: "A nova senha precisa ter pelo menos 6 caracteres." };
+  }
+
+  const supabase = await createClient();
+
+  const { error: senhaAtualError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: senhaAtual,
+  });
+
+  if (senhaAtualError) {
+    return { error: "Senha atual incorreta." };
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({ password: novaSenha });
+
+  if (updateError) {
+    return { error: "Não foi possível alterar a senha. Tente novamente." };
+  }
+
+  return { success: true };
+}

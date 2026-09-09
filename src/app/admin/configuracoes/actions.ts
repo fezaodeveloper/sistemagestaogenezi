@@ -407,10 +407,14 @@ export async function uploadBannerLogin(formData: FormData): Promise<{ error?: s
   const publicUrl = String(formData.get("public_url") ?? "");
   const titulo = String(formData.get("titulo") ?? "").trim();
   const subtitulo = String(formData.get("subtitulo") ?? "").trim();
+  const linkUrl = String(formData.get("link_url") ?? "").trim();
   const tipoRaw = String(formData.get("tipo") ?? "");
   const tipo: LoginBannerTipo = LOGIN_BANNER_TIPOS.includes(tipoRaw as LoginBannerTipo)
     ? (tipoRaw as LoginBannerTipo)
     : "admin";
+
+  const intervaloBruto = Number(formData.get("intervalo_segundos"));
+  const intervaloSegundos = Number.isInteger(intervaloBruto) && intervaloBruto >= 3 ? intervaloBruto : 6;
 
   if (!storagePath || !publicUrl) {
     return { error: "Upload da imagem falhou antes de salvar o registro. Tente novamente." };
@@ -422,6 +426,8 @@ export async function uploadBannerLogin(formData: FormData): Promise<{ error?: s
     public_url: publicUrl,
     titulo: titulo || null,
     subtitulo: subtitulo || null,
+    link_url: linkUrl || null,
+    intervalo_segundos: intervaloSegundos,
     tipo,
   });
 
@@ -445,6 +451,8 @@ export async function updateBannerLogin(
     titulo_cor: string;
     subtitulo_cor: string;
     texto_posicao: LoginBannerTextoPosicao;
+    link_url: string;
+    intervalo_segundos: number;
   },
 ): Promise<{ error?: string }> {
   await requireRole("admin");
@@ -459,6 +467,8 @@ export async function updateBannerLogin(
     titulo_cor: dados.titulo_cor,
     subtitulo_cor: dados.subtitulo_cor,
     texto_posicao: dados.texto_posicao,
+    link_url: dados.link_url || undefined,
+    intervalo_segundos: dados.intervalo_segundos,
   });
 
   if (!parsed.success) {
@@ -478,11 +488,53 @@ export async function updateBannerLogin(
       titulo_cor: parsed.data.titulo_cor,
       subtitulo_cor: parsed.data.subtitulo_cor,
       texto_posicao: parsed.data.texto_posicao,
+      link_url: parsed.data.link_url ?? null,
+      intervalo_segundos: parsed.data.intervalo_segundos,
     })
     .eq("id", id);
 
   if (error) {
     return { error: "Não foi possível salvar as alterações." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
+// Cópia rasa: reaproveita o mesmo arquivo de imagem já no Storage (não
+// re-envia bytes) — se o original for excluído depois, a cópia perde a
+// imagem junto (mesmo storage_path). Aceitável pro caso de uso ("duplicar
+// pra ajustar título/link rapidamente"), não pra manter cópias
+// independentes no longo prazo.
+export async function duplicarBannerLogin(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data: original } = await supabase.from("login_banners").select("*").eq("id", id).single();
+
+  if (!original) {
+    return { error: "Banner não encontrado." };
+  }
+
+  const { error } = await supabase.from("login_banners").insert({
+    storage_path: original.storage_path,
+    public_url: original.public_url,
+    titulo: original.titulo ? `${original.titulo} (cópia)` : "(cópia)",
+    subtitulo: original.subtitulo,
+    tipo: original.tipo,
+    ordem: original.ordem,
+    ativo: original.ativo,
+    titulo_tamanho: original.titulo_tamanho,
+    subtitulo_tamanho: original.subtitulo_tamanho,
+    titulo_cor: original.titulo_cor,
+    subtitulo_cor: original.subtitulo_cor,
+    texto_posicao: original.texto_posicao,
+    link_url: original.link_url,
+    intervalo_segundos: original.intervalo_segundos,
+  });
+
+  if (error) {
+    return { error: "Não foi possível duplicar o banner. Tente novamente." };
   }
 
   revalidatePath("/admin/configuracoes");
