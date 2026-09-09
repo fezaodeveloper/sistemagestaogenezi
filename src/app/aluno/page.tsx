@@ -124,7 +124,10 @@ export default async function AlunoDashboardPage() {
   if (cursoIdsMatriculados.length > 0) {
     queryCursosBloqueados = queryCursosBloqueados.not("id", "in", `(${cursoIdsMatriculados.join(",")})`);
   }
-  const { data: cursosBloqueadosData } = await queryCursosBloqueados;
+  const { data: cursosBloqueadosData, error: erroBloqueados } = await queryCursosBloqueados;
+  if (erroBloqueados) {
+    console.error('Erro ao buscar cursos bloqueados:', erroBloqueados);
+  }
 
   const cursosBloqueados: CursoBloqueado[] = (cursosBloqueadosData ?? []).map((curso) => ({
     id: curso.id,
