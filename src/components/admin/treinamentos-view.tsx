@@ -35,6 +35,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  extrairVimeoId,
+  extrairYoutubeId,
   TREINAMENTO_CATEGORIA_BADGE_CLASS,
   TREINAMENTO_CATEGORIA_LABELS,
   TREINAMENTO_STATUS_BADGE_CLASS,
@@ -54,44 +56,74 @@ const STATUS_FILTRO_ITEMS: Record<string, string> = {
   ...TREINAMENTO_STATUS_LABELS,
 };
 
-// tipo 'embed' abre num modal com o iframe já renderizado — o código vem do
-// próprio admin (mesma fronteira de confiança de requireRole("admin") em
-// todas as mutações desta tabela), então dangerouslySetInnerHTML aqui tem o
-// mesmo risco de um bloco de embed num CMS tradicional, não conteúdo de
-// aluno/usuário final.
+// Todos os tipos abrem dentro da plataforma, num modal — nunca redireciona
+// pra fora. 'embed' renderiza o código do admin via dangerouslySetInnerHTML
+// (mesma fronteira de confiança de requireRole("admin") em todas as
+// mutações desta tabela — risco equivalente a um bloco de embed num CMS
+// tradicional, não conteúdo de aluno/usuário final); youtube/vimeo montam
+// um iframe a partir do id extraído da URL salva.
 function AssistirButton({ treinamento }: { treinamento: Treinamento }) {
   const [modalAberto, setModalAberto] = useState(false);
 
-  if (treinamento.tipo_video === "embed") {
+  function renderPlayer() {
+    if (treinamento.tipo_video === "embed") {
+      return (
+        <div
+          className="aspect-video w-full overflow-hidden rounded-lg [&_iframe]:h-full [&_iframe]:w-full"
+          dangerouslySetInnerHTML={{ __html: treinamento.embed_codigo ?? "" }}
+        />
+      );
+    }
+
+    if (treinamento.tipo_video === "vimeo") {
+      const vimeoId = extrairVimeoId(treinamento.youtube_url);
+      if (!vimeoId) {
+        return <p className="text-destructive text-sm">Não foi possível identificar o vídeo do Vimeo.</p>;
+      }
+      return (
+        <div className="aspect-video w-full overflow-hidden rounded-lg">
+          <iframe
+            className="h-full w-full"
+            src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1`}
+            title={treinamento.titulo}
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      );
+    }
+
+    const videoId = extrairYoutubeId(treinamento.youtube_url);
+    if (!videoId) {
+      return <p className="text-destructive text-sm">Não foi possível identificar o vídeo do YouTube.</p>;
+    }
     return (
-      <>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setModalAberto(true)}>
-          Assistir
-        </Button>
-        <Dialog open={modalAberto} onOpenChange={setModalAberto}>
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{treinamento.titulo}</DialogTitle>
-            </DialogHeader>
-            <div
-              className="aspect-video w-full overflow-hidden rounded-lg [&_iframe]:h-full [&_iframe]:w-full"
-              dangerouslySetInnerHTML={{ __html: treinamento.embed_codigo ?? "" }}
-            />
-          </DialogContent>
-        </Dialog>
-      </>
+      <div className="aspect-video w-full overflow-hidden rounded-lg">
+        <iframe
+          className="h-full w-full"
+          src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
+          title={treinamento.titulo}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
     );
   }
 
   return (
-    <Button
-      render={<a href={treinamento.youtube_url} target="_blank" rel="noopener noreferrer" />}
-      nativeButton={false}
-      variant="ghost"
-      size="sm"
-    >
-      Assistir
-    </Button>
+    <>
+      <Button type="button" variant="ghost" size="sm" onClick={() => setModalAberto(true)}>
+        Assistir
+      </Button>
+      <Dialog open={modalAberto} onOpenChange={setModalAberto}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{treinamento.titulo}</DialogTitle>
+          </DialogHeader>
+          {renderPlayer()}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
