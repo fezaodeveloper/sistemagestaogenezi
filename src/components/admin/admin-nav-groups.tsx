@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
   AlertTriangle, Award, Banknote, BarChart2, CalendarDays, CalendarRange, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MessageCircle, MessagesSquare, Package, PlayCircle, PlusCircle, Presentation, Receipt,
+  LayoutDashboard, MessageCircle, MessagesSquare, Monitor, Package, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Tags, Target, TrendingDown, Truck, UserPlus, Users, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -34,6 +34,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
     { href: "/admin/cronograma", label: "Cronograma", icon: CalendarRange },
     { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },
+    { href: "/admin/acesso-remoto", label: "Acesso Remoto", icon: Monitor },
     { href: "/admin/chat", label: "Chat", icon: MessagesSquare, badge: "chat" },
   ]},
   { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
@@ -63,12 +64,16 @@ const GROUPS: NavGroup[] = [
   ]},
 ];
 
-const STORAGE_KEY = "genezi-admin-nav-open";
-const DEFAULT_OPEN = ["visao-geral", "comercial", "academico"];
-
 function isItemActive(pathname: string, href: string) {
   if (href === "/admin") return pathname === "/admin";
   return pathname === href || pathname.startsWith(href + "/");
+}
+
+// Grupo dono da página atual — usado tanto pro estado inicial (só ele
+// aberto ao montar/recarregar) quanto pra reabrir ao navegar entre páginas
+// de grupos diferentes sem remontar o componente (ver efeito abaixo).
+function grupoAtivo(pathname: string): string | null {
+  return GROUPS.find((g) => g.items.some((i) => isItemActive(pathname, i.href)))?.id ?? null;
 }
 
 export function AdminNavGroups({
@@ -81,38 +86,26 @@ export function AdminNavGroups({
   pendenciasCount: number;
 }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState<string[]>(DEFAULT_OPEN);
-  const [hydrated, setHydrated] = useState(false);
+  // Sem persistência em localStorage de propósito: um reload sempre começa
+  // com tudo fechado, exceto o grupo da página atual. usePathname() já
+  // resolve pro caminho certo tanto no server quanto no client (não é um
+  // valor só-client como localStorage), então calcular aqui no
+  // inicializador não causa hydration mismatch.
+  const [open, setOpen] = useState<string[]>(() => {
+    const ativo = grupoAtivo(pathname);
+    return ativo ? [ativo] : [];
+  });
 
+  // Reabre o grupo da página atual ao navegar entre páginas de grupos
+  // diferentes (client-side, sem remontar este componente) — nunca fecha
+  // outros grupos que o admin tenha aberto manualmente.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      // Leitura de localStorage tem que ficar num efeito pós-montagem, não
-      // num inicializador de useState: o componente é renderizado no
-      // servidor (sem localStorage, sempre cairia em DEFAULT_OPEN) e depois
-      // hidratado no cliente — se o cliente lesse localStorage já na
-      // primeira passada, o estado divergiria do HTML gerado no servidor e
-      // causaria hydration mismatch. Setar aqui, depois de montado, evita
-      // isso de propósito.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved) setOpen(JSON.parse(saved));
-    } catch {}
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    const active = GROUPS.find((g) => g.items.some((i) => isItemActive(pathname, i.href)));
-    if (active) {
-      startTransition(() => {
-        setOpen((prev) => (prev.includes(active.id) ? prev : [...prev, active.id]));
-      });
-    }
+    const ativo = grupoAtivo(pathname);
+    if (!ativo) return;
+    startTransition(() => {
+      setOpen((prev) => (prev.includes(ativo) ? prev : [...prev, ativo]));
+    });
   }, [pathname]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(open)); } catch {}
-  }, [open, hydrated]);
 
   function toggle(id: string) {
     setOpen((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
