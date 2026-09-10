@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -127,8 +128,11 @@ function AssistirButton({ treinamento }: { treinamento: Treinamento }) {
   );
 }
 
+const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
+
 function ExcluirTreinamentoButton({ treinamento }: { treinamento: Treinamento }) {
   const [open, setOpen] = useState(false);
+  const [confirmacao, setConfirmacao] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -149,6 +153,7 @@ function ExcluirTreinamentoButton({ treinamento }: { treinamento: Treinamento })
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
+        setConfirmacao("");
         if (nextOpen) setError(null);
       }}
     >
@@ -161,6 +166,19 @@ function ExcluirTreinamentoButton({ treinamento }: { treinamento: Treinamento })
             desfeita.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`confirmacao-exclusao-${treinamento.id}`} className="text-sm font-normal">
+            Digite <span className="font-mono font-semibold">EXCLUIR</span> para confirmar a exclusão de
+            &quot;{treinamento.titulo}&quot;
+          </Label>
+          <Input
+            id={`confirmacao-exclusao-${treinamento.id}`}
+            value={confirmacao}
+            onChange={(event) => setConfirmacao(event.target.value)}
+            placeholder="Digite EXCLUIR para confirmar"
+            autoComplete="off"
+          />
+        </div>
         {error && (
           <p role="alert" className="text-destructive text-sm">
             {error}
@@ -168,7 +186,11 @@ function ExcluirTreinamentoButton({ treinamento }: { treinamento: Treinamento })
         )}
         <AlertDialogFooter>
           <AlertDialogCancel>Voltar</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={isPending || confirmacao !== TEXTO_CONFIRMACAO_EXCLUSAO}
+            onClick={handleExcluir}
+          >
             {isPending ? "Excluindo..." : "Excluir"}
           </AlertDialogAction>
         </AlertDialogFooter>
