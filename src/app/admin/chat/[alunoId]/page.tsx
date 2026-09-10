@@ -4,10 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getConversaPorAluno, getMensagens } from "@/lib/chat/chat";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { IniciarConversaButton } from "@/components/admin/iniciar-conversa-button";
+import { ExcluirConversaButton } from "@/components/admin/excluir-conversa-button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   editarMensagem,
   enviarMensagemAdmin,
+  excluirConversa,
   excluirMensagem,
   iniciarOuAbrirConversaAdmin,
   marcarConversaLidaAdmin,
@@ -53,8 +55,9 @@ export default async function ConversaAdminPage({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <div>
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">{nomeAluno}</h1>
+        <ExcluirConversaButton conversaId={conversa.id} action={excluirConversa} />
       </div>
       <ChatWindow
         conversaId={conversa.id}

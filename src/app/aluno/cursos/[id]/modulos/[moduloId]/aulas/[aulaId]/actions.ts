@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getExpiracaoMatricula, getMatriculaAtivaComTurma } from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 import { verificarEmissaoAutomaticaEad } from "@/lib/certificados/emitir";
+import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -105,6 +106,15 @@ export async function toggleAulaConcluida(
     // precisar fazer nada. Cursos presenciais/híbridos ficam pendentes
     // mesmo, esperando emissão manual na fila do admin.
     await verificarEmissaoAutomaticaEad(matricula.id);
+
+    // Concede o badge "primeira aula" (e os demais progressivos) na hora,
+    // sem esperar a próxima navegação passar pelo layout de /aluno — best
+    // effort, nunca deve impedir a conclusão da aula em si.
+    try {
+      await verificarBadgesProgressivos(user.id);
+    } catch {
+      // Nunca deve impedir a conclusão da aula.
+    }
   }
 
   // Revalida a própria página da aula (o pill da prova, no AulaAcoesBar de

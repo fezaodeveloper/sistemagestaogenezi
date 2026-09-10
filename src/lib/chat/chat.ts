@@ -174,6 +174,21 @@ export async function excluirMensagem(
   return {};
 }
 
+// DELETE FROM conversas cascateia pra mensagens_chat sozinho (FK on delete
+// cascade, ver 20260906100000_create_chat_interno.sql) — não precisa apagar
+// as mensagens à parte.
+export async function excluirConversa(
+  supabase: SupabaseServerClient,
+  conversaId: string,
+): Promise<{ error?: string }> {
+  const { error } = await supabase.from("conversas").delete().eq("id", conversaId);
+
+  if (error) {
+    return { error: "Não foi possível excluir a conversa." };
+  }
+  return {};
+}
+
 export async function marcarComoLidas(
   supabase: SupabaseServerClient,
   conversaId: string,

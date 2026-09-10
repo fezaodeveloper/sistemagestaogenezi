@@ -450,17 +450,19 @@ export function GastosView({
   const [modoFiltro, setModoFiltro] = useState<"mes" | "periodo">("mes");
   const [periodoInicio, setPeriodoInicio] = useState("");
   const [periodoFim, setPeriodoFim] = useState("");
-  const [kpisVisiveis, setKpisVisiveis] = useState(true);
+  const [kpisVisiveis, setKpisVisiveis] = useState(false);
   const [kpisHydrated, setKpisHydrated] = useState(false);
 
   // Leitura de localStorage tem que ficar num efeito pós-montagem, não num
   // inicializador de useState — mesmo motivo já documentado em
-  // dashboard-kpis-financeiros.tsx (evita hydration mismatch).
+  // dashboard-kpis-financeiros.tsx (evita hydration mismatch). Padrão
+  // oculto quando nunca foi definido (REGRA da tarefa).
   useEffect(() => {
     try {
       const salvo = localStorage.getItem(KPIS_VISIVEL_STORAGE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (salvo !== null) setKpisVisiveis(salvo === "true");
+      else setKpisVisiveis(false);
     } catch {}
     setKpisHydrated(true);
   }, []);

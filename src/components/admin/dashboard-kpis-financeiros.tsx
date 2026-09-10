@@ -75,17 +75,19 @@ export function DashboardKpisFinanceiros({
   parcelasPendentesMes: number;
   receitaMes: number;
 }) {
-  const [visivel, setVisivel] = useState(true);
+  const [visivel, setVisivel] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Leitura de localStorage tem que ficar num efeito pós-montagem, não num
   // inicializador de useState — mesmo motivo do STORAGE_KEY em
   // admin-nav-groups.tsx (evita hydration mismatch entre server e client).
+  // Padrão oculto quando nunca foi definido (REGRA da tarefa).
   useEffect(() => {
     try {
       const salvo = localStorage.getItem(STORAGE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (salvo !== null) setVisivel(salvo === "true");
+      else setVisivel(false);
     } catch {}
     setHydrated(true);
   }, []);

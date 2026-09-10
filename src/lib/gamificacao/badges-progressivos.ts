@@ -307,8 +307,11 @@ async function concederRecompensasDeBadges(
       } else {
         await concederRecompensaCurso(admin, alunoId, recompensa);
       }
-    } catch {
-      // Best-effort — segue pra próxima recompensa.
+    } catch (err) {
+      // Best-effort — segue pra próxima recompensa, mas loga explicitamente
+      // em vez de falhar em silêncio (senão um erro real de INSERT em
+      // matriculas/pontos_eventos passa despercebido).
+      console.error(`[RECOMPENSA ${recompensa.tipo.toUpperCase()}] Erro ao conceder recompensa:`, err);
     }
   }
 }
@@ -322,6 +325,23 @@ async function concederRecompensasDeBadges(
 // aluno quanto no cron diário, nunca deve lançar pro chamador.
 export async function verificarBadgesProgressivos(alunoId: string): Promise<void> {
   const admin = createAdminClient();
+
+  // Os 6 badges antigos (primeira_aula, modulo_completo, curso_concluido,
+  // nota_maxima, presenca_exemplar, top10) são concedidos por essa function
+  // SQL, chamada internamente por marcar_aula_concluida/upsert_presencas/
+  // criar_tentativa_quiz/criar_tentativa_prova (ver 20260822100000). A
+  // migration 20260909300000 (teto diário) recriou marcar_aula_concluida
+  // sem essa chamada no final, então "primeira_aula" parou de ser
+  // concedido — sem alterar a function SQL (REGRA), chama aqui pra
+  // compensar, já que este ponto já roda a cada navegação do aluno e após
+  // toggleAulaConcluida. Best-effort isolado: uma falha aqui não deve
+  // impedir a verificação dos badges progressivos logo abaixo.
+  try {
+    await admin.rpc("verificar_conquistas_aluno", { p_aluno_id: alunoId });
+  } catch (err) {
+    console.error("[BADGES] Erro ao verificar conquistas (badges antigos):", err);
+  }
+
   const contadores = await calcularContadores(admin, alunoId);
 
   const resultados = await Promise.all([

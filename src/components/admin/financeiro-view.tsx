@@ -785,17 +785,19 @@ export function FinanceiroView({
   const [periodoFim, setPeriodoFim] = useState("");
   const [pagina, setPagina] = useState(1);
   const [limite, setLimite] = useState(LIMITE_PADRAO);
-  const [kpisVisiveis, setKpisVisiveis] = useState(true);
+  const [kpisVisiveis, setKpisVisiveis] = useState(false);
   const [kpisHydrated, setKpisHydrated] = useState(false);
 
   // Leitura de localStorage tem que ficar num efeito pós-montagem, não num
   // inicializador de useState — mesmo motivo já documentado em
-  // dashboard-kpis-financeiros.tsx (evita hydration mismatch).
+  // dashboard-kpis-financeiros.tsx (evita hydration mismatch). Padrão
+  // oculto quando nunca foi definido (REGRA da tarefa).
   useEffect(() => {
     try {
       const salvo = localStorage.getItem(KPIS_VISIVEL_STORAGE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (salvo !== null) setKpisVisiveis(salvo === "true");
+      else setKpisVisiveis(false);
     } catch {}
     setKpisHydrated(true);
   }, []);

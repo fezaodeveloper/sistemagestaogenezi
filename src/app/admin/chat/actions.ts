@@ -8,6 +8,7 @@ import {
   criarConversa,
   editarMensagem as editarMensagemChat,
   enviarMensagem,
+  excluirConversa as excluirConversaChat,
   excluirMensagem as excluirMensagemChat,
   marcarComoLidas,
   getConversaPorAluno,
@@ -78,6 +79,17 @@ export async function excluirMensagem(mensagemId: string): Promise<{ error?: str
   const user = await requireRole("admin");
   const supabase = await createClient();
   return excluirMensagemChat(supabase, mensagemId, user.id);
+}
+
+export async function excluirConversa(conversaId: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+  const supabase = await createClient();
+
+  const resultado = await excluirConversaChat(supabase, conversaId);
+  if (resultado.error) return resultado;
+
+  revalidatePath("/admin/chat");
+  redirect("/admin/chat");
 }
 
 // Best-effort por aluno (TAREFA 2C): continua mesmo se algum envio
