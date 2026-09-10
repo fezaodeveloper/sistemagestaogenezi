@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { alunoFormSchema, alunoEditFormSchema, isMinor } from "@/lib/alunos/schema";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -473,6 +474,21 @@ export async function trocarSenhaAluno(
   } catch {
     // Best-effort — ver comentário acima.
   }
+
+  return { success: true };
+}
+
+// ===== Forçar verificação de conquistas (badges/recompensas pendentes) =====
+//
+// Usado quando um badge foi concedido via SQL (verificar_conquistas_aluno)
+// sem passar pelo fluxo de recompensas TypeScript (concederRecompensasDeBadges
+// só roda a partir de verificarBadgesProgressivos) — permite ao admin forçar a
+// verificação e a entrega de recompensas pendentes pra um aluno específico,
+// sem esperar o próximo login dele ou o cron diário.
+export async function forcarVerificacaoBadgesAluno(alunoId: string): Promise<{ success: true }> {
+  await requireRole("admin");
+
+  await verificarBadgesProgressivos(alunoId);
 
   return { success: true };
 }

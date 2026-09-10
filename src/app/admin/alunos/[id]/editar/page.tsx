@@ -6,6 +6,7 @@ import { MatriculasSection } from "@/components/admin/matriculas-section";
 import { LiberacoesManuaisSection } from "@/components/admin/liberacoes-manuais-section";
 import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
 import { TrocarSenhaAlunoForm } from "@/components/admin/trocar-senha-aluno-form";
+import { VerificarConquistasButton } from "@/components/admin/verificar-conquistas-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AlunoWithRelations, Responsavel } from "@/lib/alunos/schema";
 import type { MatriculaWithTurma } from "@/lib/matriculas/schema";
@@ -173,6 +174,17 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
         </CardHeader>
         <CardContent>
           <TrocarSenhaAlunoForm alunoId={aluno.id} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Gamificação</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground mb-3 text-sm">
+            Força a verificação de badges e a entrega de recompensas pendentes para este aluno.
+          </p>
+          <VerificarConquistasButton alunoId={aluno.id} />
         </CardContent>
       </Card>
     </div>
