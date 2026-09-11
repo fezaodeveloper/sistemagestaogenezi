@@ -202,7 +202,7 @@ async function concederRecompensaPremio(
 
   const pontosCreditados = premio.custo_creditos * PONTOS_POR_CREDITO;
 
-  await admin.from("pontos_eventos").upsert(
+  const { error: pontosError } = await admin.from("pontos_eventos").upsert(
     {
       matricula_id: matricula.id,
       tipo_evento: "recompensa_medalha",
@@ -211,6 +211,12 @@ async function concederRecompensaPremio(
     },
     { onConflict: "matricula_id,tipo_evento,referencia_id", ignoreDuplicates: true },
   );
+  if (pontosError) {
+    console.error(
+      `[RECOMPENSA PREMIO] Erro ao creditar pontos (recompensa ${recompensa.id}, aluno ${alunoId}):`,
+      pontosError,
+    );
+  }
 
   // prazo_entrega_dias só é preenchido pelo admin quando o prêmio vinculado
   // é físico ou híbrido (ver AdicionarRecompensaDialog) — quando ausente
@@ -222,7 +228,7 @@ async function concederRecompensaPremio(
     prazoEntregaAte = data.toISOString().slice(0, 10);
   }
 
-  await admin.from("medalha_recompensas_resgatadas").upsert(
+  const { error: resgateError } = await admin.from("medalha_recompensas_resgatadas").upsert(
     {
       aluno_id: alunoId,
       recompensa_id: recompensa.id,
@@ -233,6 +239,12 @@ async function concederRecompensaPremio(
     },
     { onConflict: "aluno_id,recompensa_id", ignoreDuplicates: true },
   );
+  if (resgateError) {
+    console.error(
+      `[RECOMPENSA PREMIO] Erro ao registrar resgate (recompensa ${recompensa.id}, aluno ${alunoId}):`,
+      resgateError,
+    );
+  }
 }
 
 // Mesma lógica de seleção de turma de resgatar_curso_bonus (migration
@@ -265,14 +277,25 @@ async function concederRecompensaCurso(
     .maybeSingle();
   if (matriculaExistente) return;
 
-  const { data: novaMatricula } = await admin
+  // created_by é not null (default auth.uid()) — sem sessão de usuário no
+  // client admin (service_role), o default resolve pra null e o INSERT
+  // falhava em silêncio (supabase-js retorna { error }, não lança exceção).
+  // Mesmo valor que resgatar_curso_bonus grava pra essa coluna quando o
+  // próprio aluno resgata (auth.uid() ali = o aluno autenticado).
+  const { data: novaMatricula, error: matriculaError } = await admin
     .from("matriculas")
-    .insert({ aluno_id: alunoId, turma_id: turma.id, status: "ativa" })
+    .insert({ aluno_id: alunoId, turma_id: turma.id, status: "ativa", created_by: alunoId })
     .select("id")
     .single();
+  if (matriculaError) {
+    console.error(
+      `[RECOMPENSA CURSO] Erro ao criar matrícula (recompensa ${recompensa.id}, aluno ${alunoId}):`,
+      matriculaError,
+    );
+  }
   if (!novaMatricula) return;
 
-  await admin.from("medalha_recompensas_resgatadas").upsert(
+  const { error: resgateError } = await admin.from("medalha_recompensas_resgatadas").upsert(
     {
       aluno_id: alunoId,
       recompensa_id: recompensa.id,
@@ -282,6 +305,12 @@ async function concederRecompensaCurso(
     },
     { onConflict: "aluno_id,recompensa_id", ignoreDuplicates: true },
   );
+  if (resgateError) {
+    console.error(
+      `[RECOMPENSA CURSO] Erro ao registrar resgate (recompensa ${recompensa.id}, aluno ${alunoId}):`,
+      resgateError,
+    );
+  }
 }
 
 // Chamado só com badge_id que acabaram de ser concedidos agora (ver
