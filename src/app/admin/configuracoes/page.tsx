@@ -20,8 +20,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export default async function ConfiguracoesPage() {
+const TAB_IDS = [
+  "geral",
+  "gamificacao",
+  "calculadora",
+  "notificacoes",
+  "recursos",
+  "banners",
+  "backup",
+  "log",
+] as const;
+
+// Permite abrir uma aba específica via link direto (ex.: botões "Ir para
+// Gamificação" no guia estratégico da calculadora) — qualquer valor fora da
+// lista cai no padrão "geral", nunca repassa string arbitrária pro Tabs.
+function parseTab(value: string | undefined): (typeof TAB_IDS)[number] {
+  return (TAB_IDS as readonly string[]).includes(value ?? "") ? (value as (typeof TAB_IDS)[number]) : "geral";
+}
+
+export default async function ConfiguracoesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   await requireRole("admin");
+  const { tab } = await searchParams;
+  const abaInicial = parseTab(tab);
 
   const supabase = await createClient();
   const [{ data }, banners] = await Promise.all([
@@ -41,7 +65,7 @@ export default async function ConfiguracoesPage() {
         <p className="text-muted-foreground text-sm">Configurações gerais da plataforma.</p>
       </div>
 
-      <Tabs defaultValue="geral">
+      <Tabs defaultValue={abaInicial}>
         <TabsList>
           <TabsTrigger value="geral">Geral</TabsTrigger>
           <TabsTrigger value="gamificacao">Gamificação</TabsTrigger>

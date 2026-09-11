@@ -1,8 +1,15 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { Check, Copy, Zap } from "lucide-react";
 import { salvarConfigGamificacao, type ConfigGamificacaoValues } from "@/app/admin/configuracoes/actions";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // Pesos fixos de distribuição de créditos entre os 4 níveis de prêmio —
 // somam 100% do total de créditos esperado no curso (10/20/35/35, mesma
@@ -199,6 +207,149 @@ export function CalculadoraPontuacao({ pontuacaoInicial }: { pontuacaoInicial: C
 
   return (
     <div className="flex flex-col gap-6">
+      <Card>
+        <CardContent>
+          <Accordion>
+            <AccordionItem value="guia">
+              <AccordionTrigger>📖 Como usar o sistema de recompensas</AccordionTrigger>
+              <AccordionContent>
+                <div className="flex flex-col gap-6">
+                  <section className="flex flex-col gap-3">
+                    <h4 className="font-semibold">🎯 Estratégia Recomendada</h4>
+                    <div className="bg-muted/50 rounded-lg p-4">
+                      <p>
+                        O sistema tem dois canais de premiação. Use cada um com um objetivo diferente:
+                      </p>
+                      <Table className="mt-3">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Canal</TableHead>
+                            <TableHead>O que premiar</TableHead>
+                            <TableHead>Por quê</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell className="font-medium whitespace-normal">
+                              🏅 Recompensa por Medalha
+                            </TableCell>
+                            <TableCell className="whitespace-normal">Cursos bônus</TableCell>
+                            <TableCell className="whitespace-normal">
+                              Recompensa automática por comportamento (frequência, ofensiva)
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell className="font-medium whitespace-normal">
+                              🎁 Resgate com Créditos
+                            </TableCell>
+                            <TableCell className="whitespace-normal">Prêmios físicos</TableCell>
+                            <TableCell className="whitespace-normal">
+                              O aluno escolhe e planeja — engajamento de longo prazo
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </section>
+
+                  <section className="flex flex-col gap-3">
+                    <h4 className="font-semibold">🔥 Medalhas de Ofensiva (mais poderosas)</h4>
+                    <p>
+                      As medalhas de ofensiva são as mais eficazes para motivar frequência. Configure
+                      recompensas progressivas:
+                    </p>
+                    <ul className="flex flex-col gap-1 list-disc pl-5">
+                      <li>🔥 Ofensiva Bronze (3 aulas seguidas) → Curso bônus introdutório</li>
+                      <li>🔥 Ofensiva Prata (7 aulas seguidas) → Curso bônus intermediário</li>
+                      <li>🔥 Ofensiva Ouro (15 aulas seguidas) → Curso bônus avançado</li>
+                      <li>💎 Ofensiva Diamante (30 aulas seguidas) → Curso bônus premium</li>
+                    </ul>
+                    <p>
+                      O aluno perde a ofensiva se faltar numa aula programada — isso cria urgência para
+                      não perder o benefício.
+                    </p>
+                  </section>
+
+                  <section className="flex flex-col gap-3">
+                    <h4 className="font-semibold">💡 Passo a passo para configurar</h4>
+                    <ol className="flex flex-col gap-2 list-decimal pl-5">
+                      <li>
+                        Use a calculadora abaixo para definir as pontuações ideais
+                        <br />→ Clique &quot;⚡ Aplicar pontuações&quot; para salvar
+                      </li>
+                      <li>
+                        Cadastre os prêmios físicos em Prêmios
+                        <br />→ Use o custo em créditos sugerido pela calculadora
+                      </li>
+                      <li>
+                        Configure recompensas por medalha em Engajamento → Recompensas
+                        <br />→ Vincule medalhas de Ofensiva a cursos bônus
+                        <br />→ Vincule medalhas de Frequência e Pontos a prêmios físicos especiais
+                      </li>
+                      <li>
+                        Ative os níveis de prêmio nos próprios prêmios cadastrados
+                        <br />→ Nível 1 🥉 Básico / Nível 2 🥈 Médio / Nível 3 🥇 Alto / Nível 4 💎 Premium
+                      </li>
+                    </ol>
+                  </section>
+
+                  <section className="flex flex-col gap-3">
+                    <h4 className="font-semibold">⚠️ Dicas importantes</h4>
+                    <ul className="flex flex-col gap-1 list-disc pl-5">
+                      <li>
+                        O teto diário de pontos evita que alunos &quot;farmem&quot; pontos artificialmente
+                        — configure em Configurações → Gamificação
+                      </li>
+                      <li>As pontuações são globais para todos os cursos</li>
+                      <li>O aluno tem 12 meses para resgatar os créditos acumulados</li>
+                      <li>Cursos bônus são entregues automaticamente ao conquistar a medalha</li>
+                      <li>
+                        Prêmios físicos precisam de entrega manual — acompanhe em Engajamento → Resgates
+                      </li>
+                    </ul>
+                  </section>
+
+                  <div className="flex flex-wrap gap-2 border-t pt-4">
+                    <Button
+                      render={<Link href="/admin/premios" />}
+                      nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Ir para Prêmios
+                    </Button>
+                    <Button
+                      render={<Link href="/admin/engajamento/recompensas" />}
+                      nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Ir para Recompensas
+                    </Button>
+                    <Button
+                      render={<Link href="/admin/resgates" />}
+                      nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Ir para Resgates
+                    </Button>
+                    <Button
+                      render={<Link href="/admin/configuracoes?tab=gamificacao" />}
+                      nativeButton={false}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Ir para Gamificação
+                    </Button>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
