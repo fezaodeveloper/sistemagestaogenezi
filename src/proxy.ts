@@ -12,11 +12,17 @@ export async function proxy(request: NextRequest) {
   const userId = claimsData?.claims.sub;
   const { pathname } = request.nextUrl;
 
+  // /empresa/login e /empresa/cadastro são públicas (mesmo padrão de /login
+  // e /entrar) — precisam ficar de fora de areaRole, senão um visitante não
+  // autenticado é redirecionado pra loginHome("empresa") (a própria
+  // /empresa/login), causando um loop de redirect infinito.
+  const ROTAS_EMPRESA_PUBLICAS = ["/empresa/login", "/empresa/cadastro"];
+
   const areaRole: Role | null = pathname.startsWith("/admin")
     ? "admin"
     : pathname.startsWith("/aluno")
       ? "aluno"
-      : pathname.startsWith("/empresa") && pathname !== "/empresa/cadastro"
+      : pathname.startsWith("/empresa") && !ROTAS_EMPRESA_PUBLICAS.includes(pathname)
         ? "empresa"
         : null;
 
