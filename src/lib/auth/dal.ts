@@ -55,3 +55,20 @@ export async function requireRole(role: Role): Promise<CurrentUser> {
 
   return profile;
 }
+
+// Mesmo padrão de requireRole, com o destino de "não autenticado" fixo em
+// /empresa/login (loginHome("empresa") já resolve pra lá, mas deixar
+// explícito aqui evita depender de um role que não foi checado ainda).
+export async function requireEmpresa(): Promise<CurrentUser> {
+  const profile = await getCurrentProfile();
+
+  if (!profile) {
+    redirect(loginHome("empresa"));
+  }
+
+  if (profile.role !== "empresa") {
+    redirect(roleHome(profile.role));
+  }
+
+  return profile;
+}

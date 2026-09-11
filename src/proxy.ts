@@ -16,7 +16,9 @@ export async function proxy(request: NextRequest) {
     ? "admin"
     : pathname.startsWith("/aluno")
       ? "aluno"
-      : null;
+      : pathname.startsWith("/empresa") && pathname !== "/empresa/cadastro"
+        ? "empresa"
+        : null;
 
   if (!userId) {
     if (areaRole) {
@@ -34,7 +36,11 @@ export async function proxy(request: NextRequest) {
 
   if (
     role &&
-    ((areaRole && areaRole !== role) || pathname === "/login" || pathname === "/entrar" || pathname === "/")
+    ((areaRole && areaRole !== role) ||
+      pathname === "/login" ||
+      pathname === "/entrar" ||
+      pathname === "/empresa/login" ||
+      pathname === "/")
   ) {
     return NextResponse.redirect(new URL(roleHome(role), request.url));
   }

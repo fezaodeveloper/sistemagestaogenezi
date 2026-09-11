@@ -286,6 +286,20 @@ export async function notificarTermoAceito(payload: Record<string, unknown>): Pr
   );
 }
 
+export async function notificarEmpresaCadastro(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "CONECTA — Nova Empresa",
+    [
+      `🏢 Empresa: ${texto(payload.nome_empresa)}`,
+      `👤 Responsável: ${texto(payload.nome_responsavel)}`,
+      `📞 WhatsApp: ${texto(payload.whatsapp)}`,
+      `🏙️ Cidade: ${texto(payload.cidade)}/${texto(payload.estado)}`,
+      `⏳ Aguardando aprovação`,
+    ],
+    "🏢",
+  );
+}
+
 export async function notificarResumoMensal(payload: Record<string, unknown>): Promise<boolean> {
   return enviarAlertaTelegram(
     "Resumo Mensal",
