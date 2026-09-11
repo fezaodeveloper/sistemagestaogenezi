@@ -5,6 +5,7 @@ import { getBannersLoginAdmin } from "@/app/admin/configuracoes/actions";
 import { AssinaturaDiretorForm } from "@/components/admin/assinatura-diretor-form";
 import { ConfiguracoesForm } from "@/components/admin/configuracoes-form";
 import { ConfiguracoesGamificacaoForm } from "@/components/admin/configuracoes-gamificacao-form";
+import { CalculadoraPontuacao } from "@/components/admin/calculadora-pontuacao";
 import { CriteriosCertificadoForm } from "@/components/admin/criterios-certificado-form";
 import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
 import { ConfiguracoesNotificacoesForm } from "@/components/admin/configuracoes-notificacoes-form";
@@ -44,6 +45,7 @@ export default async function ConfiguracoesPage() {
         <TabsList>
           <TabsTrigger value="geral">Geral</TabsTrigger>
           <TabsTrigger value="gamificacao">Gamificação</TabsTrigger>
+          <TabsTrigger value="calculadora">🧮 Calculadora</TabsTrigger>
           <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           <TabsTrigger value="recursos">Recursos</TabsTrigger>
           <TabsTrigger value="banners">Banners do Login</TabsTrigger>
@@ -152,6 +154,20 @@ export default async function ConfiguracoesPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="calculadora">
+          <CalculadoraPontuacao
+            pontuacaoInicial={{
+              pts_aula_concluida: data?.pts_aula_concluida ?? 10,
+              pts_quiz_concluido: data?.pts_quiz_concluido ?? 5,
+              pts_nota_maxima: data?.pts_nota_maxima ?? 20,
+              pts_presenca: data?.pts_presenca ?? 15,
+              pts_modulo_concluido: data?.pts_modulo_concluido ?? 50,
+              pts_curso_concluido: data?.pts_curso_concluido ?? 200,
+              limite_pts_dia: data?.limite_pts_dia ?? 100,
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="notificacoes" className="flex flex-col gap-6">
