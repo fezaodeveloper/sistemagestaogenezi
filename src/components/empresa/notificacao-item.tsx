@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { marcarNotificacaoLida } from "@/app/empresa/notificacoes/actions";
+import { marcarNotificacaoLida } from "@/app/empresa/(protegido)/notificacoes/actions";
 import type { NotificacaoEmpresa } from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
