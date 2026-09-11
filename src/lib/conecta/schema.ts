@@ -52,6 +52,27 @@ export type EmpresaConecta = {
   updated_at: string;
 };
 
+// Linha de empresa com os agregados usados só na listagem do admin — não
+// vêm de empresas_conecta diretamente (total_vagas é contado à parte em
+// vagas_conecta; ultimo_acesso vem da Admin API do Auth, já que
+// auth.users.last_sign_in_at não é uma coluna de profiles/empresas_conecta).
+export type EmpresaConectaComExtras = EmpresaConecta & {
+  totalVagas: number;
+  ultimoAcesso: string | null;
+};
+
+export type EmpresasConectaFiltro = {
+  query?: string;
+  status?: EmpresaStatus;
+  page?: number;
+  limit?: number;
+};
+
+export type EmpresasConectaResultado = {
+  empresas: EmpresaConectaComExtras[];
+  total: number;
+};
+
 export const VAGA_MODALIDADES = ["presencial", "hibrido", "remoto"] as const;
 export type VagaModalidade = (typeof VAGA_MODALIDADES)[number];
 export const VAGA_MODALIDADE_LABELS: Record<VagaModalidade, string> = {
@@ -123,6 +144,7 @@ export const empresaCadastroSchema = z.object({
     .trim()
     .min(1, { error: "Informe o WhatsApp." })
     .max(30),
+  telefone: z.string().trim().max(30).optional(),
   senha: z
     .string({ error: "Informe uma senha." })
     .min(8, { error: "A senha precisa ter pelo menos 8 caracteres." }),

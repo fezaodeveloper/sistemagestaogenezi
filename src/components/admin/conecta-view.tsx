@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Bell, Building2, Check, Pause } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Bell, Building2, Check, MessageCircle, Pause, Search } from "lucide-react";
 import {
-  aprovarEmpresa,
+  ativarEmpresa,
   enviarNotificacaoEmpresa,
   excluirEmpresa,
   getEmpresasConecta,
@@ -13,7 +13,8 @@ import {
   EMPRESA_STATUS_BADGE_CLASS,
   EMPRESA_STATUS_LABELS,
   EMPRESA_STATUSES,
-  type EmpresaConecta,
+  type EmpresaConectaComExtras,
+  type EmpresasConectaResultado,
 } from "@/lib/conecta/schema";
 import {
   AlertDialog,
@@ -40,7 +41,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Paginacao } from "@/components/ui/paginacao";
 import { Textarea } from "@/components/ui/textarea";
+
+const LIMITE_PADRAO = 12;
 
 const FILTROS = ["todas", ...EMPRESA_STATUSES] as const;
 type Filtro = (typeof FILTROS)[number];
@@ -54,14 +58,20 @@ function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-function AprovarButton({ empresa, onAtualizado }: { empresa: EmpresaConecta; onAtualizado: () => void }) {
+function AtivarButton({
+  empresa,
+  onAtualizado,
+}: {
+  empresa: EmpresaConectaComExtras;
+  onAtualizado: () => void;
+}) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function handleClick() {
     setError(null);
     startTransition(async () => {
-      const resultado = await aprovarEmpresa(empresa.id);
+      const resultado = await ativarEmpresa(empresa.id);
       if (resultado.error) {
         setError(resultado.error);
         return;
@@ -74,14 +84,20 @@ function AprovarButton({ empresa, onAtualizado }: { empresa: EmpresaConecta; onA
     <div className="flex flex-col gap-1">
       <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={handleClick}>
         <Check className="size-4" />
-        Aprovar
+        {empresa.status === "suspensa" ? "Reativar" : "Aprovar"}
       </Button>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
 }
 
-function SuspenderButton({ empresa, onAtualizado }: { empresa: EmpresaConecta; onAtualizado: () => void }) {
+function SuspenderButton({
+  empresa,
+  onAtualizado,
+}: {
+  empresa: EmpresaConectaComExtras;
+  onAtualizado: () => void;
+}) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +126,13 @@ function SuspenderButton({ empresa, onAtualizado }: { empresa: EmpresaConecta; o
 
 const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
 
-function ExcluirEmpresaButton({ empresa, onExcluida }: { empresa: EmpresaConecta; onExcluida: () => void }) {
+function ExcluirEmpresaButton({
+  empresa,
+  onExcluida,
+}: {
+  empresa: EmpresaConectaComExtras;
+  onExcluida: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [confirmacao, setConfirmacao] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +207,7 @@ function ExcluirEmpresaButton({ empresa, onExcluida }: { empresa: EmpresaConecta
   );
 }
 
-function EnviarNotificacaoDialog({ empresa }: { empresa: EmpresaConecta }) {
+function EnviarNotificacaoDialog({ empresa }: { empresa: EmpresaConectaComExtras }) {
   const [open, setOpen] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -276,10 +298,12 @@ function EmpresaCard({
   onAtualizado,
   onExcluida,
 }: {
-  empresa: EmpresaConecta;
+  empresa: EmpresaConectaComExtras;
   onAtualizado: () => void;
   onExcluida: () => void;
 }) {
+  const whatsappDigitos = empresa.whatsapp?.replace(/\D/g, "");
+
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 py-4">
@@ -295,18 +319,36 @@ function EmpresaCard({
         <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
           <span>Responsável: {empresa.nome_responsavel}</span>
           <span>{empresa.email}</span>
-          {empresa.whatsapp && <span>WhatsApp: {empresa.whatsapp}</span>}
+          {empresa.cnpj && <span>CNPJ: {empresa.cnpj}</span>}
           {(empresa.cidade || empresa.estado) && (
             <span>
               {empresa.cidade ?? "—"}/{empresa.estado ?? "—"}
             </span>
           )}
           {empresa.setor && <span>Setor: {empresa.setor}</span>}
+          <span>
+            {empresa.totalVagas} vaga{empresa.totalVagas === 1 ? "" : "s"}
+          </span>
+          <span>
+            Último acesso: {empresa.ultimoAcesso ? formatDateBR(empresa.ultimoAcesso) : "nunca acessou"}
+          </span>
           <span>Cadastrada em {formatDateBR(empresa.created_at)}</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          {empresa.status !== "ativa" && <AprovarButton empresa={empresa} onAtualizado={onAtualizado} />}
+          {empresa.status !== "ativa" && <AtivarButton empresa={empresa} onAtualizado={onAtualizado} />}
           {empresa.status === "ativa" && <SuspenderButton empresa={empresa} onAtualizado={onAtualizado} />}
+          {whatsappDigitos && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-green-600 dark:text-green-400"
+              nativeButton={false}
+              render={<a href={`https://wa.me/55${whatsappDigitos}`} target="_blank" rel="noreferrer" />}
+            >
+              <MessageCircle className="size-4" />
+              WhatsApp
+            </Button>
+          )}
           <EnviarNotificacaoDialog empresa={empresa} />
           <ExcluirEmpresaButton empresa={empresa} onExcluida={onExcluida} />
         </div>
@@ -315,55 +357,94 @@ function EmpresaCard({
   );
 }
 
-export function ConectaView({ empresasIniciais }: { empresasIniciais: EmpresaConecta[] }) {
-  const [empresas, setEmpresas] = useState(empresasIniciais);
-  const [filtro, setFiltro] = useState<Filtro>("todas");
+export function ConectaView({ resultadoInicial }: { resultadoInicial: EmpresasConectaResultado }) {
+  const [resultado, setResultado] = useState(resultadoInicial);
+  const [statusFiltro, setStatusFiltro] = useState<Filtro>("todas");
+  const [busca, setBusca] = useState("");
+  const [pagina, setPagina] = useState(1);
   const [, startTransition] = useTransition();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function recarregar() {
+  function carregar(overrides: { status?: Filtro; query?: string; page?: number }) {
+    const novoStatus = overrides.status ?? statusFiltro;
+    const novaQuery = overrides.query ?? busca;
+    const novaPagina = overrides.page ?? pagina;
+
     startTransition(async () => {
-      const atualizado = await getEmpresasConecta();
-      setEmpresas(atualizado);
+      const atualizado = await getEmpresasConecta({
+        query: novaQuery.trim() || undefined,
+        status: novoStatus === "todas" ? undefined : novoStatus,
+        page: novaPagina,
+        limit: LIMITE_PADRAO,
+      });
+      setResultado(atualizado);
+      setStatusFiltro(novoStatus);
+      setPagina(novaPagina);
     });
   }
 
-  const empresasFiltradas =
-    filtro === "todas" ? empresas : empresas.filter((empresa) => empresa.status === filtro);
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      carregar({ query: valor, page: 1 });
+    }, 500);
+  }
+
+  const totalPaginas = Math.max(1, Math.ceil(resultado.total / LIMITE_PADRAO));
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="relative max-w-sm">
+        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <Input
+          value={busca}
+          onChange={(e) => handleBuscaChange(e.target.value)}
+          placeholder="Buscar por nome ou CNPJ..."
+          className="pl-9"
+        />
+      </div>
+
       <div className="flex flex-wrap gap-2">
         {FILTROS.map((opcao) => (
           <Button
             key={opcao}
             type="button"
-            variant={filtro === opcao ? "default" : "outline"}
+            variant={statusFiltro === opcao ? "default" : "outline"}
             size="sm"
-            onClick={() => setFiltro(opcao)}
+            onClick={() => carregar({ status: opcao, page: 1 })}
           >
             {FILTRO_LABELS[opcao]}
           </Button>
         ))}
       </div>
 
-      {empresasFiltradas.length === 0 ? (
+      {resultado.empresas.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            Nenhuma empresa {filtro === "todas" ? "cadastrada ainda" : `com status "${FILTRO_LABELS[filtro]}"`}.
+            Nenhuma empresa encontrada.
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {empresasFiltradas.map((empresa) => (
+          {resultado.empresas.map((empresa) => (
             <EmpresaCard
               key={empresa.id}
               empresa={empresa}
-              onAtualizado={recarregar}
-              onExcluida={recarregar}
+              onAtualizado={() => carregar({})}
+              onExcluida={() => carregar({ page: 1 })}
             />
           ))}
         </div>
       )}
+
+      <Paginacao
+        paginaAtual={pagina}
+        totalPaginas={totalPaginas}
+        totalRegistros={resultado.total}
+        limite={LIMITE_PADRAO}
+        onNavigate={(novaPagina) => carregar({ page: novaPagina })}
+      />
     </div>
   );
 }

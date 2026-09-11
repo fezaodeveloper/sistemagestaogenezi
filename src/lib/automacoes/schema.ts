@@ -51,6 +51,7 @@ export const EVENTO_AUTOMACAO_TIPOS = [
   "senha.trocada.admin",
   "termo.aceito",
   "empresa.cadastro",
+  "conecta.mensagem.enviada",
 ] as const;
 export type EventoAutomacaoTipo = (typeof EVENTO_AUTOMACAO_TIPOS)[number];
 

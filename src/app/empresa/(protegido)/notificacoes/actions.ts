@@ -18,5 +18,11 @@ export async function marcarNotificacaoLida(id: string): Promise<{ error?: strin
   }
 
   revalidatePath("/empresa/notificacoes");
+  // type "layout" invalida o cache de toda a árvore sob /empresa (não só
+  // /empresa/notificacoes) — sem isso o badge de não lidas na sidebar
+  // (renderizado pelo layout) só atualizaria ao visitar um path nunca
+  // cacheado (Partial Rendering do Next não re-executa layout entre
+  // navegações client-side de rotas irmãs, ver CLAUDE.md).
+  revalidatePath("/empresa", "layout");
   return {};
 }

@@ -69,3 +69,19 @@ export async function getContagemNotificacoesNaoLidas(
 
   return count ?? 0;
 }
+
+// empresaId não entra no filtro — visibilidade de candidato não é por
+// empresa, é geral (RLS "Empresas veem perfis visiveis e ativos" já
+// restringe o que qualquer empresa autenticada enxerga aqui). O `.or`
+// abaixo é redundante com a RLS (que já aplica exatamente essa condição),
+// mas mantido explícito pra o código não depender só da policy pra ficar
+// correto.
+export async function getContagemCandidatosDisponiveis(supabase: SupabaseServerClient): Promise<number> {
+  const { count } = await supabase
+    .from("perfis_conecta")
+    .select("id", { count: "exact", head: true })
+    .eq("visivel", true)
+    .or("tipo.eq.aluno,esta_ativo.eq.true");
+
+  return count ?? 0;
+}

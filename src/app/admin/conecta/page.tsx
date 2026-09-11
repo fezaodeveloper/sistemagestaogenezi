@@ -5,17 +5,17 @@ import { ConectaView } from "@/components/admin/conecta-view";
 export default async function AdminConectaPage() {
   await requireRole("admin");
 
-  const empresas = await getEmpresasConecta();
+  const resultado = await getEmpresasConecta();
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Gênezi Conecta</h1>
+        <h1 className="text-2xl font-semibold">Empresas — Gênezi Conecta</h1>
         <p className="text-muted-foreground text-sm">
           Empresas parceiras cadastradas no portal de vagas.
         </p>
       </div>
-      <ConectaView empresasIniciais={empresas} />
+      <ConectaView resultadoInicial={resultado} />
     </div>
   );
 }

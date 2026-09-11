@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Bell, Briefcase, Plus } from "lucide-react";
+import { Bell, Briefcase, Plus, Users } from "lucide-react";
 import { requireEmpresa } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
+  getContagemCandidatosDisponiveis,
   getContagemNotificacoesNaoLidas,
   getContagemVagasAtivas,
   getEmpresaPorProfileId,
@@ -54,9 +55,10 @@ export default async function EmpresaPainelPage() {
     );
   }
 
-  const [vagasAtivas, notificacoesNaoLidas] = await Promise.all([
+  const [vagasAtivas, notificacoesNaoLidas, candidatosDisponiveis] = await Promise.all([
     getContagemVagasAtivas(supabase, empresa.id),
     getContagemNotificacoesNaoLidas(supabase, empresa.id),
+    getContagemCandidatosDisponiveis(supabase),
   ]);
 
   return (
@@ -72,7 +74,7 @@ export default async function EmpresaPainelPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center gap-2 space-y-0">
             <Briefcase className="text-muted-foreground size-4" />
@@ -89,6 +91,15 @@ export default async function EmpresaPainelPage() {
           </CardHeader>
           <CardContent>
             <span className="text-2xl font-semibold">{notificacoesNaoLidas}</span>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+            <Users className="text-muted-foreground size-4" />
+            <CardTitle className="text-sm font-medium">Candidatos disponíveis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-2xl font-semibold">{candidatosDisponiveis}</span>
           </CardContent>
         </Card>
       </div>

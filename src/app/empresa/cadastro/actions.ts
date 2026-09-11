@@ -8,6 +8,78 @@ import { empresaCadastroSchema } from "@/lib/conecta/schema";
 
 export type CadastroEmpresaState = { error?: string } | undefined;
 
+export type ConsultaCnpjResultado =
+  | { ok: true; nomeEmpresa: string; cidade: string; estado: string }
+  // bloqueante diferencia "CNPJ realmente inativo/inválido" (impede o
+  // cadastro, REGRA da tarefa) de "serviço indisponível agora" (rate limit,
+  // rede) — nesse segundo caso o formulário continua liberado pra
+  // preenchimento manual, best-effort.
+  | { ok: false; error: string; bloqueante: boolean };
+
+// ReceitaWS (gratuita, sem key) — consulta roda no servidor pra evitar CORS
+// e não expor a URL de terceiro no client. Best-effort: qualquer falha de
+// rede ou 5xx apenas deixa o formulário como preenchimento manual, sem
+// travar o cadastro. Só o caso explícito "empresa não ativa" bloqueia de
+// verdade (REGRA da tarefa).
+export async function consultarCnpj(cnpjBruto: string): Promise<ConsultaCnpjResultado> {
+  const cnpj = cnpjBruto.replace(/\D/g, "");
+  if (cnpj.length !== 14) {
+    return { ok: false, error: "CNPJ inválido.", bloqueante: true };
+  }
+
+  try {
+    const response = await fetch(`https://receitaws.com.br/v1/cnpj/${cnpj}`);
+
+    if (response.status === 429) {
+      return {
+        ok: false,
+        error: "Muitas consultas de CNPJ agora. Tente novamente em instantes.",
+        bloqueante: false,
+      };
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: "Não foi possível consultar o CNPJ agora. Preencha os dados manualmente.",
+        bloqueante: false,
+      };
+    }
+
+    const data = (await response.json()) as {
+      status?: string;
+      message?: string;
+      nome?: string;
+      municipio?: string;
+      uf?: string;
+      situacao?: string;
+    };
+
+    if (data.status === "ERROR") {
+      return { ok: false, error: data.message ?? "CNPJ não encontrado.", bloqueante: true };
+    }
+    if (data.situacao && data.situacao.toUpperCase() !== "ATIVA") {
+      return {
+        ok: false,
+        error: "CNPJ inativo ou inválido. Apenas empresas ativas podem se cadastrar.",
+        bloqueante: true,
+      };
+    }
+
+    return {
+      ok: true,
+      nomeEmpresa: data.nome ?? "",
+      cidade: data.municipio ?? "",
+      estado: data.uf ?? "",
+    };
+  } catch {
+    return {
+      ok: false,
+      error: "Não foi possível consultar o CNPJ agora. Preencha os dados manualmente.",
+      bloqueante: false,
+    };
+  }
+}
+
 // Fluxo análogo a createAluno (src/app/admin/alunos/actions.ts): cria o
 // usuário já confirmado via client admin (sem etapa de verificação de
 // e-mail — a empresa precisa poder acessar o painel na hora, mesmo que o
@@ -36,6 +108,7 @@ export async function cadastrarEmpresa(
     nome_responsavel: formData.get("nome_responsavel"),
     email: formData.get("email"),
     whatsapp: formData.get("whatsapp"),
+    telefone: formData.get("telefone") || undefined,
     senha: formData.get("senha"),
   });
 
@@ -87,6 +160,7 @@ export async function cadastrarEmpresa(
       nome_responsavel: data.nome_responsavel,
       email: data.email,
       whatsapp: data.whatsapp,
+      telefone: data.telefone ?? null,
       site: data.site ?? null,
       setor: data.setor ?? null,
       cidade: data.cidade ?? null,

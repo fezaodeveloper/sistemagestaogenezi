@@ -300,6 +300,21 @@ export async function notificarEmpresaCadastro(payload: Record<string, unknown>)
   );
 }
 
+export async function notificarMensagemEnviadaParaEmpresa(
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "CONECTA — Mensagem Enviada",
+    [
+      `🏢 Empresa: ${texto(payload.nome_empresa)}`,
+      `📋 Título: ${texto(payload.titulo)}`,
+      `💬 Mensagem: ${texto(payload.mensagem)}`,
+      `👨‍💼 Enviado por: admin`,
+    ],
+    "📨",
+  );
+}
+
 export async function notificarResumoMensal(payload: Record<string, unknown>): Promise<boolean> {
   return enviarAlertaTelegram(
     "Resumo Mensal",
