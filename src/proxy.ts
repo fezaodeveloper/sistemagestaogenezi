@@ -12,17 +12,50 @@ export async function proxy(request: NextRequest) {
   const userId = claimsData?.claims.sub;
   const { pathname } = request.nextUrl;
 
-  // /empresa/login e /empresa/cadastro são públicas (mesmo padrão de /login
-  // e /entrar) — precisam ficar de fora de areaRole, senão um visitante não
-  // autenticado é redirecionado pra loginHome("empresa") (a própria
-  // /empresa/login), causando um loop de redirect infinito.
-  const ROTAS_EMPRESA_PUBLICAS = ["/empresa/login", "/empresa/cadastro"];
+  // Só busca o profile se houver sessão — visitante anônimo em rota pública
+  // não precisa de round-trip nenhum ao banco.
+  let role: Role | undefined;
+  if (userId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    role = profile?.role as Role | undefined;
+  }
 
+  // Rotas públicas nunca exigem autenticação — ficam completamente fora da
+  // lógica de área protegida abaixo, o que evita por construção qualquer
+  // redirect-por-falta-de-auth nelas (era essa mistura que causava o loop em
+  // /empresa/login: a rota era "pública" pro fluxo de login, mas também
+  // batia no matcher de área protegida "/empresa"). startsWith(rota + "/")
+  // cobre eventuais subrotas futuras sem precisar listar cada uma.
+  const ROTAS_PUBLICAS = ["/login", "/entrar", "/empresa/login", "/empresa/cadastro", "/captacao", "/"];
+  const isRotaPublica = ROTAS_PUBLICAS.some(
+    (rota) => pathname === rota || pathname.startsWith(rota + "/"),
+  );
+
+  if (isRotaPublica) {
+    // Usuário já autenticado numa tela de login (ou na home): manda direto
+    // pra área dele, em vez de deixar ver a tela de login de novo. Rotas
+    // públicas que NÃO são "tela de login" (captacao, empresa/cadastro)
+    // ficam de fora dessa lista de propósito — continuam acessíveis mesmo
+    // logado.
+    if (userId && role) {
+      const ROTAS_DE_LOGIN = ["/login", "/entrar", "/empresa/login", "/"];
+      if (ROTAS_DE_LOGIN.includes(pathname)) {
+        return NextResponse.redirect(new URL(roleHome(role), request.url));
+      }
+    }
+    return getResponse();
+  }
+
+  // A partir daqui, pathname não é pública — decide a área protegida.
   const areaRole: Role | null = pathname.startsWith("/admin")
     ? "admin"
     : pathname.startsWith("/aluno")
       ? "aluno"
-      : pathname.startsWith("/empresa") && !ROTAS_EMPRESA_PUBLICAS.includes(pathname)
+      : pathname.startsWith("/empresa")
         ? "empresa"
         : null;
 
@@ -33,21 +66,7 @@ export async function proxy(request: NextRequest) {
     return getResponse();
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .single();
-  const role = profile?.role as Role | undefined;
-
-  if (
-    role &&
-    ((areaRole && areaRole !== role) ||
-      pathname === "/login" ||
-      pathname === "/entrar" ||
-      pathname === "/empresa/login" ||
-      pathname === "/")
-  ) {
+  if (role && areaRole && areaRole !== role) {
     return NextResponse.redirect(new URL(roleHome(role), request.url));
   }
 
