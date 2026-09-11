@@ -23,26 +23,60 @@ function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
+// Créditos não têm data de expiração própria no banco — a regra de negócio
+// (12 meses a partir da primeira matrícula) é calculada em memória aqui,
+// sem migration (REGRA da tarefa), a partir de matriculas.created_at.
+function calcularDataLimiteCreditos(primeiraMatriculaIso: string): Date {
+  const data = new Date(primeiraMatriculaIso);
+  data.setMonth(data.getMonth() + 12);
+  return data;
+}
+
+function diasRestantes(dataLimite: Date): number {
+  const hoje = new Date();
+  const diffMs = dataLimite.getTime() - hoje.getTime();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+}
+
 export default async function CreditosPage() {
   const user = await requireRole("aluno");
   const recursos = await getRecursosHabilitadosAluno(user.id);
   const supabase = await createClient();
 
-  const [saldo, meusResgates, { data: configData }, { data: cursosBonusData }, { data: premiosData }] =
-    await Promise.all([
-      getSaldoCreditos(supabase, user.id),
-      getMeusResgates(supabase, user.id),
-      supabase.from("configuracoes").select("max_cursos_bonus_por_aluno").single(),
-      supabase
-        .from("cursos")
-        .select("id, nome, descricao, custo_creditos")
-        .eq("disponivel_para_resgate", true)
-        .eq("status", "ativo"),
-      supabase
-        .from("premios")
-        .select("id, nome, descricao, foto_url, custo_creditos, estoque")
-        .eq("ativo", true),
-    ]);
+  const [
+    saldo,
+    meusResgates,
+    { data: configData },
+    { data: cursosBonusData },
+    { data: premiosData },
+    { data: primeiraMatriculaData },
+  ] = await Promise.all([
+    getSaldoCreditos(supabase, user.id),
+    getMeusResgates(supabase, user.id),
+    supabase.from("configuracoes").select("max_cursos_bonus_por_aluno").single(),
+    supabase
+      .from("cursos")
+      .select("id, nome, descricao, custo_creditos")
+      .eq("disponivel_para_resgate", true)
+      .eq("status", "ativo"),
+    supabase
+      .from("premios")
+      .select("id, nome, descricao, foto_url, custo_creditos, estoque")
+      .eq("ativo", true),
+    supabase
+      .from("matriculas")
+      .select("created_at")
+      .eq("aluno_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const dataLimiteCreditos = primeiraMatriculaData
+    ? calcularDataLimiteCreditos(primeiraMatriculaData.created_at)
+    : null;
+  const diasParaVencer = dataLimiteCreditos ? diasRestantes(dataLimiteCreditos) : null;
+  const proximoDoVencimento = diasParaVencer !== null && diasParaVencer <= 30;
 
   const maxCursosBonus = configData?.max_cursos_bonus_por_aluno ?? 1;
   const cursosBonusJaResgatados = meusResgates.filter((r) => r.tipo === "curso_bonus").length;
@@ -75,6 +109,13 @@ export default async function CreditosPage() {
         <p className="text-muted-foreground text-sm">
           A cada 50 pontos acumulados você ganha 1 crédito — troque por cursos bônus ou prêmios.
         </p>
+        {dataLimiteCreditos && (
+          <p className={proximoDoVencimento ? "text-sm text-amber-500" : "text-muted-foreground text-xs"}>
+            {proximoDoVencimento
+              ? `Seus créditos vencem em ${diasParaVencer} dias — não esqueça de resgatar!`
+              : `Seus créditos são válidos até ${formatDateBR(dataLimiteCreditos.toISOString())}`}
+          </p>
+        )}
       </div>
 
       <Card className="max-w-sm">

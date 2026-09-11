@@ -5,10 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getCursoProgresso, type CursoProgresso } from "@/lib/aulas-concluidas/progresso";
 import { getMeusPontos } from "@/lib/gamificacao/ranking";
 import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
+import { verificarInadimplenciaAluno } from "@/lib/financeiro/inadimplencia";
+import { getSaldoCreditos } from "@/lib/creditos/saldo";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { MATRICULA_STATUSES } from "@/lib/matriculas/schema";
 import { isAvatarId } from "@/lib/avatares/catalog";
 import { AlunoAvatar } from "@/components/gamificacao/aluno-avatar";
+import { AvisoInadimplencia } from "@/components/aluno/aviso-inadimplencia";
 import { BannerSlideshowPortal } from "@/components/aluno/banner-slideshow-portal";
 import { Capa } from "@/components/aluno/capa";
 import { CursoBloqueadoCard, type CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
@@ -107,7 +110,7 @@ export default async function AlunoDashboardPage() {
   const recursos = await getRecursosHabilitadosAluno(user.id);
 
   const supabase = await createClient();
-  const [{ data, error }, meusPontos] = await Promise.all([
+  const [{ data, error }, meusPontos, statusInadimplencia, saldoCreditos] = await Promise.all([
     supabase
       .from("matriculas")
       .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url))")
@@ -115,6 +118,8 @@ export default async function AlunoDashboardPage() {
       .in("status", ["ativa", "concluida"])
       .order("created_at", { ascending: false }),
     getMeusPontos(supabase, user.id),
+    verificarInadimplenciaAluno(user.id),
+    getSaldoCreditos(supabase, user.id),
   ]);
 
   const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
@@ -190,6 +195,10 @@ export default async function AlunoDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <BannerSlideshowPortal />
+
+      {statusInadimplencia.inadimplente && (
+        <AvisoInadimplencia creditosDisponiveis={saldoCreditos.creditosDisponiveis} />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
