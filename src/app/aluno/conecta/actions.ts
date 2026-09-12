@@ -146,8 +146,11 @@ export async function uploadCurriculoConecta(
     { onConflict: "aluno_id" },
   );
 
+  // DIAGNÓSTICO TEMPORÁRIO — mensagem genérica trocada pelo erro real do
+  // Postgres/PostgREST (message + code) pra achar a causa de "violates
+  // row-level security policy". Reverter pra mensagem genérica depois.
   if (error) {
-    return { error: "Currículo enviado mas não foi possível salvar. Tente novamente." };
+    return { error: `Erro ao salvar: ${error.message} (code: ${error.code})` };
   }
 
   revalidatePath("/aluno/conecta");

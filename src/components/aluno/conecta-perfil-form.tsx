@@ -133,10 +133,17 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
     setEnviando(true);
     try {
       const supabase = createClient();
+
+      // DIAGNÓSTICO TEMPORÁRIO — 3 pontos logados separadamente pra achar
+      // exatamente qual operação dispara "violates row-level security
+      // policy": (1) sessão do client, (2) upload no Storage, (3) upsert
+      // em perfis_conecta (dentro da Server Action).
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
-      if (!user) {
+      if (userError || !user) {
+        console.error("[CONECTA CURRICULO] Falha ao obter sessão:", userError);
         setError("Sessão expirada. Recarregue a página.");
         return;
       }
@@ -146,12 +153,14 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
         .from(CURRICULO_CONECTA_BUCKET)
         .upload(path, file, { cacheControl: "3600", contentType: file.type, upsert: true });
       if (uploadError) {
+        console.error("[CONECTA CURRICULO] Falha no upload do Storage:", uploadError);
         setError(`Erro no upload: ${uploadError.message}`);
         return;
       }
 
       const resultado = await uploadCurriculoConecta(path, file.name);
       if (resultado.error) {
+        console.error("[CONECTA CURRICULO] Falha ao salvar em perfis_conecta:", resultado.error);
         setError(resultado.error);
         return;
       }
