@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   perfilConectaFormSchema,
   type PerfilConecta,
+  type VagaConecta,
   type VagasConectaFiltro,
   type VagasConectaResultado,
   type VagaConectaComEmpresa,
@@ -187,6 +188,16 @@ export async function removerCurriculoConecta(): Promise<{ error?: string }> {
 // vaga em si, sem nome/whatsapp/logo da empresa, se fosse pelo client
 // autenticado normal. Sem migration nova (REGRA): bypass via service_role,
 // mesmo padrão já usado noutras leituras agregadas deste projeto.
+//
+// Reescrito em duas queries simples + merge em JS (mesmo padrão já usado
+// noutras agregações deste projeto, ex.: vagasPorCurso em aluno/page.tsx)
+// em vez de um único select com embed `!inner` + filtro na tabela
+// embutida + count — essa combinação (inner join filtrado + count: exact)
+// é um ponto conhecido de comportamento inconsistente do
+// supabase-js/PostgREST em alguns cenários, e era a suspeita mais provável
+// de "vagas não aparecem" (PROBLEMA 4): mais fácil de garantir correto (e
+// de depurar) com duas consultas diretas do que com uma única consulta
+// combinada.
 export async function buscarVagasConecta(
   filtro: VagasConectaFiltro = {},
 ): Promise<VagasConectaResultado> {
@@ -194,62 +205,99 @@ export async function buscarVagasConecta(
 
   const page = filtro.page && filtro.page > 0 ? filtro.page : 1;
   const limit = filtro.limit && filtro.limit > 0 ? filtro.limit : LIMITE_PADRAO;
-  const offset = (page - 1) * limit;
 
   const admin = createAdminClient();
 
-  // "Buscar por cargo ou empresa": .or() do PostgREST não combina bem uma
-  // condição local (titulo) com uma condição de tabela embutida
-  // (empresas_conecta.nome_empresa) no mesmo filtro — resolve em duas
-  // etapas: acha os ids de empresa cujo nome bate, depois usa esses ids
-  // (coluna local, empresa_id) junto do título no mesmo .or().
-  const termo = filtro.query?.trim();
-  let empresaIdsComNomeCompativel: string[] = [];
-  if (termo) {
-    const { data: empresasCompativeis } = await admin
-      .from("empresas_conecta")
-      .select("id")
-      .ilike("nome_empresa", `%${termo}%`);
-    empresaIdsComNomeCompativel = (empresasCompativeis ?? []).map((e) => e.id as string);
+  // 1) Empresas ativas — tabela pequena, busca inteira de uma vez.
+  const { data: empresasAtivasData } = await admin
+    .from("empresas_conecta")
+    .select("id, nome_empresa, whatsapp, logo_url")
+    .eq("status", "ativa");
+  const empresasPorId = new Map(
+    (empresasAtivasData ?? []).map((empresa) => [
+      empresa.id as string,
+      {
+        nome: empresa.nome_empresa as string,
+        whatsapp: empresa.whatsapp as string | null,
+        logoUrl: empresa.logo_url as string | null,
+      },
+    ]),
+  );
+
+  const termo = filtro.query?.trim().toLowerCase();
+  const empresaIdsComNomeCompativel = termo
+    ? new Set(
+        [...empresasPorId.entries()]
+          .filter(([, empresa]) => empresa.nome.toLowerCase().includes(termo))
+          .map(([id]) => id),
+      )
+    : null;
+
+  // 2) Vagas ativas — filtros locais (tipo, modalidade, cidade, título) já
+  // vão direto na query; "empresa ativa" e "nome da empresa" são aplicados
+  // depois, em JS, com o Map montado acima.
+  let query = admin.from("vagas_conecta").select("*").eq("status", "ativa");
+
+  if (filtro.tipo) query = query.eq("tipo", filtro.tipo);
+  if (filtro.modalidade) query = query.eq("modalidade", filtro.modalidade);
+  if (filtro.cidade?.trim()) query = query.ilike("cidade", `%${filtro.cidade.trim()}%`);
+
+  const { data: vagasData } = await query.order("created_at", { ascending: false });
+
+  const vagasFiltradas = ((vagasData as VagaConecta[] | null) ?? []).filter((vaga) => {
+    if (!empresasPorId.has(vaga.empresa_id)) return false;
+    if (!termo) return true;
+    const tituloBate = vaga.titulo.toLowerCase().includes(termo);
+    const empresaBate = empresaIdsComNomeCompativel?.has(vaga.empresa_id) ?? false;
+    return tituloBate || empresaBate;
+  });
+
+  const total = vagasFiltradas.length;
+  const offset = (page - 1) * limit;
+  const pagina = vagasFiltradas.slice(offset, offset + limit);
+
+  const vagas: VagaConectaComEmpresa[] = pagina.map((vaga) => {
+    const empresa = empresasPorId.get(vaga.empresa_id);
+    return {
+      ...vaga,
+      empresaNome: empresa?.nome ?? "Empresa",
+      empresaWhatsapp: empresa?.whatsapp ?? null,
+      empresaLogoUrl: empresa?.logoUrl ?? null,
+    };
+  });
+
+  return { vagas, total };
+}
+
+// Signed URL de curta duração (60s) — mesmo padrão de materiais/certificados
+// (bucket privado, sem URL pública fixa). Client admin necessário: o bucket
+// é privado e createSignedUrl não é afetado pela RLS do client autenticado
+// mesmo sendo o próprio dono, porque a policy de select do bucket restringe
+// a empresa/admin (ver migration de storage) — o aluno lê o PRÓPRIO
+// currículo por aqui, contornando essa restrição com segurança porque a
+// action já confirma que o path pertence à sessão autenticada.
+export async function getUrlCurriculoConecta(): Promise<{ url?: string; error?: string }> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  const { data: perfil } = await supabase
+    .from("perfis_conecta")
+    .select("curriculo_path")
+    .eq("aluno_id", user.id)
+    .maybeSingle();
+
+  if (!perfil?.curriculo_path) {
+    return { error: "Nenhum currículo enviado ainda." };
   }
 
-  let query = admin
-    .from("vagas_conecta")
-    .select("*, empresas_conecta!inner(nome_empresa, whatsapp, logo_url, status)", { count: "exact" })
-    .eq("status", "ativa")
-    .eq("empresas_conecta.status", "ativa");
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage
+    .from("curriculos-conecta")
+    .createSignedUrl(perfil.curriculo_path, 60);
 
-  if (termo) {
-    const condicoes = [`titulo.ilike.%${termo}%`];
-    if (empresaIdsComNomeCompativel.length > 0) {
-      condicoes.push(`empresa_id.in.(${empresaIdsComNomeCompativel.join(",")})`);
-    }
-    query = query.or(condicoes.join(","));
-  }
-  if (filtro.tipo) {
-    query = query.eq("tipo", filtro.tipo);
-  }
-  if (filtro.modalidade) {
-    query = query.eq("modalidade", filtro.modalidade);
-  }
-  if (filtro.cidade?.trim()) {
-    query = query.ilike("cidade", `%${filtro.cidade.trim()}%`);
+  if (error || !data) {
+    return { error: "Não foi possível gerar o link do currículo. Tente novamente." };
   }
 
-  const { data, count } = await query
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  type VagaRow = VagaConectaComEmpresa & {
-    empresas_conecta: { nome_empresa: string; whatsapp: string | null; logo_url: string | null } | null;
-  };
-
-  const vagas: VagaConectaComEmpresa[] = ((data as unknown as VagaRow[] | null) ?? []).map((row) => ({
-    ...row,
-    empresaNome: row.empresas_conecta?.nome_empresa ?? "Empresa",
-    empresaWhatsapp: row.empresas_conecta?.whatsapp ?? null,
-    empresaLogoUrl: row.empresas_conecta?.logo_url ?? null,
-  }));
-
-  return { vagas, total: count ?? 0 };
+  return { url: data.signedUrl };
 }

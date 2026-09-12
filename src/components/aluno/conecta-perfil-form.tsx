@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { FileText, X } from "lucide-react";
+import { Eye, FileText, RotateCw, Trash2 } from "lucide-react";
 import {
+  getUrlCurriculoConecta,
   removerCurriculoConecta,
   salvarPerfilConecta,
   toggleVisibilidadePerfil,
@@ -22,6 +23,17 @@ import {
   MODALIDADES_PREFERIDAS,
   type PerfilConecta,
 } from "@/lib/conecta/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,8 +94,25 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
   const [nomeArquivo, setNomeArquivo] = useState(perfil?.curriculo_url ?? null);
   const [enviando, setEnviando] = useState(false);
   const [removendo, setRemovendo] = useState(false);
+  const [visualizando, setVisualizando] = useState(false);
+  const [excluirOpen, setExcluirOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleVisualizar() {
+    setError(null);
+    setVisualizando(true);
+    try {
+      const resultado = await getUrlCurriculoConecta();
+      if (resultado.error || !resultado.url) {
+        setError(resultado.error ?? "Não foi possível abrir o currículo.");
+        return;
+      }
+      window.open(resultado.url, "_blank", "noreferrer");
+    } finally {
+      setVisualizando(false);
+    }
+  }
 
   async function handleArquivoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -142,6 +171,7 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
         return;
       }
       setNomeArquivo(null);
+      setExcluirOpen(false);
     } finally {
       setRemovendo(false);
     }
@@ -152,18 +182,55 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
       <Label>Currículo (PDF)</Label>
       <input ref={inputRef} type="file" accept="application/pdf" onChange={handleArquivoChange} className="hidden" />
       {nomeArquivo ? (
-        <div className="flex w-fit items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <FileText className="text-muted-foreground size-4" />
-          <span className="truncate">{nomeArquivo}</span>
-          <button
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <FileText className="text-muted-foreground size-4" />
+            <span className="max-w-48 truncate">{nomeArquivo}</span>
+          </div>
+          <Button
             type="button"
-            onClick={handleRemover}
-            disabled={removendo}
-            aria-label="Remover currículo"
-            className="text-muted-foreground hover:text-destructive"
+            variant="outline"
+            size="sm"
+            disabled={visualizando}
+            onClick={handleVisualizar}
           >
-            <X className="size-4" />
-          </button>
+            <Eye className="size-4" />
+            {visualizando ? "Abrindo..." : "Visualizar"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={enviando}
+            onClick={() => inputRef.current?.click()}
+          >
+            <RotateCw className="size-4" />
+            {enviando ? "Enviando..." : "Trocar"}
+          </Button>
+          <AlertDialog open={excluirOpen} onOpenChange={setExcluirOpen}>
+            <AlertDialogTrigger
+              render={
+                <Button type="button" variant="outline" size="sm" className="text-destructive">
+                  <Trash2 className="size-4" />
+                  Remover
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remover currículo</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja remover seu currículo? Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" disabled={removendo} onClick={handleRemover}>
+                  {removendo ? "Removendo..." : "Remover"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       ) : (
         <Button

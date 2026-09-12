@@ -186,6 +186,22 @@ export const perfilConectaFormSchema = z.object({
 });
 export type PerfilConectaFormValues = z.infer<typeof perfilConectaFormSchema>;
 
+export type CandidatoConecta = {
+  id: string;
+  alunoId: string | null;
+  nome: string;
+  whatsapp: string | null;
+  cidade: string | null;
+  estado: string | null;
+  resumo: string | null;
+  experiencias: string | null;
+  linkedinUrl: string | null;
+  disponibilidade: Disponibilidade;
+  modalidadePreferida: ModalidadePreferida;
+  curriculoPath: string | null;
+  cursosConcluidos: string[];
+};
+
 export type NotificacaoEmpresa = {
   id: string;
   empresa_id: string;

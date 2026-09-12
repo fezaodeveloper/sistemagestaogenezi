@@ -1,22 +1,21 @@
 import { requireEmpresa } from "@/lib/auth/dal";
-import { Card, CardContent } from "@/components/ui/card";
+import { getCandidatosDisponiveis } from "@/app/empresa/(protegido)/candidatos/actions";
+import { CandidatosView } from "@/components/empresa/candidatos-view";
 
-// Etapa 1 (base de dados + autenticação) — a busca de candidatos
-// (perfis_conecta) fica pra uma próxima etapa.
 export default async function EmpresaCandidatosPage() {
   await requireEmpresa();
+
+  const candidatos = await getCandidatosDisponiveis();
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Candidatos</h1>
-        <p className="text-muted-foreground text-sm">Busque candidatos interessados nas suas vagas.</p>
+        <p className="text-muted-foreground text-sm">
+          Candidatos com perfil visível na Gênezi Conecta.
+        </p>
       </div>
-      <Card>
-        <CardContent className="text-muted-foreground py-10 text-center text-sm">
-          Esta funcionalidade estará disponível em breve.
-        </CardContent>
-      </Card>
+      <CandidatosView candidatosIniciais={candidatos} />
     </div>
   );
 }
