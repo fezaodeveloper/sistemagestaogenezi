@@ -5,6 +5,7 @@ import { atualizarPerfilEmpresa } from "@/app/empresa/(protegido)/perfil/actions
 import { formatCnpj } from "@/lib/configuracoes/schema";
 import { formatTelefone } from "@/lib/alunos/schema";
 import { SETORES_CONECTA, type EmpresaConecta } from "@/lib/conecta/schema";
+import { LogoEmpresaUpload } from "@/components/empresa/logo-empresa-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,9 @@ export function EditarPerfilEmpresaForm({ empresa }: { empresa: EmpresaConecta }
   }
 
   return (
-    <form action={handleSubmit} className="flex flex-col gap-4">
+    <form action={handleSubmit} className="flex flex-col gap-6">
+      <LogoEmpresaUpload profileId={empresa.profile_id} logoUrlInicial={empresa.logo_url} />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor="nome_empresa">Nome da empresa</Label>

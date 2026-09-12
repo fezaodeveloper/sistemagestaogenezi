@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, Coins, FileBadge, FileText, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
+import { Banknote, Briefcase, Coins, FileBadge, FileText, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import type { RecursosHabilitados } from "@/lib/configuracoes/recursos";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -123,6 +123,16 @@ export function AlunoSidebar({
                   />
                 </SidebarMenuItem>
               )}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={
+                    <Link href="/aluno/conecta">
+                      <Briefcase />
+                      <span>Gênezi Conecta</span>
+                    </Link>
+                  }
+                />
+              </SidebarMenuItem>
               {recursos.certificados && (
                 <SidebarMenuItem>
                   <SidebarMenuButton

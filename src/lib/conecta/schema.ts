@@ -111,6 +111,81 @@ export type VagaConecta = {
   updated_at: string;
 };
 
+export type VagaConectaComEmpresa = VagaConecta & {
+  empresaNome: string;
+  empresaWhatsapp: string | null;
+  empresaLogoUrl: string | null;
+};
+
+export type VagasConectaFiltro = {
+  query?: string;
+  tipo?: VagaTipo;
+  modalidade?: VagaModalidade;
+  cidade?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type VagasConectaResultado = {
+  vagas: VagaConectaComEmpresa[];
+  total: number;
+};
+
+export const DISPONIBILIDADES = ["imediato", "15_dias", "30_dias", "a_combinar"] as const;
+export type Disponibilidade = (typeof DISPONIBILIDADES)[number];
+export const DISPONIBILIDADE_LABELS: Record<Disponibilidade, string> = {
+  imediato: "Disponível imediatamente",
+  "15_dias": "Em 15 dias",
+  "30_dias": "Em 30 dias",
+  a_combinar: "A combinar",
+};
+
+export const MODALIDADES_PREFERIDAS = ["presencial", "hibrido", "remoto", "qualquer"] as const;
+export type ModalidadePreferida = (typeof MODALIDADES_PREFERIDAS)[number];
+export const MODALIDADE_PREFERIDA_LABELS: Record<ModalidadePreferida, string> = {
+  presencial: "Presencial",
+  hibrido: "Híbrido",
+  remoto: "Remoto",
+  qualquer: "Qualquer modalidade",
+};
+
+export type PerfilConecta = {
+  id: string;
+  aluno_id: string | null;
+  nome: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  cidade: string | null;
+  estado: string | null;
+  resumo: string | null;
+  experiencias: string | null;
+  linkedin_url: string | null;
+  curriculo_url: string | null;
+  curriculo_path: string | null;
+  disponibilidade: Disponibilidade;
+  modalidade_preferida: ModalidadePreferida;
+  visivel: boolean;
+  tipo: "aluno" | "externo";
+  esta_ativo: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+// Campos de texto livre do perfil profissional do aluno — visivel (o toggle
+// proeminente) e whatsapp-obrigatório-só-se-visível são tratados à parte
+// (toggleVisibilidadePerfil), não fazem parte deste schema.
+export const perfilConectaFormSchema = z.object({
+  whatsapp: z.string().trim().max(30).optional(),
+  cidade: z.string().trim().max(100).optional(),
+  estado: z.string().trim().max(2).optional(),
+  resumo: z.string().trim().max(500, { error: "Máximo de 500 caracteres." }).optional(),
+  experiencias: z.string().trim().max(1000, { error: "Máximo de 1000 caracteres." }).optional(),
+  linkedin_url: z.string().trim().max(300).optional(),
+  disponibilidade: z.enum(DISPONIBILIDADES),
+  modalidade_preferida: z.enum(MODALIDADES_PREFERIDAS),
+});
+export type PerfilConectaFormValues = z.infer<typeof perfilConectaFormSchema>;
+
 export type NotificacaoEmpresa = {
   id: string;
   empresa_id: string;

@@ -79,6 +79,60 @@ export async function atualizarPerfilEmpresa(formData: FormData): Promise<{ erro
   return {};
 }
 
+// ===== Logo da empresa =====
+//
+// Upload em si acontece do lado do client, direto pro Supabase Storage —
+// mesmo padrão já usado pra logo da escola e foto do aluno neste projeto
+// (ver foto-aluno-upload.tsx: "upsert:true é a solução, não 'remover
+// antes'" — tentar remover o arquivo antigo antes de subir o novo já
+// causou bug de 'resource already exists' nessas duas features). Path fixo
+// por empresa (logos/{profile_id}.{ext}), upsert sobrescreve direto. Essa
+// action só grava a URL/path já prontos na tabela.
+
+export async function salvarLogoEmpresa(url: string, path: string): Promise<{ error?: string }> {
+  const user = await requireEmpresa();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("empresas_conecta")
+    .update({ logo_url: url, logo_path: path })
+    .eq("profile_id", user.id);
+
+  if (error) {
+    return { error: "Logo enviada mas não foi possível salvar. Tente novamente." };
+  }
+
+  revalidatePath("/empresa/perfil");
+  return {};
+}
+
+export async function removerLogoEmpresa(): Promise<{ error?: string }> {
+  const user = await requireEmpresa();
+
+  const supabase = await createClient();
+  const { data: empresa } = await supabase
+    .from("empresas_conecta")
+    .select("logo_path")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  if (empresa?.logo_path) {
+    await supabase.storage.from("logos-conecta").remove([empresa.logo_path]);
+  }
+
+  const { error } = await supabase
+    .from("empresas_conecta")
+    .update({ logo_url: null, logo_path: null })
+    .eq("profile_id", user.id);
+
+  if (error) {
+    return { error: "Não foi possível remover a logo. Tente novamente." };
+  }
+
+  revalidatePath("/empresa/perfil");
+  return {};
+}
+
 // Mesmo padrão de trocarSenha (src/app/aluno/perfil/actions.ts): confirma a
 // senha atual via signInWithPassword antes de trocar — updateUser sozinho
 // não pede a senha atual, então sem essa checagem qualquer sessão já aberta
