@@ -54,6 +54,7 @@ export const EVENTO_AUTOMACAO_TIPOS = [
   "conecta.mensagem.enviada",
   "conecta.pagamento.confirmado",
   "conecta.assinatura.cancelada",
+  "conecta.vaga.nova",
 ] as const;
 export type EventoAutomacaoTipo = (typeof EVENTO_AUTOMACAO_TIPOS)[number];
 

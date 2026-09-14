@@ -1,36 +1,50 @@
 import { requireRole } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
-import { VAGA_MODALIDADE_LABELS, VAGA_TIPO_LABELS } from "@/lib/conecta/schema";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getVagasAdminConecta } from "@/app/admin/conecta/vagas/actions";
+import { calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
+import {
+  VAGA_MODALIDADES,
+  VAGA_STATUSES,
+  VAGA_TIPOS,
+  type VagaModalidade,
+  type VagaStatus,
+  type VagaTipo,
+} from "@/lib/conecta/schema";
+import { ConectaVagasAdminView } from "@/components/admin/conecta-vagas-admin-view";
 
-type VagaComEmpresa = {
-  id: string;
-  titulo: string;
-  cidade: string;
-  estado: string;
-  modalidade: "presencial" | "hibrido" | "remoto";
-  tipo: "emprego" | "estagio";
-  status: "ativa" | "pausada" | "encerrada";
-  created_at: string;
-  empresas_conecta: { nome_empresa: string } | null;
-};
-
-function formatDateBR(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR");
+function paramValido<T extends string>(valores: readonly T[], valor: string | undefined): T | undefined {
+  return valores.includes(valor as T) ? (valor as T) : undefined;
 }
 
-export default async function AdminConectaVagasPage() {
+export default async function AdminConectaVagasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    page?: string;
+    limit?: string;
+    query?: string;
+    status?: string;
+    tipo?: string;
+    modalidade?: string;
+  }>;
+}) {
   await requireRole("admin");
+  const params = await searchParams;
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("vagas_conecta")
-    .select("id, titulo, cidade, estado, modalidade, tipo, status, created_at, empresas_conecta(nome_empresa)")
-    .order("created_at", { ascending: false });
+  const paginaAtual = parsePagina(params.page);
+  const limite = parseLimite(params.limit);
+  const status = paramValido<VagaStatus>(VAGA_STATUSES, params.status);
+  const tipo = paramValido<VagaTipo>(VAGA_TIPOS, params.tipo);
+  const modalidade = paramValido<VagaModalidade>(VAGA_MODALIDADES, params.modalidade);
 
-  const vagas = (data as unknown as VagaComEmpresa[] | null) ?? [];
+  const { vagas, total } = await getVagasAdminConecta({
+    query: params.query,
+    status,
+    tipo,
+    modalidade,
+    page: paginaAtual,
+    limit: limite,
+  });
+  const totalPaginas = calcularTotalPaginas(total, limite);
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,46 +53,19 @@ export default async function AdminConectaVagasPage() {
         <p className="text-muted-foreground text-sm">Todas as vagas publicadas pelas empresas parceiras.</p>
       </div>
 
-      {vagas.length === 0 ? (
-        <Card>
-          <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            Nenhuma vaga publicada ainda.
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Título</TableHead>
-                <TableHead>Empresa</TableHead>
-                <TableHead>Local</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Modalidade</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Publicada em</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vagas.map((vaga) => (
-                <TableRow key={vaga.id}>
-                  <TableCell className="font-medium">{vaga.titulo}</TableCell>
-                  <TableCell>{vaga.empresas_conecta?.nome_empresa ?? "—"}</TableCell>
-                  <TableCell>
-                    {vaga.cidade}/{vaga.estado}
-                  </TableCell>
-                  <TableCell>{VAGA_TIPO_LABELS[vaga.tipo]}</TableCell>
-                  <TableCell>{VAGA_MODALIDADE_LABELS[vaga.modalidade]}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{vaga.status}</Badge>
-                  </TableCell>
-                  <TableCell>{formatDateBR(vaga.created_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
+      <ConectaVagasAdminView
+        vagas={vagas}
+        paginaAtual={paginaAtual}
+        totalPaginas={totalPaginas}
+        totalRegistros={total}
+        limite={limite}
+        filtrosAtuais={{
+          query: params.query ?? "",
+          status: status ?? "",
+          tipo: tipo ?? "",
+          modalidade: modalidade ?? "",
+        }}
+      />
     </div>
   );
 }

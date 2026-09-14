@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireEmpresa } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { dispararEvento } from "@/lib/automacoes/motor";
 import { getEmpresaPorProfileId, getVagasDaEmpresa } from "@/lib/conecta/empresas";
-import { vagaFormSchema, type VagaConecta, type VagaStatus } from "@/lib/conecta/schema";
+import { VAGA_MODALIDADE_LABELS, vagaFormSchema, type VagaConecta, type VagaStatus } from "@/lib/conecta/schema";
 
 type VagaActionResult = { success: true } | { error: string };
 
@@ -66,6 +67,23 @@ export async function criarVaga(formData: FormData): Promise<VagaActionResult> {
 
   if (error) {
     return { error: "Não foi possível publicar a vaga. Tente novamente." };
+  }
+
+  // Best-effort — a vaga já foi publicada com sucesso acima.
+  try {
+    await dispararEvento(
+      "conecta.vaga.nova",
+      {
+        nome_empresa: empresa.nome_empresa,
+        titulo: data.titulo,
+        cidade: data.cidade,
+        estado: data.estado,
+        modalidade: VAGA_MODALIDADE_LABELS[data.modalidade],
+      },
+      `conecta-vaga-nova-${empresa.id}-${Date.now()}`,
+    );
+  } catch {
+    // Best-effort — ver comentário acima.
   }
 
   revalidatePath("/empresa/vagas");

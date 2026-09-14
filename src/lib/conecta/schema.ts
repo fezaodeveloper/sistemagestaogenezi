@@ -92,6 +92,16 @@ export const VAGA_TIPO_LABELS: Record<VagaTipo, string> = {
 
 export const VAGA_STATUSES = ["ativa", "pausada", "encerrada"] as const;
 export type VagaStatus = (typeof VAGA_STATUSES)[number];
+export const VAGA_STATUS_LABELS: Record<VagaStatus, string> = {
+  ativa: "Ativa",
+  pausada: "Pausada",
+  encerrada: "Encerrada",
+};
+export const VAGA_STATUS_BADGE_CLASS: Record<VagaStatus, string> = {
+  ativa: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  pausada: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  encerrada: "bg-muted text-muted-foreground",
+};
 
 export type VagaConecta = {
   id: string;
@@ -329,6 +339,64 @@ export const candidatoExternoCadastroSchema = z.object({
   forma_pagamento: z.enum(FORMAS_PAGAMENTO_CONECTA, { error: "Escolha a forma de pagamento." }),
 });
 export type CandidatoExternoCadastroValues = z.infer<typeof candidatoExternoCadastroSchema>;
+
+// ===== Admin — Etapa 5 (dashboard, vagas, candidatos) =====
+
+export type KpisConecta = {
+  empresasAtivas: number;
+  vagasAtivas: number;
+  candidatosVisiveis: number;
+  assinantesAtivos: number;
+};
+
+export type AtividadeRecenteConecta = {
+  empresasRecentes: { id: string; nome: string; createdAt: string }[];
+  vagasRecentes: { id: string; titulo: string; empresaNome: string; createdAt: string }[];
+  candidatosAtivadosRecentes: { id: string; nome: string; updatedAt: string }[];
+};
+
+export type VagaAdminConecta = {
+  id: string;
+  titulo: string;
+  descricao: string;
+  requisitos: string | null;
+  cidade: string;
+  estado: string;
+  modalidade: VagaModalidade;
+  tipo: VagaTipo;
+  status: VagaStatus;
+  salario_min: number | null;
+  salario_max: number | null;
+  salario_oculto: boolean;
+  carga_horaria: string | null;
+  created_at: string;
+  empresaNome: string;
+};
+
+export type VagasAdminFiltro = {
+  query?: string;
+  status?: VagaStatus;
+  tipo?: VagaTipo;
+  modalidade?: VagaModalidade;
+  page?: number;
+  limit?: number;
+};
+
+export type VagasAdminResultado = { vagas: VagaAdminConecta[]; total: number };
+
+export type AlunoVisivelConecta = {
+  id: string;
+  alunoId: string | null;
+  nome: string;
+  whatsapp: string | null;
+  cidade: string | null;
+  disponibilidade: Disponibilidade;
+  visivel: boolean;
+  cursosConcluidos: string[];
+};
+
+export type AlunosVisiveisFiltro = { query?: string; page?: number; limit?: number };
+export type AlunosVisiveisResultado = { alunos: AlunoVisivelConecta[]; total: number };
 
 export const vagaFormSchema = z.object({
   titulo: z

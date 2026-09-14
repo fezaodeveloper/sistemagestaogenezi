@@ -314,6 +314,19 @@ export async function notificarConectaPagamentoConfirmado(
   );
 }
 
+export async function notificarNovaVagaConecta(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "GÊNEZI CONECTA — Nova Vaga",
+    [
+      `🏢 Empresa: ${texto(payload.nome_empresa)}`,
+      `💼 Vaga: ${texto(payload.titulo)}`,
+      `📍 Local: ${texto(payload.cidade)}/${texto(payload.estado)}`,
+      `🔗 Modalidade: ${texto(payload.modalidade)}`,
+    ],
+    "💼",
+  );
+}
+
 export async function notificarConectaAssinaturaCancelada(
   payload: Record<string, unknown>,
 ): Promise<boolean> {

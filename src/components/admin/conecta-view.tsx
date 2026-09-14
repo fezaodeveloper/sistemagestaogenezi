@@ -1,20 +1,37 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Bell, Building2, Check, MessageCircle, Pause, Search } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  Bell,
+  Building2,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  MapPin,
+  MessageCircle,
+  Pause,
+  Search,
+} from "lucide-react";
 import {
   ativarEmpresa,
   enviarNotificacaoEmpresa,
   excluirEmpresa,
   getEmpresasConecta,
+  getVagasEmpresaAdmin,
   suspenderEmpresa,
 } from "@/app/admin/conecta/actions";
 import {
   EMPRESA_STATUS_BADGE_CLASS,
   EMPRESA_STATUS_LABELS,
   EMPRESA_STATUSES,
+  VAGA_MODALIDADE_LABELS,
+  VAGA_STATUS_BADGE_CLASS,
+  VAGA_STATUS_LABELS,
+  VAGA_TIPO_LABELS,
   type EmpresaConectaComExtras,
   type EmpresasConectaResultado,
+  type VagaConecta,
 } from "@/lib/conecta/schema";
 import {
   AlertDialog,
@@ -56,6 +73,22 @@ const FILTRO_LABELS: Record<Filtro, string> = {
 
 function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+// Mesmo padrão de LogoOuIniciais em conecta-vagas-view.tsx (portal do
+// aluno) — fallback pro ícone Building2 quando a empresa não tem logo.
+function LogoOuIniciais({ empresa }: { empresa: EmpresaConectaComExtras }) {
+  if (empresa.logo_url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+      <img
+        src={empresa.logo_url}
+        alt={empresa.nome_empresa}
+        className="size-8 shrink-0 rounded-md border object-contain"
+      />
+    );
+  }
+  return <Building2 className="text-muted-foreground size-4 shrink-0" />;
 }
 
 function AtivarButton({
@@ -293,6 +326,85 @@ function EnviarNotificacaoDialog({ empresa }: { empresa: EmpresaConectaComExtras
   );
 }
 
+// Carrega as vagas da empresa só quando o card é expandido (mount = fetch,
+// unmount ao recolher = descarta) — evita buscar vagas de empresa nenhuma
+// tenha clicado pra ver.
+function EmpresaDetalhesExpandidos({ empresa }: { empresa: EmpresaConectaComExtras }) {
+  const [vagas, setVagas] = useState<VagaConecta[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    getVagasEmpresaAdmin(empresa.id)
+      .then((resultado) => {
+        if (!cancelado) setVagas(resultado);
+      })
+      .catch(() => {
+        if (!cancelado) setErro("Não foi possível carregar as vagas desta empresa.");
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [empresa.id]);
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-3 text-sm">
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <p className="text-muted-foreground">CNPJ</p>
+          <p>{empresa.cnpj ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Setor</p>
+          <p>{empresa.setor ?? "—"}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-muted-foreground">Endereço</p>
+          <p className="flex items-center gap-1">
+            <MapPin className="size-3 shrink-0" />
+            {empresa.endereco ?? "—"}
+          </p>
+        </div>
+        {empresa.site && (
+          <div className="col-span-2">
+            <p className="text-muted-foreground">Site</p>
+            <a
+              href={empresa.site}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 underline underline-offset-2"
+            >
+              <Globe className="size-3 shrink-0" />
+              {empresa.site}
+            </a>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-medium">Vagas desta empresa</p>
+        {erro && <p className="text-destructive text-xs">{erro}</p>}
+        {!erro && vagas === null && <p className="text-muted-foreground text-xs">Carregando...</p>}
+        {vagas !== null && vagas.length === 0 && (
+          <p className="text-muted-foreground text-xs">Nenhuma vaga publicada ainda.</p>
+        )}
+        {vagas !== null && vagas.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {vagas.map((vaga) => (
+              <div key={vaga.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="truncate">
+                  {vaga.titulo} · {VAGA_TIPO_LABELS[vaga.tipo]} · {VAGA_MODALIDADE_LABELS[vaga.modalidade]}
+                </span>
+                <Badge className={VAGA_STATUS_BADGE_CLASS[vaga.status]}>{VAGA_STATUS_LABELS[vaga.status]}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function EmpresaCard({
   empresa,
   onAtualizado,
@@ -303,19 +415,31 @@ function EmpresaCard({
   onExcluida: () => void;
 }) {
   const whatsappDigitos = empresa.whatsapp?.replace(/\D/g, "");
+  const [expandido, setExpandido] = useState(false);
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 py-4">
-        <div className="flex items-start justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpandido((atual) => !atual)}
+          className="flex items-start justify-between gap-2 text-left"
+        >
           <div className="flex items-center gap-2">
-            <Building2 className="text-muted-foreground size-4" />
+            <LogoOuIniciais empresa={empresa} />
             <span className="font-medium">{empresa.nome_empresa}</span>
           </div>
-          <Badge className={EMPRESA_STATUS_BADGE_CLASS[empresa.status]}>
-            {EMPRESA_STATUS_LABELS[empresa.status]}
-          </Badge>
-        </div>
+          <div className="flex items-center gap-2">
+            <Badge className={EMPRESA_STATUS_BADGE_CLASS[empresa.status]}>
+              {EMPRESA_STATUS_LABELS[empresa.status]}
+            </Badge>
+            {expandido ? (
+              <ChevronUp className="text-muted-foreground size-4 shrink-0" />
+            ) : (
+              <ChevronDown className="text-muted-foreground size-4 shrink-0" />
+            )}
+          </div>
+        </button>
         <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
           <span>Responsável: {empresa.nome_responsavel}</span>
           <span>{empresa.email}</span>
@@ -352,6 +476,7 @@ function EmpresaCard({
           <EnviarNotificacaoDialog empresa={empresa} />
           <ExcluirEmpresaButton empresa={empresa} onExcluida={onExcluida} />
         </div>
+        {expandido && <EmpresaDetalhesExpandidos empresa={empresa} />}
       </CardContent>
     </Card>
   );

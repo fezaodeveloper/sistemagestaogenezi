@@ -5,11 +5,15 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { getContagemCandidatosDisponiveis, getVagasDaEmpresa } from "@/lib/conecta/empresas";
 import type {
+  AtividadeRecenteConecta,
   EmpresaConecta,
   EmpresaConectaComExtras,
   EmpresasConectaFiltro,
   EmpresasConectaResultado,
+  KpisConecta,
+  VagaConecta,
 } from "@/lib/conecta/schema";
 
 const LIMITE_PADRAO = 12;
@@ -91,6 +95,97 @@ export async function getEmpresasConecta(
 // "Admins gerenciam empresas" (FOR ALL) cobre admins (ver migration). Só
 // excluirEmpresa (abaixo) realmente precisa do client admin, porque o
 // grant de DELETE ali é só pra service_role.
+// Contagens em paralelo (REGRA da tarefa) — quatro queries independentes,
+// nenhuma depende do resultado da outra. candidatosVisiveis reaproveita
+// getContagemCandidatosDisponiveis (mesma regra de negócio já usada pro
+// portal da empresa: visível E (aluno OU externo ativo)), em vez de
+// duplicar a condição aqui.
+export async function getKpisConecta(): Promise<KpisConecta> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+
+  const [{ count: empresasAtivas }, { count: vagasAtivas }, candidatosVisiveis, { count: assinantesAtivos }] =
+    await Promise.all([
+      supabase.from("empresas_conecta").select("id", { count: "exact", head: true }).eq("status", "ativa"),
+      supabase.from("vagas_conecta").select("id", { count: "exact", head: true }).eq("status", "ativa"),
+      getContagemCandidatosDisponiveis(supabase),
+      supabase
+        .from("perfis_conecta")
+        .select("id", { count: "exact", head: true })
+        .eq("tipo", "externo")
+        .eq("esta_ativo", true),
+    ]);
+
+  return {
+    empresasAtivas: empresasAtivas ?? 0,
+    vagasAtivas: vagasAtivas ?? 0,
+    candidatosVisiveis,
+    assinantesAtivos: assinantesAtivos ?? 0,
+  };
+}
+
+// "Candidatos que ativaram perfil" = perfis externos com esta_ativo = true
+// (o único jeito de esta_ativo virar true é o webhook de pagamento
+// confirmado — aluno nunca usa essa coluna) — updated_at reflete o momento
+// da ativação nesse caso, não uma edição qualquer de perfil.
+export async function getAtividadeRecenteConecta(): Promise<AtividadeRecenteConecta> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+
+  const [{ data: empresasData }, { data: vagasData }, { data: candidatosData }] = await Promise.all([
+    supabase
+      .from("empresas_conecta")
+      .select("id, nome_empresa, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("vagas_conecta")
+      .select("id, titulo, created_at, empresas_conecta(nome_empresa)")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("perfis_conecta")
+      .select("id, nome, updated_at")
+      .eq("tipo", "externo")
+      .eq("esta_ativo", true)
+      .order("updated_at", { ascending: false })
+      .limit(5),
+  ]);
+
+  type VagaRow = { id: string; titulo: string; created_at: string; empresas_conecta: { nome_empresa: string } | null };
+
+  return {
+    empresasRecentes: (empresasData ?? []).map((empresa) => ({
+      id: empresa.id,
+      nome: empresa.nome_empresa,
+      createdAt: empresa.created_at,
+    })),
+    vagasRecentes: ((vagasData as unknown as VagaRow[] | null) ?? []).map((vaga) => ({
+      id: vaga.id,
+      titulo: vaga.titulo,
+      empresaNome: vaga.empresas_conecta?.nome_empresa ?? "—",
+      createdAt: vaga.created_at,
+    })),
+    candidatosAtivadosRecentes: (candidatosData ?? []).map((candidato) => ({
+      id: candidato.id,
+      nome: candidato.nome ?? "Candidato",
+      updatedAt: candidato.updated_at,
+    })),
+  };
+}
+
+// Vagas de uma empresa, usadas ao expandir o card dela na listagem (BLOCO
+// 4) — reaproveita getVagasDaEmpresa (mesmo helper usado no portal da
+// própria empresa), só com requireRole("admin") em vez de requireEmpresa.
+export async function getVagasEmpresaAdmin(empresaId: string): Promise<VagaConecta[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  return getVagasDaEmpresa(supabase, empresaId);
+}
+
 export async function ativarEmpresa(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 

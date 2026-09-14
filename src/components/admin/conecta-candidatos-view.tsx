@@ -1,16 +1,22 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Search, UserRound, XCircle } from "lucide-react";
-import { cancelarAssinaturaCandidato, listarCandidatosExternos } from "@/app/admin/conecta/candidatos/actions";
-import { PLANO_CONECTA_INFO, type CandidatosExternosResultado, type PerfilConecta } from "@/lib/conecta/schema";
+import { cancelarAssinaturaCandidato } from "@/app/admin/conecta/candidatos/actions";
+import {
+  DISPONIBILIDADE_LABELS,
+  PLANO_CONECTA_INFO,
+  type AlunosVisiveisResultado,
+  type CandidatosExternosResultado,
+  type PerfilConecta,
+} from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
-
-const LIMITE_PADRAO = 12;
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
@@ -50,7 +56,52 @@ function CancelarAssinaturaButton({ candidato, onCancelado }: { candidato: Perfi
   );
 }
 
-function CandidatoCard({ candidato, onAtualizado }: { candidato: PerfilConecta; onAtualizado: () => void }) {
+function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, cursosConcluidos }: {
+  nome: string;
+  whatsapp: string | null;
+  cidade: string | null;
+  disponibilidade: keyof typeof DISPONIBILIDADE_LABELS;
+  visivel: boolean;
+  cursosConcluidos: string[];
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 py-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <UserRound className="text-muted-foreground size-4" />
+            <span className="font-medium">{nome}</span>
+          </div>
+          <Badge
+            className={
+              visivel
+                ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                : "bg-muted text-muted-foreground"
+            }
+          >
+            {visivel ? "Visível" : "Oculto"}
+          </Badge>
+        </div>
+        <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
+          <span>{whatsapp ?? "—"}</span>
+          <span>{cidade ?? "—"}</span>
+          <span>{DISPONIBILIDADE_LABELS[disponibilidade]}</span>
+        </div>
+        {cursosConcluidos.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {cursosConcluidos.map((curso) => (
+              <Badge key={curso} variant="secondary" className="text-[11px]">
+                {curso}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CandidatoExternoCard({ candidato, onAtualizado }: { candidato: PerfilConecta; onAtualizado: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 py-4">
@@ -86,74 +137,123 @@ function CandidatoCard({ candidato, onAtualizado }: { candidato: PerfilConecta; 
 }
 
 export function ConectaCandidatosView({
-  resultadoInicial,
+  aba,
+  resultadoAlunos,
+  resultadoExternos,
+  paginaAtual,
+  totalPaginas,
+  totalRegistros,
+  limite,
+  query,
 }: {
-  resultadoInicial: CandidatosExternosResultado;
+  aba: "alunos" | "externos";
+  resultadoAlunos: AlunosVisiveisResultado;
+  resultadoExternos: CandidatosExternosResultado;
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  limite: number;
+  query: string;
 }) {
-  const [resultado, setResultado] = useState(resultadoInicial);
-  const [busca, setBusca] = useState("");
-  const [pagina, setPagina] = useState(1);
-  const [, startTransition] = useTransition();
+  const router = useRouter();
+  const [busca, setBusca] = useState(query);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ação "Cancelar assinatura" precisa recarregar a lista após o sucesso —
+  // sem estado de servidor pra reconsultar aqui (a lista vem por prop, do
+  // Server Component pai), router.refresh() é o jeito certo de re-executar
+  // a página com os mesmos searchParams e pegar o dado já revalidado (a
+  // action já chama revalidatePath).
+  const [, startTransition] = useTransition();
 
-  function carregar(overrides: { query?: string; page?: number }) {
-    const novaQuery = overrides.query ?? busca;
-    const novaPagina = overrides.page ?? pagina;
+  function navegar(overrides: Partial<{ tab: string; query: string; page: number }>) {
+    const proximaAba = overrides.tab ?? aba;
+    const proximaQuery = overrides.query ?? (overrides.tab ? "" : busca);
+    const proximaPagina = overrides.page ?? 1;
 
-    startTransition(async () => {
-      const atualizado = await listarCandidatosExternos({
-        query: novaQuery.trim() || undefined,
-        page: novaPagina,
-        limit: LIMITE_PADRAO,
-      });
-      setResultado(atualizado);
-      setPagina(novaPagina);
-    });
+    const params = new URLSearchParams();
+    if (proximaAba !== "alunos") params.set("tab", proximaAba);
+    if (proximaQuery.trim()) params.set("query", proximaQuery.trim());
+    if (proximaPagina > 1) params.set("page", String(proximaPagina));
+    const queryString = params.toString();
+    router.push(queryString ? `/admin/conecta/candidatos?${queryString}` : "/admin/conecta/candidatos");
   }
 
   function handleBuscaChange(valor: string) {
     setBusca(valor);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      carregar({ query: valor, page: 1 });
-    }, 500);
+    debounceRef.current = setTimeout(() => navegar({ query: valor }), 500);
   }
 
-  const totalPaginas = Math.max(1, Math.ceil(resultado.total / LIMITE_PADRAO));
+  function handleTabChange(valor: string) {
+    setBusca("");
+    navegar({ tab: valor, query: "" });
+  }
+
+  const searchParamsAtuais: Record<string, string> = {};
+  if (aba !== "alunos") searchParamsAtuais.tab = aba;
+  if (query) searchParamsAtuais.query = query;
 
   return (
-    <div className="flex flex-col gap-4">
+    <Tabs value={aba} onValueChange={handleTabChange} className="flex flex-col gap-4">
+      <TabsList>
+        <TabsTrigger value="alunos">Alunos visíveis</TabsTrigger>
+        <TabsTrigger value="externos">Assinantes externos</TabsTrigger>
+      </TabsList>
+
       <div className="relative max-w-sm">
         <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
           value={busca}
           onChange={(e) => handleBuscaChange(e.target.value)}
-          placeholder="Buscar por nome ou email..."
+          placeholder={aba === "alunos" ? "Buscar por nome..." : "Buscar por nome ou email..."}
           className="pl-9"
         />
       </div>
 
-      {resultado.candidatos.length === 0 ? (
-        <Card>
-          <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            Nenhum candidato externo encontrado.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {resultado.candidatos.map((candidato) => (
-            <CandidatoCard key={candidato.id} candidato={candidato} onAtualizado={() => carregar({})} />
-          ))}
-        </div>
-      )}
+      <TabsContent value="alunos" className="flex flex-col gap-4">
+        {resultadoAlunos.alunos.length === 0 ? (
+          <Card>
+            <CardContent className="text-muted-foreground py-10 text-center text-sm">
+              Nenhum aluno com perfil visível encontrado.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {resultadoAlunos.alunos.map((aluno) => (
+              <AlunoCard key={aluno.id} {...aluno} />
+            ))}
+          </div>
+        )}
+      </TabsContent>
+
+      <TabsContent value="externos" className="flex flex-col gap-4">
+        {resultadoExternos.candidatos.length === 0 ? (
+          <Card>
+            <CardContent className="text-muted-foreground py-10 text-center text-sm">
+              Nenhum candidato externo encontrado.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {resultadoExternos.candidatos.map((candidato) => (
+              <CandidatoExternoCard
+                key={candidato.id}
+                candidato={candidato}
+                onAtualizado={() => startTransition(() => router.refresh())}
+              />
+            ))}
+          </div>
+        )}
+      </TabsContent>
 
       <Paginacao
-        paginaAtual={pagina}
+        paginaAtual={paginaAtual}
         totalPaginas={totalPaginas}
-        totalRegistros={resultado.total}
-        limite={LIMITE_PADRAO}
-        onNavigate={(novaPagina) => carregar({ page: novaPagina })}
+        totalRegistros={totalRegistros}
+        limite={limite}
+        baseUrl="/admin/conecta/candidatos"
+        searchParams={searchParamsAtuais}
       />
-    </div>
+    </Tabs>
   );
 }
