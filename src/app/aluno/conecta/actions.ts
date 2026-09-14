@@ -4,16 +4,13 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getVagasPublicasConecta } from "@/lib/conecta/publico";
 import {
   perfilConectaFormSchema,
   type PerfilConecta,
-  type VagaConecta,
   type VagasConectaFiltro,
   type VagasConectaResultado,
-  type VagaConectaComEmpresa,
 } from "@/lib/conecta/schema";
-
-const LIMITE_PADRAO = 12;
 
 // matriculas.status = 'concluida' já significa curso concluído (mesmo
 // critério usado em aluno/page.tsx pra agrupar cursos) — mais simples que
@@ -181,104 +178,15 @@ export async function removerCurriculoConecta(): Promise<{ error?: string }> {
   return {};
 }
 
-// Client admin de propósito: listar "vagas ativas de empresas ativas" é
-// informação pública dentro da plataforma (mural de vagas visível a
-// qualquer aluno), mas empresas_conecta não tem policy de select liberando
-// leitura pra quem não é a própria empresa ou admin — só teria os dados da
-// vaga em si, sem nome/whatsapp/logo da empresa, se fosse pelo client
-// autenticado normal. Sem migration nova (REGRA): bypass via service_role,
-// mesmo padrão já usado noutras leituras agregadas deste projeto.
-//
-// Reescrito em duas queries simples + merge em JS (mesmo padrão já usado
-// noutras agregações deste projeto, ex.: vagasPorCurso em aluno/page.tsx)
-// em vez de um único select com embed `!inner` + filtro na tabela
-// embutida + count — essa combinação (inner join filtrado + count: exact)
-// é um ponto conhecido de comportamento inconsistente do
-// supabase-js/PostgREST em alguns cenários, e era a suspeita mais provável
-// de "vagas não aparecem" (PROBLEMA 4): mais fácil de garantir correto (e
-// de depurar) com duas consultas diretas do que com uma única consulta
-// combinada.
+// Delegado a getVagasPublicasConecta (src/lib/conecta/publico.ts) — mesma
+// consulta é usada pela página pública /conecta/vagas, sem sessão nenhuma
+// (Etapa 6); aqui só entra o requireRole("aluno") antes, já que esta versão
+// é chamada de dentro do portal autenticado.
 export async function buscarVagasConecta(
   filtro: VagasConectaFiltro = {},
 ): Promise<VagasConectaResultado> {
   await requireRole("aluno");
-
-  const page = filtro.page && filtro.page > 0 ? filtro.page : 1;
-  const limit = filtro.limit && filtro.limit > 0 ? filtro.limit : LIMITE_PADRAO;
-
-  const admin = createAdminClient();
-
-  // 1) Empresas ativas — tabela pequena, busca inteira de uma vez.
-  const { data: empresasAtivasData } = await admin
-    .from("empresas_conecta")
-    .select("id, nome_empresa, whatsapp, logo_url, setor, cidade, estado, endereco, link_maps, site")
-    .eq("status", "ativa");
-  const empresasPorId = new Map(
-    (empresasAtivasData ?? []).map((empresa) => [
-      empresa.id as string,
-      {
-        nome: empresa.nome_empresa as string,
-        whatsapp: empresa.whatsapp as string | null,
-        logoUrl: empresa.logo_url as string | null,
-        setor: empresa.setor as string | null,
-        cidade: empresa.cidade as string | null,
-        estado: empresa.estado as string | null,
-        endereco: empresa.endereco as string | null,
-        linkMaps: empresa.link_maps as string | null,
-        site: empresa.site as string | null,
-      },
-    ]),
-  );
-
-  const termo = filtro.query?.trim().toLowerCase();
-  const empresaIdsComNomeCompativel = termo
-    ? new Set(
-        [...empresasPorId.entries()]
-          .filter(([, empresa]) => empresa.nome.toLowerCase().includes(termo))
-          .map(([id]) => id),
-      )
-    : null;
-
-  // 2) Vagas ativas — filtros locais (tipo, modalidade, cidade, título) já
-  // vão direto na query; "empresa ativa" e "nome da empresa" são aplicados
-  // depois, em JS, com o Map montado acima.
-  let query = admin.from("vagas_conecta").select("*").eq("status", "ativa");
-
-  if (filtro.tipo) query = query.eq("tipo", filtro.tipo);
-  if (filtro.modalidade) query = query.eq("modalidade", filtro.modalidade);
-  if (filtro.cidade?.trim()) query = query.ilike("cidade", `%${filtro.cidade.trim()}%`);
-
-  const { data: vagasData } = await query.order("created_at", { ascending: false });
-
-  const vagasFiltradas = ((vagasData as VagaConecta[] | null) ?? []).filter((vaga) => {
-    if (!empresasPorId.has(vaga.empresa_id)) return false;
-    if (!termo) return true;
-    const tituloBate = vaga.titulo.toLowerCase().includes(termo);
-    const empresaBate = empresaIdsComNomeCompativel?.has(vaga.empresa_id) ?? false;
-    return tituloBate || empresaBate;
-  });
-
-  const total = vagasFiltradas.length;
-  const offset = (page - 1) * limit;
-  const pagina = vagasFiltradas.slice(offset, offset + limit);
-
-  const vagas: VagaConectaComEmpresa[] = pagina.map((vaga) => {
-    const empresa = empresasPorId.get(vaga.empresa_id);
-    return {
-      ...vaga,
-      empresaNome: empresa?.nome ?? "Empresa",
-      empresaWhatsapp: empresa?.whatsapp ?? null,
-      empresaLogoUrl: empresa?.logoUrl ?? null,
-      empresaSetor: empresa?.setor ?? null,
-      empresaCidade: empresa?.cidade ?? null,
-      empresaEstado: empresa?.estado ?? null,
-      empresaEndereco: empresa?.endereco ?? null,
-      empresaLinkMaps: empresa?.linkMaps ?? null,
-      empresaSite: empresa?.site ?? null,
-    };
-  });
-
-  return { vagas, total };
+  return getVagasPublicasConecta(filtro);
 }
 
 // Signed URL de curta duração (60s) — mesmo padrão de materiais/certificados

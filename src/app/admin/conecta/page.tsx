@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { getAtividadeRecenteConecta, getEmpresasConecta, getKpisConecta } from "@/app/admin/conecta/actions";
 import { ConectaAtividadeRecente } from "@/components/admin/conecta-atividade-recente";
 import { ConectaKpis } from "@/components/admin/conecta-kpis";
+import { ConectaLinkPublico } from "@/components/admin/conecta-link-publico";
 import { ConectaView } from "@/components/admin/conecta-view";
 
 export default async function AdminConectaPage() {
@@ -22,6 +23,8 @@ export default async function AdminConectaPage() {
           Empresas parceiras cadastradas no portal de vagas.
         </p>
       </div>
+
+      <ConectaLinkPublico />
 
       <ConectaKpis kpis={kpis} />
 

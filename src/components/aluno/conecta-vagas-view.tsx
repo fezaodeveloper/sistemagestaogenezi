@@ -380,16 +380,23 @@ export function ConectaVagasView({ resultadoInicial }: { resultadoInicial: Vagas
 
       {resultado.vagas.length === 0 ? (
         <Card>
-          <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            Nenhuma vaga disponível no momento.
+          <CardContent className="text-muted-foreground flex flex-col gap-1 py-10 text-center text-sm">
+            <p>Nenhuma vaga disponível no momento.</p>
+            <p>As empresas estão sempre atualizando suas oportunidades.</p>
+            <p>Mantenha seu perfil atualizado para ser encontrado!</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          {resultado.vagas.map((vaga) => (
-            <VagaCard key={vaga.id} vaga={vaga} />
-          ))}
-        </div>
+        <>
+          <p className="text-muted-foreground text-sm">
+            {resultado.total} vaga{resultado.total === 1 ? "" : "s"} disponível{resultado.total === 1 ? "" : "eis"}
+          </p>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            {resultado.vagas.map((vaga) => (
+              <VagaCard key={vaga.id} vaga={vaga} />
+            ))}
+          </div>
+        </>
       )}
 
       <Paginacao
