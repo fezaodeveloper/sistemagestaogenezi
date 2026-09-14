@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarEmail, resendConfigurado } from "@/lib/resend/client";
+import { resendConfigurado } from "@/lib/resend/client";
+import { enviarPremioDigital } from "@/lib/resend/emails";
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
 
@@ -60,11 +61,7 @@ export async function enviarEmailEntregaPremio(
     }
   }
 
-  const enviado = await enviarEmail({
-    to: alunoEmail,
-    subject: `🎁 Seu prêmio chegou! ${premio.nome}`,
-    html: corpoEmail,
-  });
+  const enviado = await enviarPremioDigital(alunoEmail, nomeAluno, premio.nome, corpoEmail);
 
   await admin
     .from("entregas_premios")

@@ -1,8 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
-import { enviarEmail, resendConfigurado } from "@/lib/resend/client";
+import { enviarAcessoConecta } from "@/lib/resend/emails";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
+const APP_URL = "https://sistemagestaogenezi.vercel.app";
 
 // Endpoint SEPARADO do webhook financeiro (src/app/api/webhooks/asaas/route.ts,
 // REGRA da tarefa) — Gênezi Conecta cobra por assinatura recorrente, não por
@@ -30,36 +31,36 @@ type AsaasConectaWebhookPayload = {
 // engolida. O candidato nunca soube a senha temporária gerada no cadastro
 // (REGRA da tarefa) — este link de recovery é a única forma dele criar a
 // própria senha e conseguir entrar em /entrar depois.
+//
+// O link enviado por email é construído a partir de hashed_token, NÃO do
+// action_link cru devolvido por generateLink: action_link aponta pro
+// endpoint hospedado do próprio Supabase (auth/v1/verify), que verifica o
+// token e redireciona de volta com os tokens de sessão no FRAGMENTO da URL
+// (#access_token=...) — invisível pro nosso /auth/callback, que é um Route
+// Handler server-side (nunca recebe fragmento). Construindo o link direto
+// pro nosso /auth/callback com token_hash+type na query string, o
+// verifyOtp de lá funciona de verdade — mesmo padrão que o próprio Supabase
+// documenta pra quem envia o email de recovery por conta própria (não pelo
+// SMTP integrado dele).
 async function enviarLinkAcessoConecta(
   supabase: ReturnType<typeof createAdminClient>,
   perfil: { nome: string | null; email: string | null; plano: string | null },
 ): Promise<void> {
-  if (!perfil.email || !resendConfigurado()) return;
+  if (!perfil.email) return;
 
   try {
     const { data: linkData } = await supabase.auth.admin.generateLink({
       type: "recovery",
       email: perfil.email,
+      options: { redirectTo: `${APP_URL}/conecta/criar-senha` },
     });
-    const recoveryLink = linkData?.properties?.action_link;
-    if (!recoveryLink) return;
 
-    await enviarEmail({
-      to: perfil.email,
-      subject: "🎉 Gênezi Conecta — Seu acesso está pronto!",
-      html: `
-        <h2>Pagamento confirmado!</h2>
-        <p>Olá ${perfil.nome ?? "candidato"}! Seu plano ${perfil.plano ?? "—"} foi ativado.</p>
-        <p>Clique no botão abaixo para criar sua senha e acessar o portal de empregos:</p>
-        <p>
-          <a href="${recoveryLink}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">
-            Criar minha senha →
-          </a>
-        </p>
-        <p>O link expira em 24 horas.</p>
-        <p>Após criar a senha, acesse: sistemagestaogenezi.vercel.app/entrar</p>
-      `,
-    });
+    const hashedToken = linkData?.properties?.hashed_token;
+    if (!hashedToken) return;
+
+    const recoveryLink = `${APP_URL}/auth/callback?token_hash=${hashedToken}&type=recovery`;
+
+    await enviarAcessoConecta(perfil.email, perfil.nome ?? "candidato", recoveryLink, perfil.plano ?? "—");
   } catch {
     // Best-effort — ver comentário acima.
   }

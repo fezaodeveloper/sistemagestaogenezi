@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enviarEmail, resendConfigurado } from "@/lib/resend/client";
+import { enviarBoasVindas } from "@/lib/resend/emails";
 import {
   criarAssinaturaConecta,
   criarClienteAsaasConecta,
@@ -162,25 +162,7 @@ export async function cadastrarCandidatoExterno(
   }
 
   // Best-effort — o cadastro já foi concluído com sucesso acima.
-  if (resendConfigurado()) {
-    try {
-      await enviarEmail({
-        to: data.email,
-        subject: "Gênezi Conecta — Seu acesso ao portal de empregos",
-        html: `
-          <p>Olá, ${data.nome}!</p>
-          <p>Seu cadastro no Gênezi Conecta (plano ${planoInfo.label}) foi recebido.</p>
-          <p>Assim que seu pagamento for confirmado, seu perfil será ativado automaticamente.</p>
-          <p><strong>Seus dados de acesso:</strong><br>
-          E-mail: ${data.email}<br>
-          Senha temporária: ${senhaTemporaria}</p>
-          <p>Acesse em <a href="https://sistemagestaogenezi.vercel.app/entrar">sistemagestaogenezi.vercel.app/entrar</a> e troque sua senha no primeiro acesso.</p>
-        `,
-      });
-    } catch {
-      // Best-effort — ver comentário acima.
-    }
-  }
+  await enviarBoasVindas(data.email, data.nome, senhaTemporaria);
 
   redirect(
     paymentId
