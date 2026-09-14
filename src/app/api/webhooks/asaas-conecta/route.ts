@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { enviarEmail, resendConfigurado } from "@/lib/resend/client";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 
@@ -23,6 +24,47 @@ type AsaasConectaWebhookPayload = {
   };
 };
 
+// Best-effort de verdade: nunca deve impedir a ativação do perfil (que já
+// aconteceu com sucesso antes desta chamada) — qualquer falha aqui (Resend
+// não configurado, generateLink com erro, e-mail sem match) só é
+// engolida. O candidato nunca soube a senha temporária gerada no cadastro
+// (REGRA da tarefa) — este link de recovery é a única forma dele criar a
+// própria senha e conseguir entrar em /entrar depois.
+async function enviarLinkAcessoConecta(
+  supabase: ReturnType<typeof createAdminClient>,
+  perfil: { nome: string | null; email: string | null; plano: string | null },
+): Promise<void> {
+  if (!perfil.email || !resendConfigurado()) return;
+
+  try {
+    const { data: linkData } = await supabase.auth.admin.generateLink({
+      type: "recovery",
+      email: perfil.email,
+    });
+    const recoveryLink = linkData?.properties?.action_link;
+    if (!recoveryLink) return;
+
+    await enviarEmail({
+      to: perfil.email,
+      subject: "🎉 Gênezi Conecta — Seu acesso está pronto!",
+      html: `
+        <h2>Pagamento confirmado!</h2>
+        <p>Olá ${perfil.nome ?? "candidato"}! Seu plano ${perfil.plano ?? "—"} foi ativado.</p>
+        <p>Clique no botão abaixo para criar sua senha e acessar o portal de empregos:</p>
+        <p>
+          <a href="${recoveryLink}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;">
+            Criar minha senha →
+          </a>
+        </p>
+        <p>O link expira em 24 horas.</p>
+        <p>Após criar a senha, acesse: sistemagestaogenezi.vercel.app/entrar</p>
+      `,
+    });
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+}
+
 async function processarEvento(
   supabase: ReturnType<typeof createAdminClient>,
   payload: AsaasConectaWebhookPayload,
@@ -37,7 +79,7 @@ async function processarEvento(
         .from("perfis_conecta")
         .update({ esta_ativo: true, visivel: true })
         .eq("asaas_subscription_id", subscriptionId)
-        .select("nome, plano")
+        .select("nome, email, plano")
         .maybeSingle();
 
       if (error) return "Não foi possível ativar o perfil do candidato.";
@@ -53,6 +95,8 @@ async function processarEvento(
         } catch {
           // Best-effort — ver comentário acima.
         }
+
+        await enviarLinkAcessoConecta(supabase, perfil);
       }
 
       return null;
