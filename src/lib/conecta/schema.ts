@@ -315,7 +315,14 @@ export const candidatoExternoCadastroSchema = z.object({
     .trim()
     .min(1, { error: "Informe seu WhatsApp." })
     .max(30),
-  cpf: z.string().trim().max(20).optional(),
+  // Obrigatório: exigido pelo Asaas para criar o cliente/assinatura
+  // (criarClienteAsaasConecta). Mínimo 11 dígitos porque o campo guarda a
+  // máscara XXX.XXX.XXX-XX (11 dígitos + 3 pontuações).
+  cpf: z
+    .string({ error: "Informe o CPF." })
+    .trim()
+    .min(11, { error: "Informe o CPF." })
+    .max(20),
   cidade: z.string().trim().max(100).optional(),
   estado: z.string().trim().max(2).optional(),
   plano: z.enum(PLANOS_CONECTA, { error: "Escolha um plano." }),

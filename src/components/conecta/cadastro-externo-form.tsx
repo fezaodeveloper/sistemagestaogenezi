@@ -117,13 +117,14 @@ export function ConectaCadastroExternoForm() {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cpf">CPF (opcional, para emissão de nota)</Label>
+                <Label htmlFor="cpf">CPF *</Label>
                 <Input
                   id="cpf"
                   name="cpf"
                   placeholder="000.000.000-00"
                   value={cpf}
                   onChange={(e) => setCpf(formatCpf(e.target.value))}
+                  required
                 />
               </div>
               <div className="flex flex-col gap-2">
