@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import {
   adicionarCidade,
@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -39,8 +38,23 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Paginacao } from "@/components/ui/paginacao";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+const LIMITE = 20;
+
+// Sergipe antes de Alagoas (mesma ordem já usada no seed/agrupamento
+// anterior) — não é ordem alfabética de estado, por isso um mapa fixo em
+// vez de localeCompare direto em cidade.estado.
+const ESTADO_ORDEM: Record<CidadeEstado, number> = { SE: 0, AL: 1 };
+
+const ESTADO_FILTRO_TODOS = "todos";
+const ESTADO_FILTRO_ITEMS: Record<string, string> = {
+  [ESTADO_FILTRO_TODOS]: "Todos",
+  ...Object.fromEntries(CIDADE_ESTADOS.map((estado) => [estado, `${CIDADE_ESTADO_LABELS[estado]} (${estado})`])),
+};
 
 const ESTADO_ITEMS = Object.fromEntries(CIDADE_ESTADOS.map((estado) => [estado, CIDADE_ESTADO_LABELS[estado]]));
 
@@ -172,9 +186,8 @@ function ExcluirCidadeButton({ cidade, onExcluida }: { cidade: CidadeConecta; on
     >
       <AlertDialogTrigger
         render={
-          <Button type="button" variant="outline" size="sm" className="text-destructive">
+          <Button type="button" variant="ghost" size="sm" className="text-destructive" title="Excluir cidade">
             <Trash2 className="size-4" />
-            Excluir
           </Button>
         }
       />
@@ -220,7 +233,12 @@ function ExcluirCidadeButton({ cidade, onExcluida }: { cidade: CidadeConecta; on
 
 export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: CidadeConecta[] }) {
   const [cidades, setCidades] = useState(cidadesIniciais);
+  const [busca, setBusca] = useState("");
+  const [buscaDebounced, setBuscaDebounced] = useState("");
+  const [estadoFiltro, setEstadoFiltro] = useState(ESTADO_FILTRO_TODOS);
+  const [pagina, setPagina] = useState(1);
   const [, startTransition] = useTransition();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function recarregar() {
     startTransition(async () => {
@@ -229,51 +247,103 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
     });
   }
 
-  const gruposPorEstado = CIDADE_ESTADOS.map((estado) => ({
-    estado,
-    cidades: cidades.filter((cidade) => cidade.estado === estado),
-  }));
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setBuscaDebounced(valor);
+      setPagina(1);
+    }, 300);
+  }
+
+  function handleEstadoChange(valor: string) {
+    setEstadoFiltro(valor);
+    setPagina(1);
+  }
+
+  // Busca e filtro são 100% client-side (REGRA da tarefa) — a lista
+  // completa já vem carregada de getCidadesAdmin, sem paginação no banco.
+  const cidadesFiltradas = useMemo(() => {
+    const termo = buscaDebounced.trim().toLowerCase();
+    return cidades
+      .filter((cidade) => {
+        if (estadoFiltro !== ESTADO_FILTRO_TODOS && cidade.estado !== estadoFiltro) return false;
+        if (termo && !cidade.nome.toLowerCase().includes(termo)) return false;
+        return true;
+      })
+      .sort((a, b) => ESTADO_ORDEM[a.estado] - ESTADO_ORDEM[b.estado] || a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [cidades, buscaDebounced, estadoFiltro]);
+
+  const totalPaginas = Math.max(1, Math.ceil(cidadesFiltradas.length / LIMITE));
+  const offset = (pagina - 1) * LIMITE;
+  const cidadesPagina = cidadesFiltradas.slice(offset, offset + LIMITE);
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            value={busca}
+            onChange={(e) => handleBuscaChange(e.target.value)}
+            placeholder="Buscar por nome da cidade..."
+            className="max-w-sm"
+          />
+          <Select items={ESTADO_FILTRO_ITEMS} value={estadoFiltro} onValueChange={(v) => handleEstadoChange(v ?? ESTADO_FILTRO_TODOS)}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(ESTADO_FILTRO_ITEMS).map(([valor, label]) => (
+                <SelectItem key={valor} value={valor}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <AdicionarCidadeDialog onAdicionada={recarregar} />
       </div>
 
-      {cidades.length === 0 ? (
-        <Card>
-          <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            Nenhuma cidade cadastrada.
-          </CardContent>
-        </Card>
+      {cidadesFiltradas.length === 0 ? (
+        <p className="text-muted-foreground py-10 text-center text-sm">
+          {cidades.length === 0 ? "Nenhuma cidade cadastrada." : "Nenhuma cidade encontrada com os filtros aplicados."}
+        </p>
       ) : (
-        <div className="flex flex-col gap-6">
-          {gruposPorEstado.map(
-            ({ estado, cidades: lista }) =>
-              lista.length > 0 && (
-                <div key={estado} className="flex flex-col gap-2">
-                  <h2 className="text-sm font-semibold">{CIDADE_ESTADO_LABELS[estado]}</h2>
-                  <div className="flex flex-col gap-2">
-                    {lista.map((cidade) => (
-                      <Card key={cidade.id}>
-                        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className={CIDADE_ESTADO_BADGE_CLASS[cidade.estado]}>{cidade.estado}</Badge>
-                            <span className="font-medium">{cidade.nome}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <ToggleAtivaSwitch cidade={cidade} onAtualizada={recarregar} />
-                            <ExcluirCidadeButton cidade={cidade} onExcluida={recarregar} />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              ),
-          )}
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Cidade</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Excluir</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {cidadesPagina.map((cidade) => (
+              <TableRow key={cidade.id}>
+                <TableCell className="font-medium">{cidade.nome}</TableCell>
+                <TableCell>
+                  <Badge className={CIDADE_ESTADO_BADGE_CLASS[cidade.estado]}>{cidade.estado}</Badge>
+                </TableCell>
+                <TableCell>
+                  <ToggleAtivaSwitch cidade={cidade} onAtualizada={recarregar} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <ExcluirCidadeButton cidade={cidade} onExcluida={recarregar} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
+
+      <Paginacao
+        paginaAtual={pagina}
+        totalPaginas={totalPaginas}
+        totalRegistros={cidadesFiltradas.length}
+        limite={LIMITE}
+        onNavigate={(novaPagina) => setPagina(novaPagina)}
+      />
     </div>
   );
 }
