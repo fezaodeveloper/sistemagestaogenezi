@@ -4,7 +4,12 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2, ExternalLink, GraduationCap, MessageCircle, Search } from "lucide-react";
-import { VAGA_MODALIDADE_LABELS, VAGA_TIPO_LABELS, type VagaConectaComEmpresa } from "@/lib/conecta/schema";
+import {
+  VAGA_MODALIDADE_LABELS,
+  VAGA_TIPO_LABELS,
+  type CidadeConecta,
+  type VagaConectaComEmpresa,
+} from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,12 +23,22 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const TODOS = "todos";
 const TODAS = "todas";
 const TIPO_ITEMS: Record<string, string> = { [TODOS]: "Todos", ...VAGA_TIPO_LABELS };
 const MODALIDADE_ITEMS: Record<string, string> = { [TODAS]: "Todas", ...VAGA_MODALIDADE_LABELS };
+
+const CIDADES_DESTAQUE = ["Propriá", "Porto Real do Colégio"] as const;
 
 function formatSalario(vaga: VagaConectaComEmpresa): string {
   if (vaga.salario_oculto) return "A combinar";
@@ -224,6 +239,7 @@ export function ConectaVagasPublicasView({
   paginaAtual,
   totalPaginas,
   limite,
+  cidadesAprovadas,
   filtrosAtuais,
 }: {
   logoUrl: string | null;
@@ -232,12 +248,20 @@ export function ConectaVagasPublicasView({
   paginaAtual: number;
   totalPaginas: number;
   limite: number;
+  cidadesAprovadas: CidadeConecta[];
   filtrosAtuais: { q: string; tipo: string; modalidade: string; cidade: string };
 }) {
   const router = useRouter();
   const [busca, setBusca] = useState(filtrosAtuais.q);
-  const [cidade, setCidade] = useState(filtrosAtuais.cidade);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const TODAS_CIDADES = "todas-cidades";
+  const CIDADE_ITEMS: Record<string, string> = {
+    [TODAS_CIDADES]: "Todas as cidades",
+    ...Object.fromEntries(cidadesAprovadas.map((c) => [c.nome, c.nome])),
+  };
+  const cidadesSE = cidadesAprovadas.filter((c) => c.estado === "SE");
+  const cidadesAL = cidadesAprovadas.filter((c) => c.estado === "AL");
 
   function navegar(overrides: Partial<{ q: string; tipo: string; modalidade: string; cidade: string }>) {
     const proximo = { ...filtrosAtuais, ...overrides };
@@ -256,12 +280,6 @@ export function ConectaVagasPublicasView({
     debounceRef.current = setTimeout(() => navegar({ q: valor }), 400);
   }
 
-  function handleCidadeChange(valor: string) {
-    setCidade(valor);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => navegar({ cidade: valor }), 400);
-  }
-
   const searchParamsAtuais: Record<string, string> = {};
   if (filtrosAtuais.q) searchParamsAtuais.q = filtrosAtuais.q;
   if (filtrosAtuais.tipo) searchParamsAtuais.tipo = filtrosAtuais.tipo;
@@ -275,7 +293,7 @@ export function ConectaVagasPublicasView({
           <LogoGenezi logoUrl={logoUrl} />
           <h1 className="text-2xl font-bold">Gênezi Conecta — Portal de Empregos</h1>
           <p className="text-muted-foreground text-sm">
-            Vagas de emprego e estágio para a região de Propriá/SE
+            Vagas de emprego e estágio em Propriá-SE, Porto Real do Colégio-AL e Região
           </p>
         </div>
 
@@ -307,6 +325,32 @@ export function ConectaVagasPublicasView({
         </div>
 
         <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap justify-center gap-2">
+            {CIDADES_DESTAQUE.map((nomeCidade) => {
+              const cidade = cidadesAprovadas.find((c) => c.nome === nomeCidade);
+              if (!cidade) return null;
+              return (
+                <Button
+                  key={cidade.id}
+                  type="button"
+                  variant={filtrosAtuais.cidade === cidade.nome ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => navegar({ cidade: filtrosAtuais.cidade === cidade.nome ? "" : cidade.nome })}
+                >
+                  📍 {cidade.nome}-{cidade.estado}
+                </Button>
+              );
+            })}
+            <Button
+              type="button"
+              variant={filtrosAtuais.cidade === "" ? "default" : "outline"}
+              size="sm"
+              onClick={() => navegar({ cidade: "" })}
+            >
+              📍 Região
+            </Button>
+          </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="relative">
               <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
@@ -349,7 +393,34 @@ export function ConectaVagasPublicasView({
                 ))}
               </SelectContent>
             </Select>
-            <Input value={cidade} onChange={(e) => handleCidadeChange(e.target.value)} placeholder="Cidade" />
+            <Select
+              items={CIDADE_ITEMS}
+              value={filtrosAtuais.cidade || TODAS_CIDADES}
+              onValueChange={(value) => navegar({ cidade: value && value !== TODAS_CIDADES ? value : "" })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODAS_CIDADES}>Todas as cidades</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Sergipe</SelectLabel>
+                  {cidadesSE.map((c) => (
+                    <SelectItem key={c.id} value={c.nome}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>Alagoas</SelectLabel>
+                  {cidadesAL.map((c) => (
+                    <SelectItem key={c.id} value={c.nome}>
+                      {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
 
           {vagas.length === 0 ? (

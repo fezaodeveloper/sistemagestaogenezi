@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
   AlertTriangle, Award, Banknote, BarChart2, Briefcase, Building2, CalendarDays, CalendarRange, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MessageCircle, MessagesSquare, Monitor, Package, PlayCircle, PlusCircle, Presentation, Receipt,
+  LayoutDashboard, MapPin, MessageCircle, MessagesSquare, Monitor, Package, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Tags, Target, TrendingDown, Truck, UserPlus, Users, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -41,6 +41,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/conecta", label: "Empresas", icon: Building2 },
     { href: "/admin/conecta/vagas", label: "Vagas", icon: Briefcase },
     { href: "/admin/conecta/candidatos", label: "Candidatos", icon: Users },
+    { href: "/admin/conecta/cidades", label: "Cidades", icon: MapPin },
   ]},
   { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
     { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },

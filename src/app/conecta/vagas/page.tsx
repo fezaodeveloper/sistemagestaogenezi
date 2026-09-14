@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { getVagasPublicasConecta } from "@/lib/conecta/publico";
+import { getCidadesAprovadas, getVagasPublicasConecta } from "@/lib/conecta/publico";
 import { VAGA_MODALIDADES, VAGA_TIPOS, type VagaModalidade, type VagaTipo } from "@/lib/conecta/schema";
 import { ConectaVagasPublicasView } from "@/components/conecta/vagas-publicas-view";
 
@@ -38,7 +38,7 @@ export default async function ConectaVagasPublicasPage({
   const tipo = paramValido<VagaTipo>(VAGA_TIPOS, params.tipo);
   const modalidade = paramValido<VagaModalidade>(VAGA_MODALIDADES, params.modalidade);
 
-  const [supabase, resultado] = await Promise.all([
+  const [supabase, resultado, cidadesAprovadas] = await Promise.all([
     createClient(),
     getVagasPublicasConecta({
       query: params.q,
@@ -48,6 +48,7 @@ export default async function ConectaVagasPublicasPage({
       page: paginaAtual,
       limit: LIMITE,
     }),
+    getCidadesAprovadas(),
   ]);
 
   const { data: configuracoes } = await supabase
@@ -66,6 +67,7 @@ export default async function ConectaVagasPublicasPage({
       paginaAtual={paginaAtual}
       totalPaginas={totalPaginas}
       limite={LIMITE}
+      cidadesAprovadas={cidadesAprovadas}
       filtrosAtuais={{
         q: params.q ?? "",
         tipo: tipo ?? "",

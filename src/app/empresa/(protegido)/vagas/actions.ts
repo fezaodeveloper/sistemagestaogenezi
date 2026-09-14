@@ -5,9 +5,30 @@ import { requireEmpresa } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { getEmpresaPorProfileId, getVagasDaEmpresa } from "@/lib/conecta/empresas";
-import { VAGA_MODALIDADE_LABELS, vagaFormSchema, type VagaConecta, type VagaStatus } from "@/lib/conecta/schema";
+import { getCidadesAprovadas as getCidadesAprovadasBase } from "@/lib/conecta/publico";
+import {
+  VAGA_MODALIDADE_LABELS,
+  vagaFormSchema,
+  type CidadeConecta,
+  type VagaConecta,
+  type VagaStatus,
+} from "@/lib/conecta/schema";
 
 type VagaActionResult = { success: true } | { error: string };
+
+export async function getCidadesAprovadas(): Promise<CidadeConecta[]> {
+  await requireEmpresa();
+  return getCidadesAprovadasBase();
+}
+
+// Segunda camada de validação além do Select no form (que já só oferece
+// cidades aprovadas) — o form é reaproveitável e o POST direto na Server
+// Action não passa pelo <Select>, então sem isso uma empresa poderia
+// forjar um cidade/estado fora da lista aprovada (REGRA da tarefa).
+async function validarCidadeAprovada(cidade: string, estado: string): Promise<boolean> {
+  const cidades = await getCidadesAprovadasBase();
+  return cidades.some((c) => c.nome === cidade && c.estado === estado);
+}
 
 function parseVagaForm(formData: FormData) {
   return vagaFormSchema.safeParse({
@@ -42,13 +63,17 @@ export async function criarVaga(formData: FormData): Promise<VagaActionResult> {
     return { error: parsed.error.issues[0]?.message ?? "Verifique os dados da vaga." };
   }
 
+  const data = parsed.data;
+  if (!(await validarCidadeAprovada(data.cidade, data.estado))) {
+    return { error: "Cidade não aprovada para cadastro de vagas." };
+  }
+
   const supabase = await createClient();
   const empresa = await getEmpresaPorProfileId(supabase, user.id);
   if (!empresa) {
     return { error: "Não foi possível identificar sua empresa." };
   }
 
-  const data = parsed.data;
   const { error } = await supabase.from("vagas_conecta").insert({
     empresa_id: empresa.id,
     titulo: data.titulo,
@@ -99,6 +124,10 @@ export async function atualizarVaga(id: string, formData: FormData): Promise<Vag
   }
 
   const data = parsed.data;
+  if (!(await validarCidadeAprovada(data.cidade, data.estado))) {
+    return { error: "Cidade não aprovada para cadastro de vagas." };
+  }
+
   const supabase = await createClient();
   // Sem checagem manual de "essa vaga é da minha empresa" — a policy
   // "Empresa gerencia proprias vagas" (RLS) já escopa o UPDATE.

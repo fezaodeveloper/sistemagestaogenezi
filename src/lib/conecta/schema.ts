@@ -398,6 +398,35 @@ export type AlunoVisivelConecta = {
 export type AlunosVisiveisFiltro = { query?: string; page?: number; limit?: number };
 export type AlunosVisiveisResultado = { alunos: AlunoVisivelConecta[]; total: number };
 
+// ===== Cidades aprovadas (Etapa 7 — restringir cadastro de vaga a SE/AL) =====
+
+export const CIDADE_ESTADOS = ["SE", "AL"] as const;
+export type CidadeEstado = (typeof CIDADE_ESTADOS)[number];
+export const CIDADE_ESTADO_LABELS: Record<CidadeEstado, string> = { SE: "Sergipe", AL: "Alagoas" };
+export const CIDADE_ESTADO_BADGE_CLASS: Record<CidadeEstado, string> = {
+  SE: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  AL: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+};
+
+export type CidadeConecta = {
+  id: string;
+  nome: string;
+  estado: CidadeEstado;
+  ativa: boolean;
+  ordem: number;
+  created_at: string;
+};
+
+export const cidadeConectaSchema = z.object({
+  nome: z
+    .string({ error: "Informe o nome da cidade." })
+    .trim()
+    .min(1, { error: "Informe o nome da cidade." })
+    .max(100),
+  estado: z.enum(CIDADE_ESTADOS, { error: "Selecione o estado." }),
+});
+export type CidadeConectaValues = z.infer<typeof cidadeConectaSchema>;
+
 export const vagaFormSchema = z.object({
   titulo: z
     .string({ error: "Informe o título da vaga." })

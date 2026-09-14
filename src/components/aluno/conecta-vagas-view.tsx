@@ -8,6 +8,7 @@ import {
   VAGA_MODALIDADES,
   VAGA_TIPO_LABELS,
   VAGA_TIPOS,
+  type CidadeConecta,
   type VagaConectaComEmpresa,
   type VagaModalidade,
   type VagaTipo,
@@ -26,12 +27,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const LIMITE = 12;
 
 const TIPO_FILTRO_TODOS = "todos";
 const MODALIDADE_FILTRO_TODAS = "todas";
+const CIDADE_FILTRO_TODAS = "todas-cidades";
 
 const TIPO_FILTRO_ITEMS: Record<string, string> = {
   [TIPO_FILTRO_TODOS]: "Todos",
@@ -272,15 +282,28 @@ function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
   );
 }
 
-export function ConectaVagasView({ resultadoInicial }: { resultadoInicial: VagasConectaResultado }) {
+export function ConectaVagasView({
+  resultadoInicial,
+  cidadesAprovadas,
+}: {
+  resultadoInicial: VagasConectaResultado;
+  cidadesAprovadas: CidadeConecta[];
+}) {
   const [resultado, setResultado] = useState(resultadoInicial);
   const [busca, setBusca] = useState("");
   const [tipo, setTipo] = useState(TIPO_FILTRO_TODOS);
   const [modalidade, setModalidade] = useState(MODALIDADE_FILTRO_TODAS);
-  const [cidade, setCidade] = useState("");
+  const [cidade, setCidade] = useState(CIDADE_FILTRO_TODAS);
   const [pagina, setPagina] = useState(1);
   const [, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cidadesSE = cidadesAprovadas.filter((c) => c.estado === "SE");
+  const cidadesAL = cidadesAprovadas.filter((c) => c.estado === "AL");
+  const CIDADE_FILTRO_ITEMS: Record<string, string> = {
+    [CIDADE_FILTRO_TODAS]: "Todas as cidades",
+    ...Object.fromEntries(cidadesAprovadas.map((c) => [c.nome, c.nome])),
+  };
 
   function carregar(overrides: {
     query?: string;
@@ -300,7 +323,7 @@ export function ConectaVagasView({ resultadoInicial }: { resultadoInicial: Vagas
         query: novaBusca.trim() || undefined,
         tipo: novoTipo === TIPO_FILTRO_TODOS ? undefined : (novoTipo as VagaTipo),
         modalidade: novaModalidade === MODALIDADE_FILTRO_TODAS ? undefined : (novaModalidade as VagaModalidade),
-        cidade: novaCidade.trim() || undefined,
+        cidade: novaCidade === CIDADE_FILTRO_TODAS ? undefined : novaCidade,
         page: novaPagina,
         limit: LIMITE,
       });
@@ -317,12 +340,6 @@ export function ConectaVagasView({ resultadoInicial }: { resultadoInicial: Vagas
     setBusca(valor);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => carregar({ query: valor, page: 1 }), 300);
-  }
-
-  function handleCidadeChange(valor: string) {
-    setCidade(valor);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => carregar({ cidade: valor, page: 1 }), 300);
   }
 
   const totalPaginas = Math.max(1, Math.ceil(resultado.total / LIMITE));
@@ -371,11 +388,34 @@ export function ConectaVagasView({ resultadoInicial }: { resultadoInicial: Vagas
             ))}
           </SelectContent>
         </Select>
-        <Input
+        <Select
+          items={CIDADE_FILTRO_ITEMS}
           value={cidade}
-          onChange={(e) => handleCidadeChange(e.target.value)}
-          placeholder="Cidade"
-        />
+          onValueChange={(valor) => carregar({ cidade: valor ?? CIDADE_FILTRO_TODAS, page: 1 })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={CIDADE_FILTRO_TODAS}>Todas as cidades</SelectItem>
+            <SelectGroup>
+              <SelectLabel>Sergipe</SelectLabel>
+              {cidadesSE.map((c) => (
+                <SelectItem key={c.id} value={c.nome}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel>Alagoas</SelectLabel>
+              {cidadesAL.map((c) => (
+                <SelectItem key={c.id} value={c.nome}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
 
       {resultado.vagas.length === 0 ? (

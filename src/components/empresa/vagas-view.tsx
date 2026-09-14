@@ -14,6 +14,7 @@ import {
   VAGA_MODALIDADES,
   VAGA_TIPO_LABELS,
   VAGA_TIPOS,
+  type CidadeConecta,
   type VagaConecta,
 } from "@/lib/conecta/schema";
 import {
@@ -40,7 +41,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -49,8 +58,14 @@ const MODALIDADE_ITEMS = Object.fromEntries(
   VAGA_MODALIDADES.map((modalidade) => [modalidade, VAGA_MODALIDADE_LABELS[modalidade]]),
 );
 
-function VagaFormFields({ vaga }: { vaga?: VagaConecta }) {
+function VagaFormFields({ vaga, cidades }: { vaga?: VagaConecta; cidades: CidadeConecta[] }) {
   const [salarioOculto, setSalarioOculto] = useState(vaga?.salario_oculto ?? false);
+  const cidadeInicial = vaga ? cidades.find((c) => c.nome === vaga.cidade && c.estado === vaga.estado) : undefined;
+  const [cidadeId, setCidadeId] = useState(cidadeInicial?.id ?? "");
+  const cidadeSelecionada = cidades.find((c) => c.id === cidadeId);
+  const cidadesSE = cidades.filter((c) => c.estado === "SE");
+  const cidadesAL = cidades.filter((c) => c.estado === "AL");
+  const CIDADE_ITEMS = Object.fromEntries(cidades.map((c) => [c.id, `${c.nome}/${c.estado}`]));
 
   return (
     <div className="flex flex-col gap-4">
@@ -90,15 +105,37 @@ function VagaFormFields({ vaga }: { vaga?: VagaConecta }) {
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="cidade">Cidade</Label>
-          <Input id="cidade" name="cidade" defaultValue={vaga?.cidade} required />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="estado">Estado</Label>
-          <Input id="estado" name="estado" maxLength={2} defaultValue={vaga?.estado} required />
-        </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="cidade_id">Cidade</Label>
+        <Select
+          items={CIDADE_ITEMS}
+          value={cidadeId}
+          onValueChange={(value) => setCidadeId(value ?? "")}
+        >
+          <SelectTrigger id="cidade_id" className="w-full">
+            <SelectValue placeholder="Selecione a cidade" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Sergipe</SelectLabel>
+              {cidadesSE.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel>Alagoas</SelectLabel>
+              {cidadesAL.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <input type="hidden" name="cidade" value={cidadeSelecionada?.nome ?? ""} />
+        <input type="hidden" name="estado" value={cidadeSelecionada?.estado ?? ""} />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="descricao">Descrição da vaga</Label>
@@ -160,7 +197,7 @@ function VagaFormFields({ vaga }: { vaga?: VagaConecta }) {
   );
 }
 
-function NovaVagaDialog({ onSalvo }: { onSalvo: () => void }) {
+function NovaVagaDialog({ onSalvo, cidades }: { onSalvo: () => void; cidades: CidadeConecta[] }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -199,7 +236,7 @@ function NovaVagaDialog({ onSalvo }: { onSalvo: () => void }) {
           <DialogTitle>Publicar nova vaga</DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
-          <VagaFormFields />
+          <VagaFormFields cidades={cidades} />
           {error && (
             <p role="alert" className="text-destructive text-sm">
               {error}
@@ -216,7 +253,15 @@ function NovaVagaDialog({ onSalvo }: { onSalvo: () => void }) {
   );
 }
 
-function EditarVagaDialog({ vaga, onSalvo }: { vaga: VagaConecta; onSalvo: () => void }) {
+function EditarVagaDialog({
+  vaga,
+  onSalvo,
+  cidades,
+}: {
+  vaga: VagaConecta;
+  onSalvo: () => void;
+  cidades: CidadeConecta[];
+}) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -248,7 +293,7 @@ function EditarVagaDialog({ vaga, onSalvo }: { vaga: VagaConecta; onSalvo: () =>
           <DialogTitle>Editar vaga</DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
-          <VagaFormFields vaga={vaga} />
+          <VagaFormFields vaga={vaga} cidades={cidades} />
           {error && (
             <p role="alert" className="text-destructive text-sm">
               {error}
@@ -433,7 +478,15 @@ function ExcluirVagaButton({ vaga, onExcluida }: { vaga: VagaConecta; onExcluida
   );
 }
 
-function VagaCard({ vaga, onAtualizado }: { vaga: VagaConecta; onAtualizado: () => void }) {
+function VagaCard({
+  vaga,
+  onAtualizado,
+  cidades,
+}: {
+  vaga: VagaConecta;
+  onAtualizado: () => void;
+  cidades: CidadeConecta[];
+}) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-2 py-4">
@@ -446,7 +499,7 @@ function VagaCard({ vaga, onAtualizado }: { vaga: VagaConecta; onAtualizado: () 
           {VAGA_TIPO_LABELS[vaga.tipo]}
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
-          <EditarVagaDialog vaga={vaga} onSalvo={onAtualizado} />
+          <EditarVagaDialog vaga={vaga} onSalvo={onAtualizado} cidades={cidades} />
           {vaga.status === "ativa" && (
             <StatusVagaButton
               vaga={vaga}
@@ -488,9 +541,11 @@ function VagaCard({ vaga, onAtualizado }: { vaga: VagaConecta; onAtualizado: () 
 export function VagasView({
   vagasIniciais,
   recarregarAction,
+  cidadesAprovadas,
 }: {
   vagasIniciais: VagaConecta[];
   recarregarAction: () => Promise<VagaConecta[]>;
+  cidadesAprovadas: CidadeConecta[];
 }) {
   const [vagas, setVagas] = useState(vagasIniciais);
   const [, startTransition] = useTransition();
@@ -509,7 +564,7 @@ export function VagasView({
           <h1 className="text-2xl font-semibold">Minhas vagas</h1>
           <p className="text-muted-foreground text-sm">Vagas publicadas pela sua empresa.</p>
         </div>
-        <NovaVagaDialog onSalvo={recarregar} />
+        <NovaVagaDialog onSalvo={recarregar} cidades={cidadesAprovadas} />
       </div>
 
       {vagas.length === 0 ? (
@@ -521,7 +576,7 @@ export function VagasView({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {vagas.map((vaga) => (
-            <VagaCard key={vaga.id} vaga={vaga} onAtualizado={recarregar} />
+            <VagaCard key={vaga.id} vaga={vaga} onAtualizado={recarregar} cidades={cidadesAprovadas} />
           ))}
         </div>
       )}

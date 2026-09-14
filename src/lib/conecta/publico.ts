@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
+  CidadeConecta,
   EmpresaConecta,
   VagaConecta,
   VagaConectaComEmpresa,
@@ -111,6 +112,24 @@ export async function getEmpresaPublicaConecta(empresaId: string): Promise<Empre
     .maybeSingle();
 
   return (data as EmpresaConecta | null) ?? null;
+}
+
+// Lista de cidades onde empresas podem cadastrar vaga (restrição a SE/AL,
+// gerenciada pelo admin em /admin/conecta/cidades). Client admin aqui
+// porque esta função também é chamada pelas páginas públicas
+// (/conecta/vagas) — mesmo quando "anon" já tem grant de select nessa
+// tabela especificamente, manter o mesmo client em todos os call sites
+// evita comportamento diferente por contexto de chamada (REGRA da tarefa).
+export async function getCidadesAprovadas(): Promise<CidadeConecta[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("conecta_cidades")
+    .select("*")
+    .eq("ativa", true)
+    .order("estado", { ascending: true })
+    .order("ordem", { ascending: true });
+
+  return (data as CidadeConecta[] | null) ?? [];
 }
 
 export async function getVagasAtivasDaEmpresaPublica(empresaId: string): Promise<VagaConecta[]> {

@@ -1,14 +1,16 @@
 import { requireRole } from "@/lib/auth/dal";
 import { buscarVagasConecta, getCursosConcluidosAluno, getMeuPerfilConecta } from "@/app/aluno/conecta/actions";
+import { getCidadesAprovadas } from "@/lib/conecta/publico";
 import { AlunoConectaView } from "@/components/aluno/aluno-conecta-view";
 
 export default async function AlunoConectaPage() {
   const user = await requireRole("aluno");
 
-  const [perfil, cursosConcluidos, vagasResultado] = await Promise.all([
+  const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas] = await Promise.all([
     getMeuPerfilConecta(),
     getCursosConcluidosAluno(user.id),
     buscarVagasConecta(),
+    getCidadesAprovadas(),
   ]);
 
   return (
@@ -23,6 +25,7 @@ export default async function AlunoConectaPage() {
         perfilInicial={perfil}
         cursosConcluidos={cursosConcluidos}
         vagasResultadoInicial={vagasResultado}
+        cidadesAprovadas={cidadesAprovadas}
       />
     </div>
   );
