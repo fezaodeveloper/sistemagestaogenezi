@@ -119,9 +119,11 @@ export async function cadastrarCandidatoExterno(
       description: `Gênezi Conecta — Plano ${planoInfo.label}`,
     });
     asaasSubscriptionId = assinatura.id;
-  } catch {
+  } catch (erro) {
     await admin.auth.admin.deleteUser(userId);
-    return { error: "Não foi possível criar a assinatura agora. Tente novamente." };
+    const mensagemErro = erro instanceof Error ? erro.message : JSON.stringify(erro);
+    console.error("[CONECTA ASSINATURA]", mensagemErro);
+    return { error: `Erro ao criar assinatura: ${mensagemErro}` };
   }
 
   const { error: perfilError } = await admin.from("perfis_conecta").insert({
