@@ -8,6 +8,7 @@ import {
   criarAssinaturaConecta,
   criarClienteAsaasConecta,
   cancelarAssinaturaConecta,
+  buscarCobrancasAssinaturaConecta,
 } from "@/lib/asaas/client";
 import { candidatoExternoCadastroSchema, PLANO_CONECTA_INFO } from "@/lib/conecta/schema";
 
@@ -148,6 +149,18 @@ export async function cadastrarCandidatoExterno(
     return { error: "Não foi possível salvar seu cadastro. Tente novamente." };
   }
 
+  // Best-effort — o cadastro já foi concluído com sucesso acima; sem o link
+  // de pagamento o candidato só cai na página de espera sem o atalho
+  // direto, mas a assinatura já existe e ele consegue pagar por outra via
+  // (ex.: e-mail de cobrança que o Asaas envia por conta própria).
+  let paymentId: string | undefined;
+  try {
+    const cobrancas = await buscarCobrancasAssinaturaConecta(asaasSubscriptionId);
+    paymentId = cobrancas[0]?.id;
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+
   // Best-effort — o cadastro já foi concluído com sucesso acima.
   if (resendConfigurado()) {
     try {
@@ -169,5 +182,9 @@ export async function cadastrarCandidatoExterno(
     }
   }
 
-  redirect("/conecta/aguardando-pagamento");
+  redirect(
+    paymentId
+      ? `/conecta/aguardando-pagamento?payment=${encodeURIComponent(paymentId)}`
+      : "/conecta/aguardando-pagamento",
+  );
 }

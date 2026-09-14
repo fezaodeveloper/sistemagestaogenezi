@@ -176,6 +176,7 @@ export async function buscarCobrancaAsaas(asaasPaymentId: string): Promise<{
   status: string;
   value: number;
   dueDate: string;
+  billingType?: string;
   invoiceUrl?: string;
   bankSlipUrl?: string;
   paymentDate?: string;
@@ -197,6 +198,11 @@ export async function criarClienteAsaasConecta(dados: {
   return asaasRequest<{ id: string }>("/customers", "POST", dados);
 }
 
+// invoiceUrl é opcional aqui de propósito: o objeto de assinatura do Asaas
+// não traz o link de pagamento (isso pertence à primeira COBRANÇA gerada a
+// partir dela, buscada separadamente em buscarCobrancasAssinaturaConecta,
+// logo depois da criação) — o campo fica tipado como opcional só pra não
+// quebrar se uma versão futura da API passar a incluir.
 export async function criarAssinaturaConecta(dados: {
   customer: string;
   billingType: "BOLETO" | "PIX" | "CREDIT_CARD" | "UNDEFINED";
@@ -204,8 +210,12 @@ export async function criarAssinaturaConecta(dados: {
   nextDueDate: string;
   cycle: "MONTHLY";
   description: string;
-}): Promise<{ id: string; status: string }> {
-  return asaasRequest<{ id: string; status: string }>("/subscriptions", "POST", dados);
+}): Promise<{ id: string; status: string; invoiceUrl?: string }> {
+  return asaasRequest<{ id: string; status: string; invoiceUrl?: string }>(
+    "/subscriptions",
+    "POST",
+    dados,
+  );
 }
 
 export async function cancelarAssinaturaConecta(subscriptionId: string): Promise<void> {
@@ -216,4 +226,40 @@ export async function buscarStatusAssinaturaConecta(
   subscriptionId: string,
 ): Promise<{ id: string; status: string }> {
   return asaasRequest<{ id: string; status: string }>(`/subscriptions/${subscriptionId}`);
+}
+
+// Cobranças geradas por uma assinatura — a mais recente (primeira da lista,
+// já vem ordenada por dueDate ascendente com a próxima em aberto primeiro)
+// é a que o candidato precisa pagar agora. billingType vem junto pra
+// decidir, na página de espera, se mostra o fluxo de PIX (QR Code) ou só o
+// link/boleto.
+export async function buscarCobrancasAssinaturaConecta(subscriptionId: string): Promise<
+  Array<{
+    id: string;
+    status: string;
+    billingType: string;
+    invoiceUrl: string;
+    bankSlipUrl?: string;
+  }>
+> {
+  const resultado = await asaasRequest<{
+    data: Array<{
+      id: string;
+      status: string;
+      billingType: string;
+      invoiceUrl: string;
+      bankSlipUrl?: string;
+    }>;
+  }>(`/subscriptions/${subscriptionId}/payments`);
+  return resultado.data;
+}
+
+// QR Code Pix de uma cobrança específica — o Asaas não inclui isso na lista
+// de cobranças acima (nem no payload da cobrança em si), é um endpoint à
+// parte. encodedImage já vem em base64 (pronto pra <img src="data:...">),
+// payload é o "copia e cola".
+export async function buscarQrCodePixConecta(
+  paymentId: string,
+): Promise<{ encodedImage: string; payload: string }> {
+  return asaasRequest<{ encodedImage: string; payload: string }>(`/payments/${paymentId}/pixQrCode`);
 }
