@@ -300,6 +300,34 @@ export async function notificarEmpresaCadastro(payload: Record<string, unknown>)
   );
 }
 
+export async function notificarConectaPagamentoConfirmado(
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "GÊNEZI CONECTA — Pagamento Confirmado",
+    [
+      `👤 Candidato: ${texto(payload.nome)}`,
+      `📋 Plano: ${texto(payload.plano)}`,
+      `✅ Perfil ativado automaticamente`,
+    ],
+    "💳",
+  );
+}
+
+export async function notificarConectaAssinaturaCancelada(
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "GÊNEZI CONECTA — Assinatura Cancelada",
+    [
+      `👤 Candidato: ${texto(payload.nome)}`,
+      `📋 Plano: ${texto(payload.plano)}`,
+      `🔒 Perfil ocultado automaticamente`,
+    ],
+    "❌",
+  );
+}
+
 export async function notificarMensagemEnviadaParaEmpresa(
   payload: Record<string, unknown>,
 ): Promise<boolean> {

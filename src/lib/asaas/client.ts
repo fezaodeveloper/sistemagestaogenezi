@@ -182,3 +182,38 @@ export async function buscarCobrancaAsaas(asaasPaymentId: string): Promise<{
 }> {
   return asaasRequest(`/payments/${asaasPaymentId}`);
 }
+
+// ===== ASSINATURAS (Gênezi Conecta — candidatos externos pagos) =====
+// Cobrança recorrente mensal, diferente do resto do financeiro (cobrança
+// avulsa por parcela) — endpoints /customers e /subscriptions próprios do
+// Asaas para esse modelo.
+
+export async function criarClienteAsaasConecta(dados: {
+  name: string;
+  email: string;
+  cpfCnpj?: string;
+  phone?: string;
+}): Promise<{ id: string }> {
+  return asaasRequest<{ id: string }>("/customers", "POST", dados);
+}
+
+export async function criarAssinaturaConecta(dados: {
+  customer: string;
+  billingType: "BOLETO" | "PIX" | "CREDIT_CARD" | "UNDEFINED";
+  value: number;
+  nextDueDate: string;
+  cycle: "MONTHLY";
+  description: string;
+}): Promise<{ id: string; status: string }> {
+  return asaasRequest<{ id: string; status: string }>("/subscriptions", "POST", dados);
+}
+
+export async function cancelarAssinaturaConecta(subscriptionId: string): Promise<void> {
+  await asaasRequest<unknown>(`/subscriptions/${subscriptionId}`, "DELETE");
+}
+
+export async function buscarStatusAssinaturaConecta(
+  subscriptionId: string,
+): Promise<{ id: string; status: string }> {
+  return asaasRequest<{ id: string; status: string }>(`/subscriptions/${subscriptionId}`);
+}

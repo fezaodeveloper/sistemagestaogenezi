@@ -25,6 +25,8 @@ import {
   notificarTermoAceito,
   notificarEmpresaCadastro,
   notificarMensagemEnviadaParaEmpresa,
+  notificarConectaPagamentoConfirmado,
+  notificarConectaAssinaturaCancelada,
 } from "@/lib/automacoes/handlers/telegram";
 import { gerarResumoDiario } from "@/lib/automacoes/handlers/resumo-diario";
 import { gerarRelatorioSemanal } from "@/lib/automacoes/handlers/relatorio-semanal";
@@ -101,6 +103,12 @@ async function executarHandler(tipo: string, payload: EventoPayload): Promise<vo
       return;
     case "conecta.mensagem.enviada":
       await notificarMensagemEnviadaParaEmpresa(payload);
+      return;
+    case "conecta.pagamento.confirmado":
+      await notificarConectaPagamentoConfirmado(payload);
+      return;
+    case "conecta.assinatura.cancelada":
+      await notificarConectaAssinaturaCancelada(payload);
       return;
     case "resumo.diario":
       await gerarResumoDiario();

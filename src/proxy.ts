@@ -30,7 +30,15 @@ export async function proxy(request: NextRequest) {
   // /empresa/login: a rota era "pública" pro fluxo de login, mas também
   // batia no matcher de área protegida "/empresa"). startsWith(rota + "/")
   // cobre eventuais subrotas futuras sem precisar listar cada uma.
-  const ROTAS_PUBLICAS = ["/login", "/entrar", "/empresa/login", "/empresa/cadastro", "/captacao", "/"];
+  const ROTAS_PUBLICAS = [
+    "/login",
+    "/entrar",
+    "/empresa/login",
+    "/empresa/cadastro",
+    "/captacao",
+    "/conecta",
+    "/",
+  ];
   const isRotaPublica = ROTAS_PUBLICAS.some(
     (rota) => pathname === rota || pathname.startsWith(rota + "/"),
   );

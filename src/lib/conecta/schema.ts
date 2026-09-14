@@ -175,8 +175,21 @@ export type PerfilConecta = {
   visivel: boolean;
   tipo: "aluno" | "externo";
   esta_ativo: boolean;
+  plano: PlanoConecta | null;
+  asaas_subscription_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CandidatosExternosFiltro = {
+  query?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type CandidatosExternosResultado = {
+  candidatos: PerfilConecta[];
+  total: number;
 };
 
 // Campos de texto livre do perfil profissional do aluno — visivel (o toggle
@@ -251,6 +264,64 @@ export const empresaCadastroSchema = z.object({
     .min(8, { error: "A senha precisa ter pelo menos 8 caracteres." }),
 });
 export type EmpresaCadastroValues = z.infer<typeof empresaCadastroSchema>;
+
+// Planos pagos do Gênezi Conecta para candidatos externos (não-alunos) —
+// alunos ativos da GÊNEZI têm acesso gratuito (tipo 'aluno'), só externos
+// (tipo 'externo') passam por assinatura recorrente via Asaas.
+export const PLANOS_CONECTA = ["basico", "pro", "premium"] as const;
+export type PlanoConecta = (typeof PLANOS_CONECTA)[number];
+
+export const PLANO_CONECTA_INFO: Record<
+  PlanoConecta,
+  { label: string; valor: number; descricao: string; beneficio: string }
+> = {
+  basico: {
+    label: "Básico",
+    valor: 9.9,
+    descricao: "Você fica visível para empresas",
+    beneficio: "Cancele quando quiser",
+  },
+  pro: {
+    label: "PRO",
+    valor: 29.9,
+    descricao: "Você se qualifica e fica visível",
+    beneficio: "+ 1 curso online por ano",
+  },
+  premium: {
+    label: "PREMIUM",
+    valor: 39.9,
+    descricao: "Você amplia suas qualificações e sua visibilidade profissional",
+    beneficio: "+ 2 cursos online por ano",
+  },
+};
+
+export const FORMAS_PAGAMENTO_CONECTA = ["PIX", "BOLETO", "CREDIT_CARD"] as const;
+export type FormaPagamentoConecta = (typeof FORMAS_PAGAMENTO_CONECTA)[number];
+export const FORMA_PAGAMENTO_CONECTA_LABELS: Record<FormaPagamentoConecta, string> = {
+  PIX: "PIX",
+  BOLETO: "Boleto",
+  CREDIT_CARD: "Cartão de crédito",
+};
+
+export const candidatoExternoCadastroSchema = z.object({
+  nome: z
+    .string({ error: "Informe seu nome completo." })
+    .trim()
+    .min(1, { error: "Informe seu nome completo." })
+    .max(200),
+  email: z.email({ error: "Informe um e-mail válido." }),
+  whatsapp: z
+    .string({ error: "Informe seu WhatsApp." })
+    .trim()
+    .min(1, { error: "Informe seu WhatsApp." })
+    .max(30),
+  cpf: z.string().trim().max(20).optional(),
+  cidade: z.string().trim().max(100).optional(),
+  estado: z.string().trim().max(2).optional(),
+  plano: z.enum(PLANOS_CONECTA, { error: "Escolha um plano." }),
+  forma_pagamento: z.enum(FORMAS_PAGAMENTO_CONECTA, { error: "Escolha a forma de pagamento." }),
+});
+export type CandidatoExternoCadastroValues = z.infer<typeof candidatoExternoCadastroSchema>;
 
 export const vagaFormSchema = z.object({
   titulo: z
