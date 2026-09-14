@@ -123,3 +123,57 @@ export async function atualizarStatusVaga(id: string, status: VagaStatus): Promi
   revalidatePath("/empresa/vagas");
   return { success: true };
 }
+
+// Sem checagem manual de "essa vaga é da minha empresa" — a policy "Empresa
+// gerencia proprias vagas" (RLS) já escopa o SELECT/INSERT: se a vaga não
+// for da empresa autenticada, o select abaixo simplesmente não encontra
+// nada e a função retorna erro.
+export async function duplicarVaga(vagaId: string): Promise<VagaActionResult> {
+  const user = await requireEmpresa();
+
+  const supabase = await createClient();
+  const empresa = await getEmpresaPorProfileId(supabase, user.id);
+  if (!empresa) {
+    return { error: "Não foi possível identificar sua empresa." };
+  }
+
+  const { data: original } = await supabase
+    .from("vagas_conecta")
+    .select(
+      "titulo, descricao, requisitos, cidade, estado, modalidade, tipo, salario_min, salario_max, salario_oculto, carga_horaria, prazo_candidatura",
+    )
+    .eq("id", vagaId)
+    .maybeSingle();
+
+  if (!original) {
+    return { error: "Vaga não encontrada." };
+  }
+
+  const { error } = await supabase.from("vagas_conecta").insert({
+    ...original,
+    empresa_id: empresa.id,
+    titulo: `${original.titulo} (cópia)`,
+    status: "ativa",
+  });
+
+  if (error) {
+    return { error: "Não foi possível duplicar a vaga. Tente novamente." };
+  }
+
+  revalidatePath("/empresa/vagas");
+  return { success: true };
+}
+
+export async function excluirVaga(vagaId: string): Promise<VagaActionResult> {
+  await requireEmpresa();
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("vagas_conecta").delete().eq("id", vagaId);
+
+  if (error) {
+    return { error: "Não foi possível excluir a vaga. Tente novamente." };
+  }
+
+  revalidatePath("/empresa/vagas");
+  return { success: true };
+}

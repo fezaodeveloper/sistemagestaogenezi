@@ -17,6 +17,8 @@ const perfilEmpresaFormSchema = z.object({
   cidade: z.string().trim().max(100).optional(),
   estado: z.string().trim().max(2).optional(),
   site: z.string().trim().max(300).optional(),
+  endereco: z.string().trim().max(300).optional(),
+  link_maps: z.string().trim().max(500).optional(),
   nome_responsavel: z
     .string({ error: "Informe o nome do responsável." })
     .trim()
@@ -41,6 +43,8 @@ export async function atualizarPerfilEmpresa(formData: FormData): Promise<{ erro
     cidade: formData.get("cidade") || undefined,
     estado: formData.get("estado") || undefined,
     site: formData.get("site") || undefined,
+    endereco: formData.get("endereco") || undefined,
+    link_maps: formData.get("link_maps") || undefined,
     nome_responsavel: formData.get("nome_responsavel"),
     whatsapp: formData.get("whatsapp"),
     telefone: formData.get("telefone") || undefined,
@@ -64,6 +68,8 @@ export async function atualizarPerfilEmpresa(formData: FormData): Promise<{ erro
       cidade: data.cidade ?? null,
       estado: data.estado ?? null,
       site: data.site ?? null,
+      endereco: data.endereco ?? null,
+      link_maps: data.link_maps ?? null,
       nome_responsavel: data.nome_responsavel,
       whatsapp: data.whatsapp,
       telefone: data.telefone ?? null,

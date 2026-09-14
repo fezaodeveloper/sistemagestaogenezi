@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pause, Play, Plus, Square } from "lucide-react";
+import { Copy, Pause, Play, Plus, Square, Trash2 } from "lucide-react";
 import {
   atualizarStatusVaga,
   atualizarVaga,
   criarVaga,
+  duplicarVaga,
+  excluirVaga,
 } from "@/app/empresa/(protegido)/vagas/actions";
 import {
   VAGA_MODALIDADE_LABELS,
@@ -14,6 +16,17 @@ import {
   VAGA_TIPOS,
   type VagaConecta,
 } from "@/lib/conecta/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -257,12 +270,14 @@ function StatusVagaButton({
   status,
   label,
   icon,
+  colorClassName,
   onAtualizado,
 }: {
   vaga: VagaConecta;
   status: VagaConecta["status"];
   label: string;
   icon: React.ReactNode;
+  colorClassName: string;
   onAtualizado: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -275,10 +290,146 @@ function StatusVagaButton({
   }
 
   return (
-    <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={handleClick}>
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={isPending}
+      onClick={handleClick}
+      className={colorClassName}
+    >
       {icon}
       {label}
     </Button>
+  );
+}
+
+function DuplicarVagaButton({ vaga, onSalvo }: { vaga: VagaConecta; onSalvo: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleDuplicar() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await duplicarVaga(vaga.id);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onSalvo();
+    });
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm">
+            <Copy className="size-4" />
+            Duplicar
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Duplicar vaga</AlertDialogTitle>
+          <AlertDialogDescription>
+            Isso cria uma nova vaga ativa com os mesmos dados de &quot;{vaga.titulo}&quot;, com o título
+            &quot;{vaga.titulo} (cópia)&quot;.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction disabled={isPending} onClick={handleDuplicar}>
+            {isPending ? "Duplicando..." : "Duplicar"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
+
+function ExcluirVagaButton({ vaga, onExcluida }: { vaga: VagaConecta; onExcluida: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [confirmacao, setConfirmacao] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleExcluir() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await excluirVaga(vaga.id);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onExcluida();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        setConfirmacao("");
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm" className="text-destructive">
+            <Trash2 className="size-4" />
+            Excluir
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir vaga</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja excluir &quot;{vaga.titulo}&quot;? Esta ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`confirmacao-exclusao-vaga-${vaga.id}`} className="text-sm font-normal">
+            Digite <span className="font-mono font-semibold">EXCLUIR</span> para confirmar
+          </Label>
+          <Input
+            id={`confirmacao-exclusao-vaga-${vaga.id}`}
+            value={confirmacao}
+            onChange={(event) => setConfirmacao(event.target.value)}
+            placeholder="Digite EXCLUIR para confirmar"
+            autoComplete="off"
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={isPending || confirmacao !== TEXTO_CONFIRMACAO_EXCLUSAO}
+            onClick={handleExcluir}
+          >
+            {isPending ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -302,6 +453,7 @@ function VagaCard({ vaga, onAtualizado }: { vaga: VagaConecta; onAtualizado: () 
               status="pausada"
               label="Pausar"
               icon={<Pause className="size-4" />}
+              colorClassName="text-amber-600 dark:text-amber-400"
               onAtualizado={onAtualizado}
             />
           )}
@@ -311,6 +463,7 @@ function VagaCard({ vaga, onAtualizado }: { vaga: VagaConecta; onAtualizado: () 
               status="ativa"
               label="Ativar"
               icon={<Play className="size-4" />}
+              colorClassName="text-green-600 dark:text-green-400"
               onAtualizado={onAtualizado}
             />
           )}
@@ -320,9 +473,12 @@ function VagaCard({ vaga, onAtualizado }: { vaga: VagaConecta; onAtualizado: () 
               status="encerrada"
               label="Encerrar"
               icon={<Square className="size-4" />}
+              colorClassName="text-destructive"
               onAtualizado={onAtualizado}
             />
           )}
+          <DuplicarVagaButton vaga={vaga} onSalvo={onAtualizado} />
+          <ExcluirVagaButton vaga={vaga} onExcluida={onAtualizado} />
         </div>
       </CardContent>
     </Card>

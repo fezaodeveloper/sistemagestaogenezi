@@ -146,11 +146,8 @@ export async function uploadCurriculoConecta(
     { onConflict: "aluno_id" },
   );
 
-  // DIAGNÓSTICO TEMPORÁRIO — mensagem genérica trocada pelo erro real do
-  // Postgres/PostgREST (message + code) pra achar a causa de "violates
-  // row-level security policy". Reverter pra mensagem genérica depois.
   if (error) {
-    return { error: `Erro ao salvar: ${error.message} (code: ${error.code})` };
+    return { error: "Currículo enviado mas não foi possível salvar. Tente novamente." };
   }
 
   revalidatePath("/aluno/conecta");
@@ -214,7 +211,7 @@ export async function buscarVagasConecta(
   // 1) Empresas ativas — tabela pequena, busca inteira de uma vez.
   const { data: empresasAtivasData } = await admin
     .from("empresas_conecta")
-    .select("id, nome_empresa, whatsapp, logo_url")
+    .select("id, nome_empresa, whatsapp, logo_url, setor, cidade, estado, endereco, link_maps, site")
     .eq("status", "ativa");
   const empresasPorId = new Map(
     (empresasAtivasData ?? []).map((empresa) => [
@@ -223,6 +220,12 @@ export async function buscarVagasConecta(
         nome: empresa.nome_empresa as string,
         whatsapp: empresa.whatsapp as string | null,
         logoUrl: empresa.logo_url as string | null,
+        setor: empresa.setor as string | null,
+        cidade: empresa.cidade as string | null,
+        estado: empresa.estado as string | null,
+        endereco: empresa.endereco as string | null,
+        linkMaps: empresa.link_maps as string | null,
+        site: empresa.site as string | null,
       },
     ]),
   );
@@ -266,6 +269,12 @@ export async function buscarVagasConecta(
       empresaNome: empresa?.nome ?? "Empresa",
       empresaWhatsapp: empresa?.whatsapp ?? null,
       empresaLogoUrl: empresa?.logoUrl ?? null,
+      empresaSetor: empresa?.setor ?? null,
+      empresaCidade: empresa?.cidade ?? null,
+      empresaEstado: empresa?.estado ?? null,
+      empresaEndereco: empresa?.endereco ?? null,
+      empresaLinkMaps: empresa?.linkMaps ?? null,
+      empresaSite: empresa?.site ?? null,
     };
   });
 

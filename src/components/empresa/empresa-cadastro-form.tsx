@@ -142,6 +142,14 @@ export function EmpresaCadastroForm() {
                   onChange={(e) => setEstado(e.target.value.toUpperCase())}
                 />
               </div>
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <Label htmlFor="endereco">Endereço completo</Label>
+                <Input id="endereco" name="endereco" placeholder="Rua X, 123, Centro" />
+              </div>
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <Label htmlFor="link_maps">Link do Google Maps (opcional)</Label>
+                <Input id="link_maps" name="link_maps" placeholder="https://maps.google.com/..." />
+              </div>
             </div>
           </div>
 

@@ -46,6 +46,8 @@ export type EmpresaConecta = {
   logo_url: string | null;
   logo_path: string | null;
   descricao: string | null;
+  endereco: string | null;
+  link_maps: string | null;
   status: EmpresaStatus;
   aprovada_em: string | null;
   created_at: string;
@@ -115,6 +117,12 @@ export type VagaConectaComEmpresa = VagaConecta & {
   empresaNome: string;
   empresaWhatsapp: string | null;
   empresaLogoUrl: string | null;
+  empresaSetor: string | null;
+  empresaCidade: string | null;
+  empresaEstado: string | null;
+  empresaEndereco: string | null;
+  empresaLinkMaps: string | null;
+  empresaSite: string | null;
 };
 
 export type VagasConectaFiltro = {
@@ -224,6 +232,8 @@ export const empresaCadastroSchema = z.object({
   cidade: z.string().trim().max(100).optional(),
   estado: z.string().trim().max(2).optional(),
   site: z.string().trim().max(300).optional(),
+  endereco: z.string().trim().max(300).optional(),
+  link_maps: z.string().trim().max(500).optional(),
   nome_responsavel: z
     .string({ error: "Informe o nome do responsável." })
     .trim()

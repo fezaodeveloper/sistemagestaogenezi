@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Building2, MessageCircle, Search } from "lucide-react";
+import { Building2, ExternalLink, MapPin, MessageCircle, Search } from "lucide-react";
 import { buscarVagasConecta } from "@/app/aluno/conecta/actions";
 import {
   VAGA_MODALIDADE_LABELS,
@@ -16,6 +16,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,33 +53,181 @@ function formatSalario(vaga: VagaConectaComEmpresa): string {
   return formatar(vaga.salario_min ?? vaga.salario_max ?? 0);
 }
 
-function formatPrazo(iso: string): string {
-  const [, mes, dia] = iso.slice(0, 10).split("-");
-  return `${dia}/${mes}`;
+function formatDataCompleta(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 
-function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
+function truncar(texto: string, max: number): string {
+  if (texto.length <= max) return texto;
+  return `${texto.slice(0, max).trimEnd()}...`;
+}
+
+function iniciais(nome: string): string {
+  const partes = nome.trim().split(/\s+/).slice(0, 2);
+  return partes.map((parte) => parte[0]?.toUpperCase() ?? "").join("");
+}
+
+function LogoOuIniciais({ vaga, className }: { vaga: VagaConectaComEmpresa; className: string }) {
+  if (vaga.empresaLogoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+      <img src={vaga.empresaLogoUrl} alt={vaga.empresaNome} className={`${className} rounded-md object-contain`} />
+    );
+  }
+  return (
+    <div className={`${className} bg-muted text-muted-foreground flex items-center justify-center rounded-md font-semibold`}>
+      {iniciais(vaga.empresaNome) || <Building2 className="size-4" />}
+    </div>
+  );
+}
+
+function BotaoWhatsapp({ vaga, className }: { vaga: VagaConectaComEmpresa; className?: string }) {
   const whatsappDigitos = vaga.empresaWhatsapp?.replace(/\D/g, "");
   const mensagem = encodeURIComponent(
     `Olá! Vi a vaga de ${vaga.titulo} no Gênezi Conecta e tenho interesse.`,
   );
 
+  if (!whatsappDigitos) {
+    return (
+      <Button disabled title="Empresa não informou WhatsApp para contato." className={className}>
+        <MessageCircle className="size-4" />
+        Candidatar via WhatsApp
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      className={`bg-green-600 hover:bg-green-700 ${className ?? ""}`}
+      nativeButton={false}
+      render={
+        <a href={`https://wa.me/55${whatsappDigitos}?text=${mensagem}`} target="_blank" rel="noreferrer" />
+      }
+    >
+      <MessageCircle className="size-4" />
+      Candidatar via WhatsApp
+    </Button>
+  );
+}
+
+function VagaDetalhesDialog({ vaga }: { vaga: VagaConectaComEmpresa }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button type="button" variant="outline" className="w-full" />}>
+        Ver detalhes
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <LogoOuIniciais vaga={vaga} className="size-10 shrink-0" />
+            <div>
+              <DialogTitle>{vaga.titulo}</DialogTitle>
+              <p className="text-muted-foreground text-sm">{vaga.empresaNome}</p>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4 text-sm">
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline">{VAGA_TIPO_LABELS[vaga.tipo]}</Badge>
+            <Badge variant="outline">{VAGA_MODALIDADE_LABELS[vaga.modalidade]}</Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-muted-foreground text-xs">Local da vaga</p>
+              <p>
+                {vaga.cidade}/{vaga.estado}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Salário</p>
+              <p>{formatSalario(vaga)}</p>
+            </div>
+            {vaga.carga_horaria && (
+              <div>
+                <p className="text-muted-foreground text-xs">Carga horária</p>
+                <p>{vaga.carga_horaria}</p>
+              </div>
+            )}
+            {vaga.prazo_candidatura && (
+              <div>
+                <p className="text-muted-foreground text-xs">Candidaturas até</p>
+                <p>{formatDataCompleta(vaga.prazo_candidatura)}</p>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-1 font-medium">Descrição</p>
+            <p className="text-muted-foreground whitespace-pre-line">{vaga.descricao}</p>
+          </div>
+
+          {vaga.requisitos && (
+            <div>
+              <p className="mb-1 font-medium">Requisitos</p>
+              <p className="text-muted-foreground whitespace-pre-line">{vaga.requisitos}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1 border-t pt-4">
+            <p className="font-medium">Sobre a empresa</p>
+            {vaga.empresaSetor && <p className="text-muted-foreground">Setor: {vaga.empresaSetor}</p>}
+            {(vaga.empresaCidade || vaga.empresaEstado) && (
+              <p className="text-muted-foreground">
+                {vaga.empresaCidade ?? "—"}/{vaga.empresaEstado ?? "—"}
+              </p>
+            )}
+            {vaga.empresaEndereco && (
+              <p className="text-muted-foreground flex items-center gap-1">
+                <MapPin className="size-3.5 shrink-0" />
+                {vaga.empresaEndereco}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3 pt-1">
+              {vaga.empresaLinkMaps && (
+                <a
+                  href={vaga.empresaLinkMaps}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-foreground inline-flex items-center gap-1 text-xs underline underline-offset-2"
+                >
+                  <MapPin className="size-3.5" />
+                  Ver no Google Maps
+                </a>
+              )}
+              {vaga.empresaSite && (
+                <a
+                  href={vaga.empresaSite}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-foreground inline-flex items-center gap-1 text-xs underline underline-offset-2"
+                >
+                  <ExternalLink className="size-3.5" />
+                  Site da empresa
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <BotaoWhatsapp vaga={vaga} className="w-full" />
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 py-4">
         <div className="flex items-center gap-2">
-          {vaga.empresaLogoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
-            <img
-              src={vaga.empresaLogoUrl}
-              alt={vaga.empresaNome}
-              className="size-8 shrink-0 rounded-md object-contain"
-            />
-          ) : (
-            <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-md">
-              <Building2 className="text-muted-foreground size-4" />
-            </div>
-          )}
+          <LogoOuIniciais vaga={vaga} className="size-8 shrink-0 text-xs" />
           <span className="text-muted-foreground truncate text-xs">{vaga.empresaNome}</span>
         </div>
 
@@ -86,31 +242,31 @@ function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
           <span>
             {vaga.cidade}/{vaga.estado}
           </span>
+          {vaga.empresaEndereco && (
+            <span className="flex items-center gap-1">
+              <MapPin className="size-3 shrink-0" />
+              <span className="truncate">{vaga.empresaEndereco}</span>
+            </span>
+          )}
           <span>{formatSalario(vaga)}</span>
-          {vaga.prazo_candidatura && <span>Candidaturas até {formatPrazo(vaga.prazo_candidatura)}</span>}
+          {vaga.carga_horaria && <span>{vaga.carga_horaria}</span>}
+          {vaga.prazo_candidatura && (
+            <span>Candidaturas até {formatDataCompleta(vaga.prazo_candidatura)}</span>
+          )}
         </div>
 
-        {whatsappDigitos ? (
-          <Button
-            className="bg-green-600 hover:bg-green-700"
-            nativeButton={false}
-            render={
-              <a
-                href={`https://wa.me/55${whatsappDigitos}?text=${mensagem}`}
-                target="_blank"
-                rel="noreferrer"
-              />
-            }
-          >
-            <MessageCircle className="size-4" />
-            Candidatar via WhatsApp
-          </Button>
-        ) : (
-          <Button disabled title="Empresa não informou WhatsApp para contato.">
-            <MessageCircle className="size-4" />
-            Candidatar via WhatsApp
-          </Button>
+        <p className="text-sm">{truncar(vaga.descricao, 150)}</p>
+        {vaga.requisitos && (
+          <p className="text-muted-foreground text-xs">
+            <span className="font-medium">Requisitos: </span>
+            {truncar(vaga.requisitos, 100)}
+          </p>
         )}
+
+        <div className="flex flex-col gap-2 pt-1">
+          <BotaoWhatsapp vaga={vaga} />
+          <VagaDetalhesDialog vaga={vaga} />
+        </div>
       </CardContent>
     </Card>
   );
