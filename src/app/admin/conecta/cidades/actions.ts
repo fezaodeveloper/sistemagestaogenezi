@@ -43,6 +43,21 @@ export async function adicionarCidade(nome: string, estado: string): Promise<{ e
   return {};
 }
 
+// Lista dinâmica de estados já cadastrados — não fixa em SE/AL, pra
+// suportar o filtro de estado da tela de cidades crescer junto com o que
+// for cadastrado (TAREFA 2). Sem .distinct() nativo simples pra uma coluna
+// só no supabase-js: a tabela é pequena (cidades aprovadas), então buscar
+// tudo e deduplicar em JS é suficiente.
+export async function getEstadosDisponiveis(): Promise<string[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("conecta_cidades").select("estado");
+
+  const estados = new Set((data ?? []).map((linha) => linha.estado as string));
+  return [...estados].sort();
+}
+
 export async function toggleCidadeAtiva(id: string, ativa: boolean): Promise<{ error?: string }> {
   await requireRole("admin");
 
@@ -82,6 +97,34 @@ export async function desativarTodasCidades(): Promise<{ error?: string }> {
 
   if (error) {
     return { error: "Não foi possível desativar todas as cidades. Tente novamente." };
+  }
+
+  revalidatePath("/admin/conecta/cidades");
+  return {};
+}
+
+export async function ativarCidadesPorEstado(estado: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("conecta_cidades").update({ ativa: true }).eq("estado", estado);
+
+  if (error) {
+    return { error: "Não foi possível ativar as cidades deste estado. Tente novamente." };
+  }
+
+  revalidatePath("/admin/conecta/cidades");
+  return {};
+}
+
+export async function desativarCidadesPorEstado(estado: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("conecta_cidades").update({ ativa: false }).eq("estado", estado);
+
+  if (error) {
+    return { error: "Não foi possível desativar as cidades deste estado. Tente novamente." };
   }
 
   revalidatePath("/admin/conecta/cidades");

@@ -398,8 +398,21 @@ export type AlunoVisivelConecta = {
 export type AlunosVisiveisFiltro = { query?: string; page?: number; limit?: number };
 export type AlunosVisiveisResultado = { alunos: AlunoVisivelConecta[]; total: number };
 
-// ===== Cidades aprovadas (Etapa 7 — restringir cadastro de vaga a SE/AL) =====
-
+// ===== Cidades aprovadas (Etapa 7 — restringir cadastro de vaga a SE/AL,
+// com espaço pra outros estados entrarem depois) =====
+//
+// SE/AL são os únicos dois estados conhecidos hoje pelo formulário de vaga
+// da empresa e pelos filtros público/aluno (ambos ainda agrupam por esses
+// dois fixos) — CIDADE_ESTADOS/LABELS/BADGE_CLASS abaixo continuam servindo
+// esses agrupamentos. Mas o campo estado em si (na tabela e no formulário
+// de "adicionar cidade" do admin) não é mais restrito a esses dois: a
+// migration 20260917300000 relaxa o CHECK de conecta_cidades pra aceitar
+// qualquer sigla de 2 letras, e cidadeConectaSchema abaixo valida esse
+// formato (não um enum fechado) — se o admin cadastrar a primeira cidade de
+// um estado novo (ex.: PE), ela aparece no filtro dinâmico da própria tela
+// de cidades, mas ainda NÃO aparece agrupada no formulário de vaga da
+// empresa nem nos filtros público/aluno, que exigiriam ficar dinâmicos
+// também (fora do escopo desta tarefa).
 export const CIDADE_ESTADOS = ["SE", "AL"] as const;
 export type CidadeEstado = (typeof CIDADE_ESTADOS)[number];
 export const CIDADE_ESTADO_LABELS: Record<CidadeEstado, string> = { SE: "Sergipe", AL: "Alagoas" };
@@ -411,7 +424,7 @@ export const CIDADE_ESTADO_BADGE_CLASS: Record<CidadeEstado, string> = {
 export type CidadeConecta = {
   id: string;
   nome: string;
-  estado: CidadeEstado;
+  estado: string;
   ativa: boolean;
   ordem: number;
   created_at: string;
@@ -423,7 +436,11 @@ export const cidadeConectaSchema = z.object({
     .trim()
     .min(1, { error: "Informe o nome da cidade." })
     .max(100),
-  estado: z.enum(CIDADE_ESTADOS, { error: "Selecione o estado." }),
+  estado: z
+    .string({ error: "Informe o estado." })
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/, { error: "Use a sigla do estado (2 letras)." }),
 });
 export type CidadeConectaValues = z.infer<typeof cidadeConectaSchema>;
 

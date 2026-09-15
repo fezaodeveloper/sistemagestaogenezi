@@ -4,19 +4,15 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import {
   adicionarCidade,
+  ativarCidadesPorEstado,
   ativarTodasCidades,
+  desativarCidadesPorEstado,
   desativarTodasCidades,
   excluirCidade,
   getCidadesAdmin,
   toggleCidadeAtiva,
 } from "@/app/admin/conecta/cidades/actions";
-import {
-  CIDADE_ESTADO_BADGE_CLASS,
-  CIDADE_ESTADO_LABELS,
-  CIDADE_ESTADOS,
-  type CidadeConecta,
-  type CidadeEstado,
-} from "@/lib/conecta/schema";
+import { CIDADE_ESTADO_BADGE_CLASS, CIDADE_ESTADO_LABELS, type CidadeConecta, type CidadeEstado } from "@/lib/conecta/schema";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,23 +43,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 const LIMITE = 20;
 
-// Sergipe antes de Alagoas (mesma ordem já usada no seed/agrupamento
-// anterior) — não é ordem alfabética de estado, por isso um mapa fixo em
-// vez de localeCompare direto em cidade.estado.
-const ESTADO_ORDEM: Record<CidadeEstado, number> = { SE: 0, AL: 1 };
+// Sergipe antes de Alagoas (mesma ordem já usada no seed original); estados
+// fora desses dois (cadastrados via TAREFA 2) caem depois, em ordem
+// alfabética entre si.
+const ESTADO_ORDEM: Record<string, number> = { SE: 0, AL: 1 };
+
+function labelEstado(estado: string): string {
+  return CIDADE_ESTADO_LABELS[estado as CidadeEstado] ?? estado;
+}
+
+function corBadgeEstado(estado: string): string {
+  return CIDADE_ESTADO_BADGE_CLASS[estado as CidadeEstado] ?? "bg-muted text-muted-foreground";
+}
 
 const ESTADO_FILTRO_TODOS = "todos";
-const ESTADO_FILTRO_ITEMS: Record<string, string> = {
-  [ESTADO_FILTRO_TODOS]: "Todos",
-  ...Object.fromEntries(CIDADE_ESTADOS.map((estado) => [estado, `${CIDADE_ESTADO_LABELS[estado]} (${estado})`])),
-};
-
-const ESTADO_ITEMS = Object.fromEntries(CIDADE_ESTADOS.map((estado) => [estado, CIDADE_ESTADO_LABELS[estado]]));
 
 function AdicionarCidadeDialog({ onAdicionada }: { onAdicionada: () => void }) {
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState("");
-  const [estado, setEstado] = useState<CidadeEstado>("SE");
+  const [estado, setEstado] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -76,7 +74,7 @@ function AdicionarCidadeDialog({ onAdicionada }: { onAdicionada: () => void }) {
         return;
       }
       setNome("");
-      setEstado("SE");
+      setEstado("");
       setOpen(false);
       onAdicionada();
     });
@@ -109,18 +107,14 @@ function AdicionarCidadeDialog({ onAdicionada }: { onAdicionada: () => void }) {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="estado-cidade">Estado</Label>
-            <Select items={ESTADO_ITEMS} value={estado} onValueChange={(value) => setEstado((value as CidadeEstado) || "SE")}>
-              <SelectTrigger id="estado-cidade" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CIDADE_ESTADOS.map((uf) => (
-                  <SelectItem key={uf} value={uf}>
-                    {CIDADE_ESTADO_LABELS[uf]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              id="estado-cidade"
+              value={estado}
+              onChange={(e) => setEstado(e.target.value.toUpperCase().slice(0, 2))}
+              placeholder="Ex: SE, AL, PE, BA..."
+              maxLength={2}
+              className="w-24 uppercase"
+            />
           </div>
           {error && (
             <p role="alert" className="text-destructive text-sm">
@@ -129,12 +123,107 @@ function AdicionarCidadeDialog({ onAdicionada }: { onAdicionada: () => void }) {
           )}
         </div>
         <DialogFooter>
-          <Button type="button" disabled={isPending || !nome.trim()} onClick={handleSalvar}>
+          <Button type="button" disabled={isPending || !nome.trim() || estado.length !== 2} onClick={handleSalvar}>
             {isPending ? "Salvando..." : "Salvar"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ToggleAtivaSwitch({ cidade, onAtualizada }: { cidade: CidadeConecta; onAtualizada: () => void }) {
+  const [isPending, startTransition] = useTransition();
+
+  function handleChange(valor: boolean) {
+    startTransition(async () => {
+      await toggleCidadeAtiva(cidade.id, valor);
+      onAtualizada();
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Switch checked={cidade.ativa} onCheckedChange={handleChange} disabled={isPending} />
+      <span className="text-muted-foreground text-xs">{cidade.ativa ? "Ativa" : "Inativa"}</span>
+    </div>
+  );
+}
+
+const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
+
+function ExcluirCidadeButton({ cidade, onExcluida }: { cidade: CidadeConecta; onExcluida: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [confirmacao, setConfirmacao] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleExcluir() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await excluirCidade(cidade.id);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onExcluida();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        setConfirmacao("");
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="ghost" size="sm" className="text-destructive" title="Excluir cidade">
+            <Trash2 className="size-4" />
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir cidade</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja excluir &quot;{cidade.nome}&quot;? Vagas já cadastradas nessa cidade não são
+            afetadas, mas ela deixa de aparecer nas opções para novas vagas. Esta ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`confirmacao-exclusao-cidade-${cidade.id}`} className="text-sm font-normal">
+            Digite <span className="font-mono font-semibold">EXCLUIR</span> para confirmar
+          </Label>
+          <Input
+            id={`confirmacao-exclusao-cidade-${cidade.id}`}
+            value={confirmacao}
+            onChange={(event) => setConfirmacao(event.target.value)}
+            placeholder="Digite EXCLUIR para confirmar"
+            autoComplete="off"
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={isPending || confirmacao !== TEXTO_CONFIRMACAO_EXCLUSAO}
+            onClick={handleExcluir}
+          >
+            {isPending ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -248,42 +337,21 @@ function DesativarTodasButton({ onAtualizado }: { onAtualizado: () => void }) {
   );
 }
 
-function ToggleAtivaSwitch({ cidade, onAtualizada }: { cidade: CidadeConecta; onAtualizada: () => void }) {
-  const [isPending, startTransition] = useTransition();
-
-  function handleChange(valor: boolean) {
-    startTransition(async () => {
-      await toggleCidadeAtiva(cidade.id, valor);
-      onAtualizada();
-    });
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <Switch checked={cidade.ativa} onCheckedChange={handleChange} disabled={isPending} />
-      <span className="text-muted-foreground text-xs">{cidade.ativa ? "Ativa" : "Inativa"}</span>
-    </div>
-  );
-}
-
-const TEXTO_CONFIRMACAO_EXCLUSAO = "EXCLUIR";
-
-function ExcluirCidadeButton({ cidade, onExcluida }: { cidade: CidadeConecta; onExcluida: () => void }) {
+function AtivarEstadoButton({ estado, onAtualizado }: { estado: string; onAtualizado: () => void }) {
   const [open, setOpen] = useState(false);
-  const [confirmacao, setConfirmacao] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function handleExcluir() {
+  function handleConfirmar() {
     setError(null);
     startTransition(async () => {
-      const resultado = await excluirCidade(cidade.id);
+      const resultado = await ativarCidadesPorEstado(estado);
       if (resultado.error) {
         setError(resultado.error);
         return;
       }
       setOpen(false);
-      onExcluida();
+      onAtualizado();
     });
   }
 
@@ -292,37 +360,23 @@ function ExcluirCidadeButton({ cidade, onExcluida }: { cidade: CidadeConecta; on
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        setConfirmacao("");
         if (nextOpen) setError(null);
       }}
     >
       <AlertDialogTrigger
         render={
-          <Button type="button" variant="ghost" size="sm" className="text-destructive" title="Excluir cidade">
-            <Trash2 className="size-4" />
+          <Button type="button" variant="outline" size="sm" className="text-green-600 dark:text-green-400">
+            ✅ Ativar todas de {estado}
           </Button>
         }
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Excluir cidade</AlertDialogTitle>
+          <AlertDialogTitle>Ativar todas as cidades de {labelEstado(estado)}</AlertDialogTitle>
           <AlertDialogDescription>
-            Tem certeza que deseja excluir &quot;{cidade.nome}&quot;? Vagas já cadastradas nessa cidade não são
-            afetadas, mas ela deixa de aparecer nas opções para novas vagas. Esta ação não pode ser desfeita.
+            Tem certeza que deseja ativar todas as cidades de {labelEstado(estado)} ({estado})?
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`confirmacao-exclusao-cidade-${cidade.id}`} className="text-sm font-normal">
-            Digite <span className="font-mono font-semibold">EXCLUIR</span> para confirmar
-          </Label>
-          <Input
-            id={`confirmacao-exclusao-cidade-${cidade.id}`}
-            value={confirmacao}
-            onChange={(event) => setConfirmacao(event.target.value)}
-            placeholder="Digite EXCLUIR para confirmar"
-            autoComplete="off"
-          />
-        </div>
         {error && (
           <p role="alert" className="text-destructive text-sm">
             {error}
@@ -330,12 +384,65 @@ function ExcluirCidadeButton({ cidade, onExcluida }: { cidade: CidadeConecta; on
         )}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            disabled={isPending || confirmacao !== TEXTO_CONFIRMACAO_EXCLUSAO}
-            onClick={handleExcluir}
-          >
-            {isPending ? "Excluindo..." : "Excluir"}
+          <AlertDialogAction disabled={isPending} onClick={handleConfirmar}>
+            {isPending ? "Ativando..." : "Ativar todas"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function DesativarEstadoButton({ estado, onAtualizado }: { estado: string; onAtualizado: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleConfirmar() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await desativarCidadesPorEstado(estado);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onAtualizado();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm" className="text-destructive">
+            🔴 Desativar todas de {estado}
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Desativar todas as cidades de {labelEstado(estado)}</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja desativar todas as cidades de {labelEstado(estado)} ({estado})? Empresas não
+            conseguirão cadastrar novas vagas nessas cidades.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleConfirmar}>
+            {isPending ? "Desativando..." : "Desativar todas"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -373,8 +480,20 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
     setPagina(1);
   }
 
-  // Busca e filtro são 100% client-side (REGRA da tarefa) — a lista
-  // completa já vem carregada de getCidadesAdmin, sem paginação no banco.
+  // Dinâmico a partir das cidades já carregadas (TAREFA 2) — em vez de uma
+  // segunda chamada a getEstadosDisponiveis, que traria exatamente a mesma
+  // informação já presente em `cidades`; fica sincronizado automaticamente
+  // sempre que a lista muda (ex.: logo após adicionar a 1ª cidade de um
+  // estado novo), sem round-trip extra.
+  const estadosDisponiveis = useMemo(
+    () => [...new Set(cidades.map((cidade) => cidade.estado))].sort((a, b) => a.localeCompare(b)),
+    [cidades],
+  );
+  const ESTADO_FILTRO_ITEMS: Record<string, string> = {
+    [ESTADO_FILTRO_TODOS]: "Todos",
+    ...Object.fromEntries(estadosDisponiveis.map((estado) => [estado, `${labelEstado(estado)} (${estado})`])),
+  };
+
   const cidadesFiltradas = useMemo(() => {
     const termo = buscaDebounced.trim().toLowerCase();
     return cidades
@@ -383,7 +502,12 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
         if (termo && !cidade.nome.toLowerCase().includes(termo)) return false;
         return true;
       })
-      .sort((a, b) => ESTADO_ORDEM[a.estado] - ESTADO_ORDEM[b.estado] || a.nome.localeCompare(b.nome, "pt-BR"));
+      .sort(
+        (a, b) =>
+          (ESTADO_ORDEM[a.estado] ?? 99) - (ESTADO_ORDEM[b.estado] ?? 99) ||
+          a.estado.localeCompare(b.estado) ||
+          a.nome.localeCompare(b.nome, "pt-BR"),
+      );
   }, [cidades, buscaDebounced, estadoFiltro]);
 
   const totalPaginas = Math.max(1, Math.ceil(cidadesFiltradas.length / LIMITE));
@@ -400,7 +524,11 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
             placeholder="Buscar por nome da cidade..."
             className="max-w-sm"
           />
-          <Select items={ESTADO_FILTRO_ITEMS} value={estadoFiltro} onValueChange={(v) => handleEstadoChange(v ?? ESTADO_FILTRO_TODOS)}>
+          <Select
+            items={ESTADO_FILTRO_ITEMS}
+            value={estadoFiltro}
+            onValueChange={(v) => handleEstadoChange(v ?? ESTADO_FILTRO_TODOS)}
+          >
             <SelectTrigger className="w-44">
               <SelectValue />
             </SelectTrigger>
@@ -412,6 +540,12 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
               ))}
             </SelectContent>
           </Select>
+          {estadoFiltro !== ESTADO_FILTRO_TODOS && (
+            <>
+              <AtivarEstadoButton estado={estadoFiltro} onAtualizado={recarregar} />
+              <DesativarEstadoButton estado={estadoFiltro} onAtualizado={recarregar} />
+            </>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AtivarTodasButton onAtualizado={recarregar} />
@@ -439,7 +573,7 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
               <TableRow key={cidade.id}>
                 <TableCell className="font-medium">{cidade.nome}</TableCell>
                 <TableCell>
-                  <Badge className={CIDADE_ESTADO_BADGE_CLASS[cidade.estado]}>{cidade.estado}</Badge>
+                  <Badge className={corBadgeEstado(cidade.estado)}>{cidade.estado}</Badge>
                 </TableCell>
                 <TableCell>
                   <ToggleAtivaSwitch cidade={cidade} onAtualizada={recarregar} />
