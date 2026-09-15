@@ -7,6 +7,8 @@ import { SaudeEscola } from "@/components/admin/saude-escola";
 import { DashboardCalendario } from "@/components/admin/dashboard-calendario";
 import { PendenciasResumo } from "@/components/admin/pendencias-resumo";
 import { DashboardKpisFinanceiros } from "@/components/admin/dashboard-kpis-financeiros";
+import { DashboardGraficos } from "@/components/admin/dashboard-graficos";
+import { getDadosGraficosDashboard } from "@/lib/relatorios/dashboard-graficos";
 import { Card, CardContent } from "@/components/ui/card";
 
 function saudacaoPorHorario(): string {
@@ -67,6 +69,7 @@ export default async function AdminDashboardPage() {
     { count: parcelasPendentesMes },
     { data: parcelasPagasMesData },
     { data: avulsosMesData },
+    graficos,
   ] = await Promise.all([
     supabase.from("alunos").select("*", { count: "exact", head: true }),
     supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
@@ -80,6 +83,7 @@ export default async function AdminDashboardPage() {
       .lte("data_vencimento", fimMes),
     supabase.from("parcelas").select("valor").eq("status", "pago").gte("data_pagamento", inicioMes).lte("data_pagamento", fimMes),
     supabase.from("pagamentos_avulsos").select("valor").gte("data_pagamento", inicioMes).lte("data_pagamento", fimMes),
+    getDadosGraficosDashboard(supabase),
   ]);
 
   const receitaMes =
@@ -109,6 +113,8 @@ export default async function AdminDashboardPage() {
         parcelasPendentesMes={parcelasPendentesMes ?? 0}
         receitaMes={receitaMes}
       />
+
+      <DashboardGraficos dados={graficos} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">

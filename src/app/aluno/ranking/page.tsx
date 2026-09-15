@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getRankingGeral } from "@/lib/gamificacao/ranking";
 import { getBadgesPublicosPorAluno, getCatalogoBadges, getMeusBadges } from "@/lib/gamificacao/badges";
+import { getHistoricoPontosAluno, type HistoricoPontoItem } from "@/lib/gamificacao/historico-pontos";
 import {
   FREQUENCIA_NIVEIS,
   getProgressoBadgesProgressivos,
@@ -34,6 +35,78 @@ type CategoriaProgressiva = { chave: string; titulo: string; niveis: NivelBadge[
 // termos-view.tsx, contratos-view.tsx).
 function formatDataConquista(isoString: string): string {
   return new Date(isoString).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+// "21/08/2026 14:32"
+function formatDataHistorico(isoString: string): string {
+  return new Date(isoString).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// recompensa_medalha nunca é gravado na prática hoje (nenhum handler insere
+// esse tipo em pontos_eventos, ver comentário em historico-pontos.ts) —
+// mapeado mesmo assim porque é um valor válido do enum, caso passe a ser
+// usado no futuro.
+const ICONE_TIPO_EVENTO: Record<string, string> = {
+  aula_concluida: "🎯",
+  presenca: "✅",
+  quiz: "📝",
+  prova: "📝",
+  modulo_concluido: "📚",
+  curso_concluido: "🎓",
+  recompensa_medalha: "🎁",
+};
+
+function HistoricoPontosSection({ eventos }: { eventos: HistoricoPontoItem[] }) {
+  const total = eventos.reduce((soma, evento) => soma + evento.pontos, 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h2 className="text-lg font-semibold">Histórico de pontos</h2>
+        <p className="text-muted-foreground text-sm">Total: {total} pontos (últimos {eventos.length} eventos)</p>
+      </div>
+
+      {eventos.length === 0 ? (
+        <Card>
+          <CardContent className="text-muted-foreground py-8 text-center text-sm">
+            Nenhum evento de pontuação ainda.
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col divide-y py-0">
+            {eventos.map((evento) => (
+              <div key={evento.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{ICONE_TIPO_EVENTO[evento.tipoEvento] ?? "🏅"}</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm">{evento.descricao}</span>
+                    <span className="text-muted-foreground text-xs">{formatDataHistorico(evento.createdAt)}</span>
+                  </div>
+                </div>
+                <span
+                  className={
+                    evento.pontos > 0
+                      ? "font-medium text-green-600 dark:text-green-400"
+                      : "text-muted-foreground text-sm"
+                  }
+                >
+                  {evento.pontos > 0 ? `+${evento.pontos}` : "0"} pts
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 export default async function RankingPage() {
@@ -79,10 +152,11 @@ export default async function RankingPage() {
     .maybeSingle();
   const ofensivaAtual = (ofensivaData?.ofensiva_atual as number | undefined) ?? 0;
 
-  const [catalogoBadges, meusBadges, progresso] = await Promise.all([
+  const [catalogoBadges, meusBadges, progresso, historicoPontos] = await Promise.all([
     getCatalogoBadges(supabase),
     getMeusBadges(supabase, user.id),
     getProgressoBadgesProgressivos(user.id),
+    getHistoricoPontosAluno(user.id),
   ]);
 
   const catalogoPorId = new Map(catalogoBadges.map((b) => [b.id, b]));
@@ -289,6 +363,8 @@ export default async function RankingPage() {
           ))}
         </Tabs>
       </div>
+
+      <HistoricoPontosSection eventos={historicoPontos} />
     </div>
   );
 }

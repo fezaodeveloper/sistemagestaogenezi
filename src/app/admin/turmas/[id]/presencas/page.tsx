@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { PRESENCA_STATUSES } from "@/lib/presencas/schema";
 import type { Turma } from "@/lib/turmas/schema";
+import { ExportarFrequenciaButtons } from "@/components/admin/exportar-frequencia-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -97,13 +98,16 @@ export default async function PresencasPage({ params }: { params: Promise<{ id: 
             <h1 className="text-2xl font-semibold">Presenças</h1>
             <p className="text-muted-foreground text-sm">{turma.nome}</p>
           </div>
-          <Button
-            render={<Link href={`/admin/turmas/${turmaId}/presencas/registrar`} />}
-            nativeButton={false}
-          >
-            <Plus />
-            Nova chamada
-          </Button>
+          <div className="flex items-center gap-3">
+            <ExportarFrequenciaButtons turmaId={turmaId} />
+            <Button
+              render={<Link href={`/admin/turmas/${turmaId}/presencas/registrar`} />}
+              nativeButton={false}
+            >
+              <Plus />
+              Nova chamada
+            </Button>
+          </div>
         </div>
       </div>
 

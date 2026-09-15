@@ -6,8 +6,37 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { presencaRowSchema } from "@/lib/presencas/schema";
 import { enviarMensagemFalta } from "@/lib/mensagens/mensagens";
+import { buscarDadosFrequenciaTurma } from "@/lib/relatorios/frequencia-turma";
+import { gerarPdfFrequenciaTurma } from "@/lib/relatorios/frequencia-turma-pdf";
+import { gerarExcelFrequenciaTurma } from "@/lib/relatorios/frequencia-turma-excel";
 
 export type RegistrarPresencasState = { error?: string } | undefined;
+
+// BLOCO 1 (relatório de frequência) — pedido originalmente pra
+// src/app/admin/frequencias/actions.ts, que não existe neste projeto (a
+// gestão de presença já vive inteira em /admin/turmas/[id]/presencas). Os
+// botões de exportar (ver presencas-view.tsx) ficam aqui, na mesma tela que
+// já lista as sessões de chamada da turma.
+export async function gerarRelatorioFrequenciaTurma(
+  turmaId: string,
+  formato: "pdf" | "excel",
+): Promise<{ data: string; filename: string } | { error: string }> {
+  await requireRole("admin");
+
+  const dados = await buscarDadosFrequenciaTurma(turmaId);
+  if (!dados) {
+    return { error: "Turma não encontrada." };
+  }
+
+  const nomeBase = `frequencia-${dados.turmaNome}`.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9-_]+/g, "_");
+
+  if (formato === "pdf") {
+    const buffer = await gerarPdfFrequenciaTurma(dados);
+    return { data: buffer.toString("base64"), filename: `${nomeBase}.pdf` };
+  }
+
+  return { data: gerarExcelFrequenciaTurma(dados), filename: `${nomeBase}.xlsx` };
+}
 
 type MatriculaAluno = {
   id: string;
