@@ -8,7 +8,7 @@ import {
   getExpiracaoMatricula,
   getMatriculaIdAtivaParaCurso,
 } from "@/lib/matriculas/access";
-import { getCursoProgresso } from "@/lib/aulas-concluidas/progresso";
+import { getCursoProgresso, getModulosProgresso } from "@/lib/aulas-concluidas/progresso";
 import { CURSO_TIPOS, CURSO_TIPO_LABELS } from "@/lib/cursos/schema";
 import { Capa } from "@/components/aluno/capa";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,15 @@ type CursoTipo = (typeof CURSO_TIPOS)[number];
 function formatDateBR(isoDate: string) {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
+}
+
+// Verde quando o módulo está 100% concluído, âmbar em andamento, cinza
+// (cor neutra do tema) quando ainda não começou — mesma paleta de status já
+// usada em badges de andamento no resto do admin/portal.
+function corIndicadorModulo(percentual: number): string {
+  if (percentual >= 100) return "bg-green-500";
+  if (percentual > 0) return "bg-amber-500";
+  return "bg-muted-foreground/30";
 }
 
 type ModuloAlunoRow = {
@@ -85,13 +94,14 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
     );
   }
 
-  const [{ data, error }, progresso] = await Promise.all([
+  const [{ data, error }, progresso, modulosProgresso] = await Promise.all([
     supabase
       .from("modulos")
       .select("id, numero, titulo, capa_url, aulas(id), provas(id)")
       .eq("curso_id", cursoId)
       .order("numero"),
     getCursoProgresso(supabase, cursoId),
+    getModulosProgresso(supabase, cursoId, matriculaId),
   ]);
 
   const percentual =
@@ -156,6 +166,15 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
           {modulos.map((modulo) => {
             const totalAulas = modulo.aulas?.length ?? 0;
             const temProva = !!modulo.provas;
+            const progressoModulo = modulosProgresso.get(modulo.id) ?? {
+              total: totalAulas,
+              concluidas: 0,
+            };
+            const percentualModulo =
+              progressoModulo.total > 0
+                ? Math.round((progressoModulo.concluidas / progressoModulo.total) * 100)
+                : 0;
+            const moduloConcluido = progressoModulo.total > 0 && percentualModulo >= 100;
 
             return (
               <Link key={modulo.id} href={`/aluno/cursos/${cursoId}/modulos/${modulo.id}`}>
@@ -172,11 +191,29 @@ export default async function CursoModulosPage({ params }: { params: Promise<{ i
                       Módulo {modulo.numero} — {modulo.titulo}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">
-                      {totalAulas} {totalAulas === 1 ? "aula" : "aulas"}
-                    </Badge>
-                    {temProva && <Badge variant="default">Prova disponível</Badge>}
+                  <CardContent className="flex flex-col gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">
+                        {totalAulas} {totalAulas === 1 ? "aula" : "aulas"}
+                      </Badge>
+                      {temProva && <Badge variant="default">Prova disponível</Badge>}
+                      {moduloConcluido && (
+                        <Badge className="bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400">
+                          ✅ Concluído
+                        </Badge>
+                      )}
+                    </div>
+                    {progressoModulo.total > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <Progress
+                          value={percentualModulo}
+                          indicatorClassName={corIndicadorModulo(percentualModulo)}
+                        />
+                        <span className="text-muted-foreground text-xs">
+                          {progressoModulo.concluidas}/{progressoModulo.total} aulas
+                        </span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </Link>

@@ -36,6 +36,51 @@ export async function getCursoProgresso(
   return { total: aulaIds.length, concluidas: concluidasUnicas.size };
 }
 
+export type ModuloProgresso = { total: number; concluidas: number };
+
+// Progresso de aulas concluídas por módulo — usado nos cards de módulo da
+// página do curso e na barra de progresso do topo da página de aulas do
+// módulo. Mesma estratégia de getCursoProgresso (busca módulos+aulas do
+// curso, depois aulas_concluidas), só que agregando por módulo em vez de
+// somar tudo num total só.
+export async function getModulosProgresso(
+  supabase: SupabaseServerClient,
+  cursoId: string,
+  matriculaId: string | null,
+): Promise<Map<string, ModuloProgresso>> {
+  const { data: modulosData } = await supabase
+    .from("modulos")
+    .select("id, aulas(id)")
+    .eq("curso_id", cursoId);
+
+  const modulos = (modulosData ?? []) as unknown as {
+    id: string;
+    aulas: { id: string }[] | null;
+  }[];
+
+  const progresso = new Map<string, ModuloProgresso>();
+  const todasAulaIds: string[] = [];
+
+  for (const modulo of modulos) {
+    const aulaIds = modulo.aulas?.map((a) => a.id) ?? [];
+    progresso.set(modulo.id, { total: aulaIds.length, concluidas: 0 });
+    todasAulaIds.push(...aulaIds);
+  }
+
+  const concluidasIds = await getAulasConcluidasIds(supabase, todasAulaIds, matriculaId);
+  if (concluidasIds.size === 0) return progresso;
+
+  for (const modulo of modulos) {
+    const aulaIds = modulo.aulas?.map((a) => a.id) ?? [];
+    progresso.set(modulo.id, {
+      total: aulaIds.length,
+      concluidas: aulaIds.filter((id) => concluidasIds.has(id)).length,
+    });
+  }
+
+  return progresso;
+}
+
 // Ids das aulas (dentre um conjunto dado) já concluídas por uma matrícula —
 // usado tanto pra decidir "módulo 100% concluído" (aulas/[aulaId]/page.tsx,
 // gate de exibição do pill da prova) quanto pra marcar ✅/⭕ na lista de

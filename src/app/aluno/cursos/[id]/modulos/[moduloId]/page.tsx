@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Lock, PlayCircle } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -13,10 +13,21 @@ import { getAulasConcluidasIds } from "@/lib/aulas-concluidas/progresso";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 
 function formatDateBR(isoDate: string) {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
+}
+
+// Verde quando o módulo está 100% concluído, âmbar em andamento, cinza
+// quando ainda não começou — mesma paleta usada na página de módulos do
+// curso (cursos/[id]/page.tsx).
+function corIndicadorModulo(percentual: number): string {
+  if (percentual >= 100) return "bg-green-500";
+  if (percentual > 0) return "bg-amber-500";
+  return "bg-muted-foreground/30";
 }
 
 type ModuloRow = {
@@ -34,6 +45,8 @@ type AulaAlunoRow = {
   quizzes: { id: string } | null;
 };
 
+type ModuloVizinhoRow = { id: string; numero: number; titulo: string };
+
 export default async function ModuloAulasPage({
   params,
 }: {
@@ -49,23 +62,26 @@ export default async function ModuloAulasPage({
     notFound();
   }
 
-  const [{ data: moduloData }, { data, error }, matricula] = await Promise.all([
-    supabase
-      .from("modulos")
-      .select("id, numero, titulo, cursos(nome)")
-      .eq("id", moduloId)
-      .eq("curso_id", cursoId)
-      .single(),
-    supabase
-      .from("aulas")
-      .select("id, numero, titulo, materiais(id), quizzes(id)")
-      .eq("modulo_id", moduloId)
-      .order("numero"),
-    getMatriculaAtivaComTurma(supabase, user.id, cursoId),
-  ]);
+  const [{ data: moduloData }, { data, error }, matricula, { data: todosModulosData }] =
+    await Promise.all([
+      supabase
+        .from("modulos")
+        .select("id, numero, titulo, cursos(nome)")
+        .eq("id", moduloId)
+        .eq("curso_id", cursoId)
+        .single(),
+      supabase
+        .from("aulas")
+        .select("id, numero, titulo, materiais(id), quizzes(id)")
+        .eq("modulo_id", moduloId)
+        .order("numero"),
+      getMatriculaAtivaComTurma(supabase, user.id, cursoId),
+      supabase.from("modulos").select("id, numero, titulo").eq("curso_id", cursoId).order("numero"),
+    ]);
 
   const modulo = moduloData as unknown as ModuloRow | null;
   const aulas = data as unknown as AulaAlunoRow[] | null;
+  const todosModulos = (todosModulosData ?? []) as ModuloVizinhoRow[];
 
   if (!modulo) {
     notFound();
@@ -122,6 +138,23 @@ export default async function ModuloAulasPage({
     matricula?.id ?? null,
   );
 
+  const totalAulas = aulas?.length ?? 0;
+  const concluidas = aulasConcluidasIds.size;
+  const percentualModulo = totalAulas > 0 ? Math.round((concluidas / totalAulas) * 100) : 0;
+  const moduloConcluido = totalAulas > 0 && concluidas === totalAulas;
+
+  // Primeira aula liberada e ainda não concluída, na ordem do módulo —
+  // define tanto o destaque visual ("aula atual") quanto o alvo do botão
+  // "Continuar de onde parei".
+  const aulaAtual = (aulas ?? []).find((aula) => {
+    const liberacao = liberacaoMap.get(aula.id) ?? liberacaoPadrao;
+    return liberacao.liberada && !aulasConcluidasIds.has(aula.id);
+  });
+
+  const proximoModulo = todosModulos
+    .filter((m) => m.numero > modulo.numero)
+    .sort((a, b) => a.numero - b.numero)[0];
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -139,12 +172,31 @@ export default async function ModuloAulasPage({
           <h1 className="text-2xl font-semibold">
             Módulo {modulo.numero} — {modulo.titulo}
           </h1>
-          {aulas && aulas.length > 0 && (
+          {totalAulas > 0 && (
             <Badge variant="secondary">
-              {aulasConcluidasIds.size}/{aulas.length}
+              {concluidas}/{totalAulas}
             </Badge>
           )}
         </div>
+        {totalAulas > 0 && (
+          <div className="mt-3 flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <Progress
+                value={percentualModulo}
+                className="max-w-xs flex-1"
+                indicatorClassName={corIndicadorModulo(percentualModulo)}
+              />
+              <span className="text-muted-foreground text-sm">
+                {concluidas} de {totalAulas} aulas concluídas ({percentualModulo}%)
+              </span>
+            </div>
+            {moduloConcluido && (
+              <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                🎉 Módulo concluído!
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {error ? (
@@ -162,55 +214,108 @@ export default async function ModuloAulasPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="flex flex-col gap-2">
-          {aulas.map((aula) => {
-            const totalMateriais = aula.materiais?.length ?? 0;
-            const temQuiz = !!aula.quizzes;
-            const liberacao = liberacaoMap.get(aula.id) ?? liberacaoPadrao;
+        <div className="flex flex-col gap-4">
+          {aulaAtual && (
+            <Button
+              render={
+                <Link href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaAtual.id}`} />
+              }
+              nativeButton={false}
+              className="w-fit gap-2 bg-cyan-600 text-white hover:bg-cyan-700"
+            >
+              <PlayCircle className="size-4" />
+              Continuar: Aula {aulaAtual.numero} — {aulaAtual.titulo}
+            </Button>
+          )}
 
-            if (!liberacao.liberada) {
-              return (
-                <Card key={aula.id} className="opacity-60">
-                  <CardContent className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Lock className="text-muted-foreground size-4 shrink-0" />
-                      <p className="font-medium">
-                        {aulasConcluidasIds.has(aula.id) ? "✅" : "⭕"} Aula {aula.numero} — {aula.titulo}
+          {moduloConcluido && (
+            <Card className="border-cyan-500/30 bg-cyan-500/5">
+              <CardContent className="flex items-center justify-between gap-3 py-4">
+                {proximoModulo ? (
+                  <>
+                    <p className="text-sm font-medium">Você concluiu este módulo. Continue para o próximo:</p>
+                    <Button
+                      render={
+                        <Link href={`/aluno/cursos/${cursoId}/modulos/${proximoModulo.id}`} />
+                      }
+                      nativeButton={false}
+                      size="sm"
+                      className="shrink-0 gap-2 bg-cyan-600 text-white hover:bg-cyan-700"
+                    >
+                      Ir para o Módulo {proximoModulo.numero} — {proximoModulo.titulo}
+                      <ArrowRight className="size-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm font-medium">
+                    🎓 Você concluiu todos os módulos! Aguarde a liberação do seu certificado.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex flex-col gap-2">
+            {aulas.map((aula) => {
+              const totalMateriais = aula.materiais?.length ?? 0;
+              const temQuiz = !!aula.quizzes;
+              const liberacao = liberacaoMap.get(aula.id) ?? liberacaoPadrao;
+              const concluida = aulasConcluidasIds.has(aula.id);
+              const atual = aulaAtual?.id === aula.id;
+
+              if (!liberacao.liberada) {
+                return (
+                  <Card key={aula.id} className="opacity-60">
+                    <CardContent className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Lock className="text-muted-foreground size-4 shrink-0" />
+                        <p className="font-medium">
+                          {concluida ? "✅" : "⭕"} Aula {aula.numero} — {aula.titulo}
+                        </p>
+                      </div>
+                      <p className="text-muted-foreground text-sm">
+                        {liberacao.motivoBloqueio === "sequencial"
+                          ? "Conclua a aula anterior"
+                          : `Disponível em ${formatDateBR(liberacao.dataLiberacao!)}`}
                       </p>
-                    </div>
-                    <p className="text-muted-foreground text-sm">
-                      {liberacao.motivoBloqueio === "sequencial"
-                        ? "Conclua a aula anterior"
-                        : `Disponível em ${formatDateBR(liberacao.dataLiberacao!)}`}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            }
+                    </CardContent>
+                  </Card>
+                );
+              }
 
-            return (
-              <Link
-                key={aula.id}
-                href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}`}
-              >
-                <Card className="hover:bg-accent/50 transition-colors">
-                  <CardContent className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">
-                      {aulasConcluidasIds.has(aula.id) ? "✅" : "⭕"} Aula {aula.numero} — {aula.titulo}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {totalMateriais > 0 && (
-                        <Badge variant="secondary">
-                          {totalMateriais} {totalMateriais === 1 ? "material" : "materiais"}
-                        </Badge>
-                      )}
-                      {temQuiz && <Badge variant="default">Quiz disponível</Badge>}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+              return (
+                <Link
+                  key={aula.id}
+                  href={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aula.id}`}
+                >
+                  <Card
+                    className={cn(
+                      "transition-colors",
+                      concluida
+                        ? "border-green-500/30 bg-green-500/5 hover:bg-green-500/10"
+                        : atual
+                          ? "border-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/15"
+                          : "hover:bg-accent/50",
+                    )}
+                  >
+                    <CardContent className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">
+                        {concluida ? "✅" : "⭕"} Aula {aula.numero} — {aula.titulo}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {totalMateriais > 0 && (
+                          <Badge variant="secondary">
+                            {totalMateriais} {totalMateriais === 1 ? "material" : "materiais"}
+                          </Badge>
+                        )}
+                        {temQuiz && <Badge variant="default">Quiz disponível</Badge>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
