@@ -57,6 +57,37 @@ export async function toggleCidadeAtiva(id: string, ativa: boolean): Promise<{ e
   return {};
 }
 
+// Sem .eq()/filtro nenhum de propósito: atualiza todas as linhas que a RLS
+// permitir (policy "Admins gerenciam cidades" cobre qualquer linha pra um
+// admin) — é exatamente o "ativar/desativar tudo de uma vez" pedido.
+export async function ativarTodasCidades(): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("conecta_cidades").update({ ativa: true });
+
+  if (error) {
+    return { error: "Não foi possível ativar todas as cidades. Tente novamente." };
+  }
+
+  revalidatePath("/admin/conecta/cidades");
+  return {};
+}
+
+export async function desativarTodasCidades(): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("conecta_cidades").update({ ativa: false });
+
+  if (error) {
+    return { error: "Não foi possível desativar todas as cidades. Tente novamente." };
+  }
+
+  revalidatePath("/admin/conecta/cidades");
+  return {};
+}
+
 export async function excluirCidade(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 

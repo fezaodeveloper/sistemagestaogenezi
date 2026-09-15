@@ -4,6 +4,8 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import {
   adicionarCidade,
+  ativarTodasCidades,
+  desativarTodasCidades,
   excluirCidade,
   getCidadesAdmin,
   toggleCidadeAtiva,
@@ -133,6 +135,116 @@ function AdicionarCidadeDialog({ onAdicionada }: { onAdicionada: () => void }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AtivarTodasButton({ onAtualizado }: { onAtualizado: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleConfirmar() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await ativarTodasCidades();
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onAtualizado();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" className="text-green-600 dark:text-green-400">
+            ✅ Ativar todas
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Ativar todas as cidades</AlertDialogTitle>
+          <AlertDialogDescription>Tem certeza que deseja ativar todas as cidades?</AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction disabled={isPending} onClick={handleConfirmar}>
+            {isPending ? "Ativando..." : "Ativar todas"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function DesativarTodasButton({ onAtualizado }: { onAtualizado: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleConfirmar() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await desativarTodasCidades();
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onAtualizado();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" className="text-destructive">
+            🔴 Desativar todas
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Desativar todas as cidades</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja desativar todas as cidades? Empresas não conseguirão cadastrar novas vagas.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleConfirmar}>
+            {isPending ? "Desativando..." : "Desativar todas"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -301,7 +413,11 @@ export function ConectaCidadesView({ cidadesIniciais }: { cidadesIniciais: Cidad
             </SelectContent>
           </Select>
         </div>
-        <AdicionarCidadeDialog onAdicionada={recarregar} />
+        <div className="flex flex-wrap items-center gap-2">
+          <AtivarTodasButton onAtualizado={recarregar} />
+          <DesativarTodasButton onAtualizado={recarregar} />
+          <AdicionarCidadeDialog onAdicionada={recarregar} />
+        </div>
       </div>
 
       {cidadesFiltradas.length === 0 ? (
