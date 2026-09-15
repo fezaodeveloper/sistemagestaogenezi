@@ -114,8 +114,6 @@ export default async function AdminDashboardPage() {
         receitaMes={receitaMes}
       />
 
-      <DashboardGraficos dados={graficos} />
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <AlertasDia />
@@ -127,6 +125,8 @@ export default async function AdminDashboardPage() {
           <DashboardCalendario />
         </div>
       </div>
+
+      <DashboardGraficos dados={graficos} />
     </div>
   );
 }

@@ -1,12 +1,36 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DashboardGraficosDados } from "@/lib/relatorios/dashboard-graficos";
 
 function formatMoeda(valor: number): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
+
+// "trancada" não existe no enum real de matriculas.status (ver comentário em
+// src/lib/relatorios/dashboard-graficos.ts) — a cor âmbar pedida pra
+// "trancada" foi aplicada em "inativa", o status real mais próximo (que já
+// inclui o alias legado "transferida").
+const COR_STATUS: Record<string, string> = {
+  ativa: "#22c55e",
+  concluida: "#06b6d4",
+  cancelada: "#ef4444",
+  inativa: "#f59e0b",
+};
 
 export function DashboardGraficos({ dados }: { dados: DashboardGraficosDados }) {
   return (
@@ -51,16 +75,37 @@ export function DashboardGraficos({ dados }: { dados: DashboardGraficosDados }) 
           <CardHeader>
             <CardTitle className="text-sm font-medium">Status das matrículas</CardTitle>
           </CardHeader>
-          <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dados.statusMatriculas} layout="vertical" margin={{ left: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" fontSize={12} allowDecimals={false} />
-                <YAxis type="category" dataKey="label" fontSize={12} width={90} />
-                <Tooltip />
-                <Bar dataKey="total" name="Matrículas" fill="#A78BFA" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="flex flex-col items-center gap-6 sm:flex-row sm:justify-center">
+            <div className="h-64 w-full max-w-xs">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={dados.statusMatriculas} dataKey="total" nameKey="label" cx="50%" cy="50%" outerRadius={90}>
+                    {dados.statusMatriculas.map((item) => (
+                      <Cell key={item.status} fill={COR_STATUS[item.status] ?? "#94a3b8"} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-col gap-2">
+              {dados.statusMatriculas.map((item) => {
+                const totalGeral = dados.statusMatriculas.reduce((soma, atual) => soma + atual.total, 0);
+                const percentual = totalGeral > 0 ? Math.round((item.total / totalGeral) * 100) : 0;
+                return (
+                  <div key={item.status} className="flex items-center gap-2 text-sm">
+                    <span
+                      className="size-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: COR_STATUS[item.status] ?? "#94a3b8" }}
+                    />
+                    <span>{item.label}</span>
+                    <span className="text-muted-foreground">
+                      — {item.total} ({percentual}%)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       </div>
