@@ -5,6 +5,7 @@ import { getConversaPorAluno, getContagemNaoLidasAluno } from "@/lib/chat/chat";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
+import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
 import { Separator } from "@/components/ui/separator";
@@ -44,19 +45,21 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   const recursos = await getRecursosHabilitadosAluno(user.id);
 
   const supabase = await createClient();
-  const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }] = await Promise.all([
-    getConversaPorAluno(supabase, user.id),
-    supabase
-      .from("parcelas")
-      .select("id", { count: "exact", head: true })
-      .eq("aluno_id", user.id)
-      .eq("status", "atrasado"),
-    supabase
-      .from("contratos_assinados")
-      .select("id", { count: "exact", head: true })
-      .eq("aluno_id", user.id)
-      .eq("status", "pendente"),
-  ]);
+  const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }, conectaHabilitado] =
+    await Promise.all([
+      getConversaPorAluno(supabase, user.id),
+      supabase
+        .from("parcelas")
+        .select("id", { count: "exact", head: true })
+        .eq("aluno_id", user.id)
+        .eq("status", "atrasado"),
+      supabase
+        .from("contratos_assinados")
+        .select("id", { count: "exact", head: true })
+        .eq("aluno_id", user.id)
+        .eq("status", "pendente"),
+      getConectaHabilitado(supabase),
+    ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
     : 0;
@@ -72,6 +75,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           parcelasAtrasadas={parcelasAtrasadas ?? 0}
           contratosPendentes={contratosPendentes ?? 0}
           recursos={recursos}
+          conectaHabilitado={conectaHabilitado}
         />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">

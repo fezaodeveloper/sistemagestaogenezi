@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { salvarRecursos, type ConfigRecursosValues } from "@/app/admin/configuracoes/actions";
+import {
+  salvarConectaHabilitado,
+  salvarRecursos,
+  type ConfigRecursosValues,
+} from "@/app/admin/configuracoes/actions";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -30,10 +36,34 @@ function campo(recurso: RecursoChave, tipo: CursoTipoChave) {
 // banners-login-form.tsx) — sem botão "Salvar" separado. O FormData enviado
 // a cada toggle carrega os 15 valores (não só o que mudou): mais simples que
 // um PATCH parcial, e o estado inteiro já vive no client de qualquer forma.
-export function ConfiguracoesRecursosForm({ defaultValues }: { defaultValues: ConfigRecursosValues }) {
+export function ConfiguracoesRecursosForm({
+  defaultValues,
+  conectaHabilitadoInicial,
+}: {
+  defaultValues: ConfigRecursosValues;
+  conectaHabilitadoInicial: boolean;
+}) {
   const [valores, setValores] = useState(defaultValues);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [conectaHabilitado, setConectaHabilitado] = useState(conectaHabilitadoInicial);
+  const [erroConecta, setErroConecta] = useState<string | null>(null);
+  const [salvandoConecta, startTransitionConecta] = useTransition();
+
+  function handleToggleConecta(checked: boolean) {
+    const anterior = conectaHabilitado;
+    setConectaHabilitado(checked);
+    setErroConecta(null);
+
+    startTransitionConecta(async () => {
+      const resultado = await salvarConectaHabilitado(checked);
+      if (resultado.error) {
+        setErroConecta(resultado.error);
+        setConectaHabilitado(anterior);
+      }
+    });
+  }
 
   function handleToggle(recurso: RecursoChave, tipo: CursoTipoChave, checked: boolean) {
     const chave = campo(recurso, tipo);
@@ -93,6 +123,32 @@ export function ConfiguracoesRecursosForm({ defaultValues }: { defaultValues: Co
           {error}
         </p>
       )}
+
+      <Separator className="my-2" />
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold">Gênezi Conecta</h3>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="conecta-habilitado" className="font-normal">
+            Habilitar Gênezi Conecta
+          </Label>
+          <Switch
+            id="conecta-habilitado"
+            checked={conectaHabilitado}
+            disabled={salvandoConecta}
+            onCheckedChange={(checked) => handleToggleConecta(checked === true)}
+          />
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Quando desativado, o portal de empregos fica completamente oculto para alunos e
+          candidatos externos.
+        </p>
+        {erroConecta && (
+          <p role="alert" className="text-destructive text-sm">
+            {erroConecta}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

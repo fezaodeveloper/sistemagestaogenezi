@@ -1,10 +1,19 @@
+import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
+import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
 import { buscarVagasConecta, getCursosConcluidosAluno, getMeuPerfilConecta } from "@/app/aluno/conecta/actions";
 import { getCidadesAprovadas } from "@/lib/conecta/publico";
 import { AlunoConectaView } from "@/components/aluno/aluno-conecta-view";
 
 export default async function AlunoConectaPage() {
   const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  const conectaHabilitado = await getConectaHabilitado(supabase);
+  if (!conectaHabilitado) {
+    notFound();
+  }
 
   const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas] = await Promise.all([
     getMeuPerfilConecta(),

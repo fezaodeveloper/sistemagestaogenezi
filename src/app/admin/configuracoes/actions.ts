@@ -804,3 +804,28 @@ export async function salvarRecursos(formData: FormData): Promise<{ error?: stri
   revalidatePath("/admin/configuracoes");
   return {};
 }
+
+// ===== Botão global do Gênezi Conecta (roadmap Grupo A, item 6) =====
+//
+// Desativar esconde a aba do menu do aluno (aluno-sidebar.tsx), faz
+// /aluno/conecta responder 404 e faz o proxy redirecionar /conecta/* e
+// /empresa/* pra /entrar — ver src/lib/configuracoes/conecta.ts e
+// src/proxy.ts.
+
+export async function salvarConectaHabilitado(ativo: boolean): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ conecta_habilitado: ativo, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/aluno");
+  return {};
+}

@@ -52,7 +52,7 @@ export default async function ConfiguracoesPage({
     supabase
       .from("configuracoes")
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido, conecta_habilitado",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -245,6 +245,7 @@ export default async function ConfiguracoesPage({
                   recurso_certificados_ead: data?.recurso_certificados_ead ?? true,
                   recurso_certificados_hibrido: data?.recurso_certificados_hibrido ?? true,
                 }}
+                conectaHabilitadoInicial={data?.conecta_habilitado ?? true}
               />
             </CardContent>
           </Card>

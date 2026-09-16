@@ -68,6 +68,11 @@ export default async function EntrarPage({
               Não foi possível entrar com o Google. Tente novamente.
             </p>
           )}
+          {error === "conecta-desativado" && (
+            <p role="alert" className="text-destructive text-sm">
+              O Gênezi Conecta está temporariamente desativado.
+            </p>
+          )}
           <LoginForm />
         </div>
 

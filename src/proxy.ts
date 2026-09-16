@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createProxyClient } from "@/lib/supabase/proxy";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { loginHome, roleHome, type Role } from "@/lib/auth/roles";
 
 // Camada de conveniência/UX: faz o refresh de sessão (getClaims) e redireciona
@@ -11,6 +12,31 @@ export async function proxy(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims.sub;
   const { pathname } = request.nextUrl;
+
+  // Gênezi Conecta pode ser desativado globalmente (TAREFA 6 do roadmap) —
+  // quando estiver, TODO o portal externo (empresas + candidatos) fica
+  // invisível, inclusive as rotas públicas de login/cadastro dentro de
+  // /empresa. Checagem best-effort via client admin (bypassa RLS e não
+  // depende de sessão, já que isso roda antes de qualquer autenticação) —
+  // se a query falhar por qualquer motivo, deixa passar em vez de derrubar
+  // o app inteiro por causa de uma tabela de configuração.
+  if (pathname.startsWith("/conecta") || pathname.startsWith("/empresa")) {
+    let conectaHabilitado = true;
+    try {
+      const admin = createAdminClient();
+      const { data } = await admin
+        .from("configuracoes")
+        .select("conecta_habilitado")
+        .eq("id", true)
+        .maybeSingle();
+      conectaHabilitado = data?.conecta_habilitado ?? true;
+    } catch {
+      conectaHabilitado = true;
+    }
+    if (!conectaHabilitado) {
+      return NextResponse.redirect(new URL("/entrar?error=conecta-desativado", request.url));
+    }
+  }
 
   // Só busca o profile se houver sessão — visitante anônimo em rota pública
   // não precisa de round-trip nenhum ao banco.

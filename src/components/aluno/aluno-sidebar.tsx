@@ -26,6 +26,7 @@ export function AlunoSidebar({
   parcelasAtrasadas,
   contratosPendentes,
   recursos,
+  conectaHabilitado,
 }: {
   user: CurrentUser;
   conversaId: string | null;
@@ -33,6 +34,7 @@ export function AlunoSidebar({
   parcelasAtrasadas: number;
   contratosPendentes: number;
   recursos: RecursosHabilitados;
+  conectaHabilitado: boolean;
 }) {
   return (
     <Sidebar>
@@ -123,16 +125,18 @@ export function AlunoSidebar({
                   />
                 </SidebarMenuItem>
               )}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={
-                    <Link href="/aluno/conecta">
-                      <Briefcase />
-                      <span>Gênezi Conecta</span>
-                    </Link>
-                  }
-                />
-              </SidebarMenuItem>
+              {conectaHabilitado && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link href="/aluno/conecta">
+                        <Briefcase />
+                        <span>Gênezi Conecta</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
+              )}
               {recursos.certificados && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
@@ -166,6 +170,23 @@ export function AlunoSidebar({
       </SidebarContent>
       <SidebarFooter>
         <UserMenu user={user} />
+        <nav className="flex flex-wrap justify-center gap-x-1.5 gap-y-0.5 px-2 pb-1 text-[11px] text-muted-foreground/70">
+          <Link href="/aluno/legal/privacidade" className="hover:text-muted-foreground hover:underline">
+            Privacidade
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/aluno/legal/termos" className="hover:text-muted-foreground hover:underline">
+            Termos
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/aluno/legal/lgpd" className="hover:text-muted-foreground hover:underline">
+            LGPD
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/aluno/legal/imagem" className="hover:text-muted-foreground hover:underline">
+            Uso de Imagem
+          </Link>
+        </nav>
       </SidebarFooter>
     </Sidebar>
   );

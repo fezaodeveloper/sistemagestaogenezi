@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
   AlertTriangle, Award, Banknote, BarChart2, Briefcase, Building2, CalendarDays, CalendarRange, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
-  LayoutDashboard, MapPin, MessageCircle, MessagesSquare, Monitor, Package, PlayCircle, PlusCircle, Presentation, Receipt,
+  LayoutDashboard, MapPin, Megaphone, MessageCircle, MessagesSquare, Monitor, Package, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Tags, Target, TrendingDown, Truck, UserPlus, Users, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -51,6 +51,7 @@ const GROUPS: NavGroup[] = [
   ]},
   { id: "comercial", label: "Comercial", icon: Target, items: [
     { href: "/admin/leads", label: "Leads / CRM", icon: UserPlus },
+    { href: "/admin/comercial/campanhas", label: "Campanhas", icon: Megaphone },
   ]},
   { id: "engajamento", label: "Engajamento", icon: Gift, items: [
     { href: "/admin/premios", label: "Prêmios", icon: Gift },
