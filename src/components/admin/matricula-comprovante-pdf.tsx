@@ -243,7 +243,7 @@ export function MatriculaComprovantePdf({
           <View style={pdfStyles.section}>
             <Text style={pdfStyles.sectionTitle}>AUTORIZAÇÃO DE USO DE IMAGEM E VOZ</Text>
             <Text style={pdfStyles.termoTexto}>{resumo.termo_imagem_texto}</Text>
-            <Text style={pdfStyles.termoData}>Propriá/SE, ___/___/______</Text>
+            <Text style={pdfStyles.termoData}>Porto Real do Colégio/AL, ___/___/______</Text>
 
             <View style={pdfStyles.assinaturaBloco}>
               <View style={pdfStyles.assinaturaLinha} />
