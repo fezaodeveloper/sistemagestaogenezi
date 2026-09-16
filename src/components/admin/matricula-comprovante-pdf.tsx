@@ -91,26 +91,30 @@ function formatDiasSemana(dias: (typeof DIAS_SEMANA)[number][] | null | undefine
 }
 
 const pdfStyles = StyleSheet.create({
-  page: { padding: 36, fontSize: 10, fontFamily: "Helvetica" },
-  header: { marginBottom: 18, borderBottomWidth: 2, borderBottomColor: "#000000", paddingBottom: 10 },
+  page: { padding: 28, fontSize: 9, fontFamily: "Helvetica" },
+  header: { marginBottom: 12, borderBottomWidth: 2, borderBottomColor: "#000000", paddingBottom: 8 },
   title: { fontSize: 16, fontFamily: "Helvetica-Bold" },
   subtitle: { fontSize: 12, marginTop: 2 },
   meta: { fontSize: 9, color: "#555555", marginTop: 4 },
-  section: { marginBottom: 12 },
+  section: { marginBottom: 8 },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Helvetica-Bold",
     marginBottom: 4,
     backgroundColor: "#f0f0f0",
-    padding: 4,
+    padding: 3,
   },
-  row: { flexDirection: "row", marginBottom: 2 },
+  row: { flexDirection: "row", marginBottom: 1 },
   label: { width: "40%", color: "#555555" },
   value: { width: "60%", fontFamily: "Helvetica-Bold" },
-  footer: { marginTop: 24, fontSize: 9, textAlign: "center", color: "#555555" },
+  footer: { marginTop: 12, fontSize: 9, textAlign: "center", color: "#555555" },
   escolaContato: { fontSize: 9, color: "#555555", marginTop: 2 },
-  termoTexto: { textAlign: "justify", marginBottom: 12, lineHeight: 1.4 },
-  termoData: { marginBottom: 24 },
+  // fontSize 8 (menor que o resto do PDF, 9): o texto do termo é
+  // configurável pelo admin (configuracoes.termo_imagem_texto) e pode ficar
+  // longo — reduzido de propósito pra não ser o parágrafo que empurra o
+  // documento pra uma segunda página.
+  termoTexto: { textAlign: "justify", marginBottom: 8, lineHeight: 1.35, fontSize: 8 },
+  termoData: { marginBottom: 12 },
   // Mesmo padrão de linha de assinatura já usado no contrato
   // (src/lib/contratos/pdf.tsx: assinaturaLinha) — borda em vez de
   // caracteres "_____" literais, que não alinham bem em fontes PDF.
