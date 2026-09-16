@@ -46,13 +46,16 @@ import {
 import {
   buscarAlunosParaWizard,
   buscarCursosParaWizard,
+  buscarModulosAulasCurso,
   buscarTurmasParaWizard,
   createMatricula,
   type AlunoParaMatricula,
   type CursoParaMatricula,
+  type ModulosAulasCurso,
   type TurmaParaMatricula,
 } from "@/app/admin/matriculas/actions";
 import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
+import { ResponsavelMenorDialog, type ResponsavelMenor } from "@/components/admin/responsavel-menor-dialog";
 
 const ETAPAS = ["Aluno", "Curso e Turma", "Valores", "Datas", "Materiais", "Confirmação"] as const;
 
@@ -138,7 +141,14 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
 
 // --- Wizard ---
 
-export function MatriculaWizard() {
+type EscolaInfo = {
+  nome?: string;
+  endereco?: string;
+  telefone?: string;
+  termoImagemTexto?: string;
+};
+
+export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
   const [step, setStep] = useState(1);
 
   // Etapa 1 — Aluno
@@ -182,6 +192,7 @@ export function MatriculaWizard() {
   const [turmasDoCurso, setTurmasDoCurso] = useState<TurmaParaMatricula[]>([]);
   const [buscandoTurmas, setBuscandoTurmas] = useState(false);
   const [buscaTurma, setBuscaTurma] = useState("");
+  const [cursoModulosAulas, setCursoModulosAulas] = useState<ModulosAulasCurso | null>(null);
 
   // Mesma busca sob demanda com debounce de 300ms da Etapa 1 — só dispara
   // com 2+ caracteres, evita carregar todos os cursos ativos de uma vez.
@@ -213,10 +224,15 @@ export function MatriculaWizard() {
     setTurma(null);
     setBuscaTurma("");
     setTurmasDoCurso([]);
+    setCursoModulosAulas(null);
     setBuscandoTurmas(true);
     try {
-      const turmasEncontradas = await buscarTurmasParaWizard(cursoSelecionado.id);
+      const [turmasEncontradas, modulosAulas] = await Promise.all([
+        buscarTurmasParaWizard(cursoSelecionado.id),
+        buscarModulosAulasCurso(cursoSelecionado.id),
+      ]);
       setTurmasDoCurso(turmasEncontradas);
+      setCursoModulosAulas(modulosAulas);
     } finally {
       setBuscandoTurmas(false);
     }
@@ -348,6 +364,7 @@ export function MatriculaWizard() {
     setTurma(null);
     setTurmasDoCurso([]);
     setBuscaTurma("");
+    setCursoModulosAulas(null);
     setDescontoTipo("sem_bolsa");
     setDescontoFormato(null);
     setDescontoValorInput("");
@@ -416,11 +433,14 @@ export function MatriculaWizard() {
     });
   }
 
-  async function handleImprimirComprovante() {
+  async function handleImprimirComprovante(responsavel: ResponsavelMenor | null) {
     if (!aluno || !curso || !turma || !formaPagamento) return;
 
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
     // de qualquer await — mesmo padrão de alunos-table.tsx/cursos-table.tsx.
+    // O ResponsavelMenorDialog chama esta função direto no onClick do botão
+    // "Gerar PDF" (sem await no meio), então isso continua valendo mesmo
+    // com o dialog no caminho.
     const novaAba = window.open("", "_blank");
     setGerandoPdf(true);
     try {
@@ -429,7 +449,11 @@ export function MatriculaWizard() {
         <MatriculaComprovantePdf
           resumo={{
             aluno,
-            curso,
+            curso: {
+              ...curso,
+              totalModulos: cursoModulosAulas?.totalModulos,
+              totalAulas: cursoModulosAulas?.totalAulas,
+            },
             turma,
             valorOriginal,
             descontoTipo,
@@ -449,6 +473,12 @@ export function MatriculaWizard() {
             taxaMatriculaFinal: cobrarTaxaMatricula ? taxaMatriculaFinal : null,
             taxaMatriculaFormaPagamento: cobrarTaxaMatricula ? taxaMatriculaFormaPagamento : null,
             taxaMatriculaPaga: cobrarTaxaMatricula ? taxaMatriculaPaga : false,
+            escola_nome: escola.nome,
+            escola_endereco: escola.endereco,
+            escola_telefone: escola.telefone,
+            termo_imagem_texto: escola.termoImagemTexto,
+            responsavelNome: responsavel?.nome,
+            responsavelCpf: responsavel?.cpf,
           }}
           geradoEm={geradoEm}
         />,
@@ -1232,10 +1262,16 @@ export function MatriculaWizard() {
         {renderResumoCard()}
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={handleImprimirComprovante} disabled={gerandoPdf}>
-            <Printer />
-            {gerandoPdf ? "Gerando PDF..." : "Imprimir Comprovante"}
-          </Button>
+          <ResponsavelMenorDialog
+            gerandoPdf={gerandoPdf}
+            onConfirmar={handleImprimirComprovante}
+            trigger={
+              <Button type="button" variant="outline" disabled={gerandoPdf}>
+                <Printer />
+                {gerandoPdf ? "Gerando PDF..." : "Imprimir Comprovante"}
+              </Button>
+            }
+          />
           <Button type="button" variant="outline" onClick={resetWizard}>
             Nova Matrícula
           </Button>

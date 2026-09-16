@@ -14,6 +14,7 @@ import { ConfiguracoesRecursosForm } from "@/components/admin/configuracoes-recu
 import { BannersLoginForm } from "@/components/admin/banners-login-form";
 import { LogoEscolaForm } from "@/components/admin/logo-escola-form";
 import { RodapeLoginForm } from "@/components/admin/rodape-login-form";
+import { TermoImagemMatriculaForm } from "@/components/admin/termo-imagem-matricula-form";
 import { BackupSection } from "@/components/admin/backup-section";
 import { LogSistemaView } from "@/components/admin/log-sistema-view";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export default async function ConfiguracoesPage({
     supabase
       .from("configuracoes")
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido, conecta_habilitado",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido, conecta_habilitado, termo_imagem_texto",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -155,6 +156,15 @@ export default async function ConfiguracoesPage({
               >
                 Editar template do certificado
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>Termo de Imagem do Comprovante de Matrícula</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TermoImagemMatriculaForm textoInicial={data?.termo_imagem_texto ?? null} />
             </CardContent>
           </Card>
         </TabsContent>

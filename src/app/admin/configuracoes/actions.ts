@@ -599,6 +599,35 @@ export async function salvarRodapeLogin(texto: string): Promise<{ error?: string
   return {};
 }
 
+// ===== Termo de Uso de Imagem do comprovante de matrícula (roadmap, item 5) =====
+
+const TERMO_IMAGEM_MAX_LENGTH = 2000;
+
+export async function salvarTermoImagemMatricula(texto: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const termo = texto.trim();
+  if (!termo) {
+    return { error: "O texto do termo não pode ficar vazio." };
+  }
+  if (termo.length > TERMO_IMAGEM_MAX_LENGTH) {
+    return { error: `O texto pode ter no máximo ${TERMO_IMAGEM_MAX_LENGTH} caracteres.` };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ termo_imagem_texto: termo, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar o termo. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
 // ===== Logomarca da escola (TAREFA 5) =====
 //
 // Mesmo padrão dos banners do login: o upload do arquivo em si acontece do

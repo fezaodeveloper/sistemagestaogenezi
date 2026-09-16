@@ -22,6 +22,9 @@ type ResumoCurso = {
   nome: string;
   tipo: (typeof CURSO_TIPOS)[number];
   carga_horaria_horas: number | null;
+  descricao?: string | null;
+  totalModulos?: number;
+  totalAulas?: number;
 };
 type ResumoTurma = {
   nome: string;
@@ -51,6 +54,18 @@ export type ResumoMatricula = {
   taxaMatriculaFinal?: number | null;
   taxaMatriculaFormaPagamento?: TaxaMatriculaFormaPagamento | null;
   taxaMatriculaPaga?: boolean;
+  // Dados da escola (configuracoes) — opcionais: quando ausentes, o header
+  // cai no nome fixo "GÊNEZI — Educação Profissional" já usado antes desses
+  // campos existirem, e o Termo de Imagem simplesmente não é impresso.
+  escola_nome?: string;
+  escola_endereco?: string;
+  escola_telefone?: string;
+  termo_imagem_texto?: string;
+  // Preenchidos manualmente pelo admin no momento da impressão (Dialog "aluno
+  // é menor de idade?"), não vêm de nenhuma tabela — ver handleImprimirComprovante
+  // em matricula-detalhes.tsx/matricula-wizard.tsx.
+  responsavelNome?: string;
+  responsavelCpf?: string;
 };
 
 function formatValor(valor: number | null): string {
@@ -93,6 +108,15 @@ const pdfStyles = StyleSheet.create({
   label: { width: "40%", color: "#555555" },
   value: { width: "60%", fontFamily: "Helvetica-Bold" },
   footer: { marginTop: 24, fontSize: 9, textAlign: "center", color: "#555555" },
+  escolaContato: { fontSize: 9, color: "#555555", marginTop: 2 },
+  termoTexto: { textAlign: "justify", marginBottom: 12, lineHeight: 1.4 },
+  termoData: { marginBottom: 24 },
+  // Mesmo padrão de linha de assinatura já usado no contrato
+  // (src/lib/contratos/pdf.tsx: assinaturaLinha) — borda em vez de
+  // caracteres "_____" literais, que não alinham bem em fontes PDF.
+  assinaturaBloco: { marginTop: 8, width: "70%" },
+  assinaturaLinha: { borderTopWidth: 1, borderTopColor: "#000000", marginBottom: 4 },
+  assinaturaLabel: { fontSize: 9, color: "#555555" },
 });
 
 function LinhaPdf({ label, value }: { label: string; value: string }) {
@@ -126,8 +150,13 @@ export function MatriculaComprovantePdf({
     <Document>
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
-          <Text style={pdfStyles.title}>GÊNEZI — Educação Profissional</Text>
+          <Text style={pdfStyles.title}>{resumo.escola_nome ?? "GÊNEZI — Educação Profissional"}</Text>
           <Text style={pdfStyles.subtitle}>Comprovante de Matrícula</Text>
+          {(resumo.escola_endereco || resumo.escola_telefone) && (
+            <Text style={pdfStyles.escolaContato}>
+              {[resumo.escola_endereco, resumo.escola_telefone].filter(Boolean).join(" · ")}
+            </Text>
+          )}
           <Text style={pdfStyles.meta}>Emitido em {geradoEm}</Text>
         </View>
 
@@ -140,16 +169,28 @@ export function MatriculaComprovantePdf({
         </View>
 
         <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Curso e Turma</Text>
+          <Text style={pdfStyles.sectionTitle}>Informações do Curso</Text>
           <LinhaPdf label="Curso" value={resumo.curso.nome} />
-          <LinhaPdf label="Modalidade" value={CURSO_TIPO_LABELS[resumo.curso.tipo]} />
+          {resumo.curso.descricao && <LinhaPdf label="Descrição" value={resumo.curso.descricao} />}
           <LinhaPdf
             label="Carga horária"
             value={resumo.curso.carga_horaria_horas ? `${resumo.curso.carga_horaria_horas}h` : "—"}
           />
+          {resumo.curso.totalModulos !== undefined && resumo.curso.totalAulas !== undefined && (
+            <LinhaPdf
+              label="Módulos e aulas"
+              value={`${resumo.curso.totalModulos} módulo(s), ${resumo.curso.totalAulas} aula(s)`}
+            />
+          )}
           <LinhaPdf label="Turma" value={resumo.turma.nome} />
-          <LinhaPdf label="Dias da semana" value={formatDiasSemana(resumo.turma.cadencia_dias_semana)} />
+          <LinhaPdf label="Local" value={CURSO_TIPO_LABELS[resumo.curso.tipo]} />
+          <LinhaPdf label="Dias de aula" value={formatDiasSemana(resumo.turma.cadencia_dias_semana)} />
           <LinhaPdf label="Horário" value={resumo.turma.horario_aula ?? "—"} />
+          <LinhaPdf label="Início" value={formatDataBR(resumo.dataInicio)} />
+          <LinhaPdf
+            label="Previsão de conclusão"
+            value={resumo.previsaoConclusao ? formatDataBR(resumo.previsaoConclusao) : "—"}
+          />
         </View>
 
         <View style={pdfStyles.section}>
@@ -181,15 +222,6 @@ export function MatriculaComprovantePdf({
         )}
 
         <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Datas</Text>
-          <LinhaPdf label="Início" value={formatDataBR(resumo.dataInicio)} />
-          <LinhaPdf
-            label="Previsão de conclusão"
-            value={resumo.previsaoConclusao ? formatDataBR(resumo.previsaoConclusao) : "—"}
-          />
-        </View>
-
-        <View style={pdfStyles.section}>
           <Text style={pdfStyles.sectionTitle}>Materiais entregues</Text>
           <LinhaPdf label="Apostila" value={resumo.apostilaEntregue ? "Sim" : "Não"} />
           <LinhaPdf label="Farda" value={resumo.fardaEntregue ? "Sim" : "Não"} />
@@ -203,8 +235,33 @@ export function MatriculaComprovantePdf({
           </View>
         )}
 
+        {resumo.termo_imagem_texto && (
+          <View style={pdfStyles.section}>
+            <Text style={pdfStyles.sectionTitle}>AUTORIZAÇÃO DE USO DE IMAGEM E VOZ</Text>
+            <Text style={pdfStyles.termoTexto}>{resumo.termo_imagem_texto}</Text>
+            <Text style={pdfStyles.termoData}>Propriá/SE, ___/___/______</Text>
+
+            <View style={pdfStyles.assinaturaBloco}>
+              <View style={pdfStyles.assinaturaLinha} />
+              <Text style={pdfStyles.assinaturaLabel}>Assinatura do Aluno ou Responsável</Text>
+              <Text style={{ marginTop: 8 }}>Nome completo: {resumo.aluno.full_name ?? "—"}</Text>
+              <Text>CPF: {formatCpf(resumo.aluno.cpf)}</Text>
+            </View>
+
+            {resumo.responsavelNome && (
+              <View style={pdfStyles.assinaturaBloco}>
+                <View style={pdfStyles.assinaturaLinha} />
+                <Text style={pdfStyles.assinaturaLabel}>Assinatura do Responsável</Text>
+                <Text style={{ marginTop: 8 }}>Responsável: {resumo.responsavelNome}</Text>
+                <Text>CPF: {resumo.responsavelCpf ? formatCpf(resumo.responsavelCpf) : "—"}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         <Text style={pdfStyles.footer}>
-          Este comprovante confirma a matrícula do aluno acima.
+          Este comprovante confirma a matrícula do aluno acima e deve ser assinado e devolvido à
+          secretaria da escola.
         </Text>
       </Page>
     </Document>

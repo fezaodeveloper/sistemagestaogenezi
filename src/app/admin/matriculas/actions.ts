@@ -72,6 +72,7 @@ export type CursoParaMatricula = {
   tipo: (typeof CURSO_TIPOS)[number];
   carga_horaria_horas: number | null;
   valor: number | null;
+  descricao: string | null;
 };
 
 // Busca sob demanda pro wizard de matrícula (Etapa 2) — substituiu o
@@ -91,7 +92,7 @@ export async function buscarCursosParaWizard(query: string): Promise<CursoParaMa
   const supabase = await createClient();
   const { data } = await supabase
     .from("cursos")
-    .select("id, nome, tipo, carga_horaria_horas, valor")
+    .select("id, nome, tipo, carga_horaria_horas, valor, descricao")
     .eq("status", "ativo")
     .ilike("nome", termoLike)
     .order("nome")
@@ -117,6 +118,29 @@ export async function buscarTurmasParaWizard(cursoId: string): Promise<TurmaPara
     .order("nome");
 
   return (data as TurmaParaMatricula[] | null) ?? [];
+}
+
+export type ModulosAulasCurso = { totalModulos: number; totalAulas: number };
+
+// Contagem pro comprovante de matrícula (item 5 do roadmap, "Total de
+// módulos e aulas se disponível") — duas queries de count (head: true, sem
+// baixar linhas) em vez de embed com agregação, que o PostgREST não resolve
+// bem pra "count de aulas de todos os módulos de um curso" num só round trip.
+// Chamada só quando o curso é selecionado no wizard (não a cada tecla da
+// busca) e uma vez na tela de detalhes da matrícula.
+export async function buscarModulosAulasCurso(cursoId: string): Promise<ModulosAulasCurso> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const [{ count: totalModulos }, { count: totalAulas }] = await Promise.all([
+    supabase.from("modulos").select("id", { count: "exact", head: true }).eq("curso_id", cursoId),
+    supabase
+      .from("aulas")
+      .select("id, modulos!inner(curso_id)", { count: "exact", head: true })
+      .eq("modulos.curso_id", cursoId),
+  ]);
+
+  return { totalModulos: totalModulos ?? 0, totalAulas: totalAulas ?? 0 };
 }
 
 export type CreateMatriculaResult =
@@ -316,9 +340,11 @@ export type MatriculaDetalhada = Matricula & {
     data_inicio: string;
     data_fim: string;
     cursos: {
+      id: string;
       nome: string;
       tipo: (typeof CURSO_TIPOS)[number];
       carga_horaria_horas: number | null;
+      descricao: string | null;
     } | null;
   } | null;
 };
@@ -330,7 +356,7 @@ export async function getMatricula(id: string): Promise<MatriculaDetalhada | nul
   const { data } = await supabase
     .from("matriculas")
     .select(
-      "*, alunos(full_name, email, cpf, telefone), turmas(nome, cadencia_dias_semana, horario_aula, data_inicio, data_fim, cursos(nome, tipo, carga_horaria_horas))",
+      "*, alunos(full_name, email, cpf, telefone), turmas(nome, cadencia_dias_semana, horario_aula, data_inicio, data_fim, cursos(id, nome, tipo, carga_horaria_horas, descricao))",
     )
     .eq("id", id)
     .single();

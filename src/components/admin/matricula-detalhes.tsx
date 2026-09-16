@@ -10,6 +10,7 @@ import {
   type MatriculaDetalhada,
 } from "@/app/admin/matriculas/actions";
 import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
+import { ResponsavelMenorDialog, type ResponsavelMenor } from "@/components/admin/responsavel-menor-dialog";
 import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,7 +97,22 @@ const STATUS_SELECT_ITEMS: Record<string, string> = Object.fromEntries(
   STATUS_EDITAVEIS.map((valor) => [valor, MATRICULA_STATUS_LABELS[valor]]),
 );
 
-export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada }) {
+type EscolaInfo = {
+  nome?: string;
+  endereco?: string;
+  telefone?: string;
+  termoImagemTexto?: string;
+};
+
+export function MatriculaDetalhes({
+  matricula,
+  escola,
+  cursoModulosAulas,
+}: {
+  matricula: MatriculaDetalhada;
+  escola: EscolaInfo;
+  cursoModulosAulas: { totalModulos: number; totalAulas: number } | null;
+}) {
   const router = useRouter();
 
   const [matriculaAtual, setMatriculaAtual] = useState(matricula);
@@ -168,9 +184,12 @@ export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada
     });
   }
 
-  async function handleImprimirComprovante() {
+  async function handleImprimirComprovante(responsavel: ResponsavelMenor | null) {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
     // de qualquer await — mesmo padrão de matricula-wizard.tsx/matriculas-table.tsx.
+    // O ResponsavelMenorDialog chama esta função direto no onClick do botão
+    // "Gerar PDF" (sem await no meio), então isso continua valendo mesmo
+    // com o dialog no caminho.
     const novaAba = window.open("", "_blank");
     setGerandoPdf(true);
     try {
@@ -188,6 +207,9 @@ export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada
               nome: matriculaAtual.turmas?.cursos?.nome ?? "—",
               tipo: matriculaAtual.turmas?.cursos?.tipo ?? "presencial",
               carga_horaria_horas: matriculaAtual.turmas?.cursos?.carga_horaria_horas ?? null,
+              descricao: matriculaAtual.turmas?.cursos?.descricao ?? null,
+              totalModulos: cursoModulosAulas?.totalModulos,
+              totalAulas: cursoModulosAulas?.totalAulas,
             },
             turma: {
               nome: matriculaAtual.turmas?.nome ?? "—",
@@ -212,6 +234,12 @@ export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada
             taxaMatriculaFinal: matriculaAtual.taxa_matricula_final,
             taxaMatriculaFormaPagamento: matriculaAtual.taxa_matricula_forma_pagamento,
             taxaMatriculaPaga: matriculaAtual.taxa_matricula_paga,
+            escola_nome: escola.nome,
+            escola_endereco: escola.endereco,
+            escola_telefone: escola.telefone,
+            termo_imagem_texto: escola.termoImagemTexto,
+            responsavelNome: responsavel?.nome,
+            responsavelCpf: responsavel?.cpf,
           }}
           geradoEm={geradoEm}
         />,
@@ -501,10 +529,16 @@ export function MatriculaDetalhes({ matricula }: { matricula: MatriculaDetalhada
 
         <div className="flex gap-2">
           <WhatsappStubDropdown matriculaId={matriculaAtual.id} />
-          <Button variant="outline" onClick={handleImprimirComprovante} disabled={gerandoPdf}>
-            <Printer />
-            {gerandoPdf ? "Gerando PDF..." : "Imprimir Comprovante"}
-          </Button>
+          <ResponsavelMenorDialog
+            gerandoPdf={gerandoPdf}
+            onConfirmar={handleImprimirComprovante}
+            trigger={
+              <Button variant="outline" disabled={gerandoPdf}>
+                <Printer />
+                {gerandoPdf ? "Gerando PDF..." : "Imprimir Comprovante"}
+              </Button>
+            }
+          />
           {!modoEdicao && (
             <Button onClick={entrarEdicao}>
               <Pencil />
