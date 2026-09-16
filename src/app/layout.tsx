@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Figtree, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -17,6 +17,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Genezi — Sistema de Gestão",
   description: "Plataforma de gestão e portal do aluno da Genezi.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Gênezi",
+  },
+  icons: {
+    apple: "/favicon.ico",
+  },
+};
+
+// themeColor migrou de Metadata pra Viewport no Next 16 (o campo em
+// Metadata está deprecated) — ver node_modules/next/dist/lib/metadata/types.
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
 };
 
 export default function RootLayout({

@@ -3,6 +3,7 @@ import { Banknote, Briefcase, Coins, FileBadge, FileText, GraduationCap, Message
 import type { CurrentUser } from "@/lib/auth/dal";
 import type { RecursosHabilitados } from "@/lib/configuracoes/recursos";
 import { UserMenu } from "@/components/auth/user-menu";
+import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 import { getContagemNaoLidasAlunoAction } from "@/lib/chat/badge-actions";
 import {
@@ -187,6 +188,7 @@ export function AlunoSidebar({
             Uso de Imagem
           </Link>
         </nav>
+        <PwaInstallButton />
       </SidebarFooter>
     </Sidebar>
   );

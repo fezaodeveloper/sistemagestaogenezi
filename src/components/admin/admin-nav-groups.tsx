@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
-  AlertTriangle, Award, Banknote, BarChart2, Briefcase, Building2, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
+  AlertTriangle, Award, Banknote, BarChart2, Bell, Briefcase, Building2, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
   LayoutDashboard, Lock, MapPin, Megaphone, MessageCircle, MessagesSquare, Monitor, Package, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Shield, Tags, Target, TrendingDown, Truck, UserPlus, Users, Wrench, Zap,
 } from "lucide-react";
@@ -57,6 +57,9 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/premios", label: "Prêmios", icon: Gift },
     { href: "/admin/resgates", label: "Resgates", icon: Award },
     { href: "/admin/engajamento/recompensas", label: "Recompensas", icon: Gift },
+  ]},
+  { id: "notificacoes", label: "Notificações", icon: Bell, items: [
+    { href: "/admin/notificacoes", label: "Enviar notificação", icon: Bell },
   ]},
   { id: "sistema", label: "Sistema", icon: Settings, items: [
     { href: "/admin/automacoes", label: "Log de Automações", icon: Zap },

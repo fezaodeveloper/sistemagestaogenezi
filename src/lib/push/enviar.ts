@@ -22,14 +22,19 @@ export async function gerarVapidKeys(): Promise<VapidKeys> {
   return { publicKey: keys.publicKey, privateKey: keys.privateKey };
 }
 
-// Envia uma notificação push pra todas as subscriptions de admin
-// cadastradas (push_subscriptions não distingue "qual admin" — a policy
-// "Admins gerenciam push" já restringe quem pode ler/escrever ali, então
-// qualquer subscription na tabela é, por definição, de um admin). Best-effort
-// por subscription — uma falha isolada (endpoint expirado) não deve impedir
-// o envio pras demais nem lançar pro chamador (mesmo espírito de
-// dispararEvento em automacoes/motor.ts).
-export async function enviarPushAdmin(titulo: string, corpo: string, url: string): Promise<void> {
+// Envia uma notificação push pra um subconjunto de subscriptions
+// (admin: aluno_id null / alunos: aluno_id preenchido — ver migration
+// 20260917800000_push_subscriptions_alunos.sql). Best-effort por
+// subscription — uma falha isolada (endpoint expirado) não deve impedir o
+// envio pras demais nem lançar pro chamador (mesmo espírito de
+// dispararEvento em automacoes/motor.ts). Retorna quantas subscriptions
+// foram encontradas (tentativas de envio, não confirmação de entrega).
+async function enviarPushPara(
+  titulo: string,
+  corpo: string,
+  url: string,
+  filtro: "admin" | "aluno",
+): Promise<number> {
   try {
     const admin = createAdminClient();
 
@@ -39,7 +44,7 @@ export async function enviarPushAdmin(titulo: string, corpo: string, url: string
       .eq("id", true)
       .maybeSingle();
 
-    if (!config?.push_vapid_public_key || !config?.push_vapid_private_key) return;
+    if (!config?.push_vapid_public_key || !config?.push_vapid_private_key) return 0;
 
     webpush.setVapidDetails(
       `mailto:${config.escola_email ?? "contato@genezi.com.br"}`,
@@ -47,11 +52,11 @@ export async function enviarPushAdmin(titulo: string, corpo: string, url: string
       config.push_vapid_private_key,
     );
 
-    const { data: subscriptions } = await admin
-      .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth_key");
+    let query = admin.from("push_subscriptions").select("id, endpoint, p256dh, auth_key");
+    query = filtro === "admin" ? query.is("aluno_id", null) : query.not("aluno_id", "is", null);
+    const { data: subscriptions } = await query;
 
-    if (!subscriptions || subscriptions.length === 0) return;
+    if (!subscriptions || subscriptions.length === 0) return 0;
 
     const payload = JSON.stringify({ title: titulo, body: corpo, url });
 
@@ -76,7 +81,25 @@ export async function enviarPushAdmin(titulo: string, corpo: string, url: string
         }
       }),
     );
+
+    return subscriptions.length;
   } catch {
     // Best-effort — nunca deve afetar o chamador (handlers de Telegram).
+    return 0;
   }
+}
+
+// Só pras subscriptions do próprio admin (aluno_id null) — usada pelos
+// alertas internos (financeiro atrasado, certificados pendentes etc. em
+// automacoes/handlers/telegram.ts). Nunca deve vazar pra dispositivos de
+// aluno, por isso o filtro explícito.
+export async function enviarPushAdmin(titulo: string, corpo: string, url: string): Promise<void> {
+  await enviarPushPara(titulo, corpo, url, "admin");
+}
+
+// Notificação disparada manualmente pelo admin pra todos os alunos com
+// subscription ativa (item 7 do roadmap — /admin/notificacoes). Retorna a
+// quantidade de dispositivos pra que a tela mostre o resultado do envio.
+export async function enviarPushAlunos(titulo: string, corpo: string, url: string): Promise<number> {
+  return enviarPushPara(titulo, corpo, url, "aluno");
 }

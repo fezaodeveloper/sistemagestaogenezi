@@ -59,3 +59,27 @@ export async function getBannersPortal(): Promise<LoginBanner[]> {
 
   return (data as LoginBanner[] | null) ?? [];
 }
+
+// ===== Push notifications do próprio aluno (roadmap, item 7 — PWA) =====
+//
+// ignoreDuplicates (não upsert de verdade) de propósito: push_subscriptions
+// só tem grant de select/insert/delete pra authenticated (sem update) — ver
+// o mesmo comentário em salvarPushSubscription (admin, configuracoes/actions.ts).
+export async function salvarPushSubscriptionAluno(subscription: {
+  endpoint: string;
+  p256dh: string;
+  auth_key: string;
+}): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .upsert({ ...subscription, aluno_id: user.id }, { onConflict: "endpoint", ignoreDuplicates: true });
+
+  if (error) {
+    return { error: "Não foi possível ativar as notificações push." };
+  }
+
+  return {};
+}

@@ -8,6 +8,7 @@ import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
+import { PushSubscribeAluno } from "@/components/aluno/push-subscribe";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -45,7 +46,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   const recursos = await getRecursosHabilitadosAluno(user.id);
 
   const supabase = await createClient();
-  const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }, conectaHabilitado] =
+  const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }, conectaHabilitado, { data: pushConfig }] =
     await Promise.all([
       getConversaPorAluno(supabase, user.id),
       supabase
@@ -59,6 +60,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
         .eq("aluno_id", user.id)
         .eq("status", "pendente"),
       getConectaHabilitado(supabase),
+      supabase.from("configuracoes").select("push_vapid_public_key").eq("id", true).maybeSingle(),
     ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
@@ -67,6 +69,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   return (
     <div className="dark bg-background text-foreground min-h-svh">
       <ConquistasProvider alunoId={user.id} />
+      <PushSubscribeAluno vapidPublicKey={pushConfig?.push_vapid_public_key ?? null} />
       <SidebarProvider>
         <AlunoSidebar
           user={user}
