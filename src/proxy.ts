@@ -63,6 +63,7 @@ export async function proxy(request: NextRequest) {
     "/empresa/cadastro",
     "/captacao",
     "/conecta",
+    "/agendar",
     "/",
   ];
   const isRotaPublica = ROTAS_PUBLICAS.some(

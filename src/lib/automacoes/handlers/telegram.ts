@@ -385,3 +385,26 @@ export async function notificarFollowupLeadsResumo(payload: Record<string, unkno
     "📊",
   );
 }
+
+// ===== Sistema de agendamentos (roadmap, item 2) =====
+
+export async function notificarAgendamentoCriado(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Novo Agendamento",
+    [
+      `👤 ${texto(payload.nome)}`,
+      `📱 WhatsApp: ${texto(payload.whatsapp)}`,
+      `📅 ${formatarData(payload.data_agendada)} às ${texto(payload.horario)}`,
+      `📋 Página: ${texto(payload.titulo_pagina)}`,
+    ],
+    "📅",
+  );
+}
+
+export async function notificarLembretesAgendamentosResumo(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Lembretes D-1 de Agendamentos",
+    [`📅 ${texto(payload.quantidade)} agendamento(s) para amanhã`],
+    "📅",
+  );
+}
