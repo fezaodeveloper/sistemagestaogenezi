@@ -71,11 +71,10 @@ export async function criarAgendamentoPagina(formData: FormData): Promise<{ erro
     .single();
 
   if (error || !data) {
-    console.error("[AGENDAMENTO] Erro ao criar página:", error);
     const mensagem =
       error?.code === "23505"
         ? "Já existe uma página com esse slug."
-        : `Não foi possível criar a página. (${error?.code}: ${error?.message})`;
+        : "Não foi possível criar a página. Tente novamente.";
     return { error: mensagem };
   }
 
