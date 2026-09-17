@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     title: "Gênezi",
   },
   icons: {
-    apple: "/favicon.ico",
+    apple: "/icons/icon-192.png",
   },
 };
 
