@@ -59,7 +59,7 @@ export function BannerSlideshowPortal() {
   return (
     <div className="flex flex-col gap-2">
       <div
-        className="relative h-40 w-full overflow-hidden rounded-xl sm:h-48"
+        className="relative h-40 w-full overflow-hidden rounded-xl sm:h-48 md:h-75"
         onMouseEnter={() => setPausado(true)}
         onMouseLeave={() => setPausado(false)}
       >
