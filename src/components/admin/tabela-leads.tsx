@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { enviarRecontatoLeads, updateLeadStatus } from "@/app/admin/leads/actions";
 import { Button } from "@/components/ui/button";
@@ -25,15 +26,38 @@ import {
 } from "@/components/ui/select";
 import { DeleteLeadButton } from "@/components/admin/delete-lead-button";
 import {
+  KANBAN_COLUNA_LABELS,
   LEAD_ORIGEM_LABELS,
   LEAD_STATUSES,
   LEAD_STATUSES_AUTOMATICOS,
   LEAD_STATUS_LABELS,
+  TEMPERATURA_BADGE_CLASS,
+  TEMPERATURA_LABELS,
 } from "@/lib/leads/schema";
 import type { LeadComCurso } from "@/lib/leads/leads";
+import { LIMITE_PADRAO } from "@/lib/paginacao";
+
+const FILTRO_TODOS = "todos";
+const TEMPERATURA_FILTRO_ITEMS: Record<string, string> = { [FILTRO_TODOS]: "Todas", ...TEMPERATURA_LABELS };
+const COLUNA_FILTRO_ITEMS: Record<string, string> = { [FILTRO_TODOS]: "Todas", ...KANBAN_COLUNA_LABELS };
 
 function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function formatDataCurta(iso: string | null): string | null {
+  if (!iso) return null;
+  const [, mes, dia] = iso.slice(0, 10).split("-");
+  return `${dia}/${mes}`;
+}
+
+function proximaAcaoVencida(lead: LeadComCurso): boolean {
+  return (
+    !!lead.proxima_acao &&
+    lead.proxima_acao < new Date().toISOString().slice(0, 10) &&
+    lead.kanban_coluna !== "matriculado" &&
+    lead.kanban_coluna !== "perdido"
+  );
 }
 
 function LeadStatusSelect({ leadId, status }: { leadId: string; status: string }) {
@@ -81,17 +105,43 @@ export function TabelaLeads({
   totalPaginas,
   totalRegistros,
   limite,
+  temperatura,
+  coluna,
 }: {
   itens: LeadComCurso[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
+  temperatura: string;
+  coluna: string;
 }) {
+  const router = useRouter();
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+
+  function construirUrl(overrides: { temperatura?: string; coluna?: string }) {
+    const params = new URLSearchParams();
+    const t = overrides.temperatura ?? temperatura;
+    const c = overrides.coluna ?? coluna;
+    if (t && t !== FILTRO_TODOS) params.set("temperatura", t);
+    if (c && c !== FILTRO_TODOS) params.set("coluna", c);
+    if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
+    const queryString = params.toString();
+    return queryString ? `/admin/leads?${queryString}` : "/admin/leads";
+  }
+
+  function handleTemperaturaChange(valor: string | null) {
+    if (!valor) return;
+    router.push(construirUrl({ temperatura: valor }));
+  }
+
+  function handleColunaChange(valor: string | null) {
+    if (!valor) return;
+    router.push(construirUrl({ coluna: valor }));
+  }
 
   function toggleUm(id: string) {
     setSelecionados((prev) => {
@@ -127,6 +177,39 @@ export function TabelaLeads({
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-muted-foreground text-xs">Temperatura</span>
+          <Select items={TEMPERATURA_FILTRO_ITEMS} value={temperatura || FILTRO_TODOS} onValueChange={handleTemperaturaChange}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(TEMPERATURA_FILTRO_ITEMS).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {TEMPERATURA_FILTRO_ITEMS[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-muted-foreground text-xs">Coluna Kanban</span>
+          <Select items={COLUNA_FILTRO_ITEMS} value={coluna || FILTRO_TODOS} onValueChange={handleColunaChange}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(COLUNA_FILTRO_ITEMS).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {COLUNA_FILTRO_ITEMS[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground text-sm">
           {selecionados.size > 0
@@ -159,13 +242,17 @@ export function TabelaLeads({
               <TableHead>Curso</TableHead>
               <TableHead>Origem</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Temperatura</TableHead>
+              <TableHead>Próxima ação</TableHead>
               <TableHead>Criado em</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {itens.map((lead) => (
-              <TableRow key={lead.id}>
+            {itens.map((lead) => {
+              const vencida = proximaAcaoVencida(lead);
+              return (
+              <TableRow key={lead.id} className={vencida ? "bg-amber-500/10" : undefined}>
                 <TableCell>
                   <Checkbox
                     checked={selecionados.has(lead.id)}
@@ -182,6 +269,18 @@ export function TabelaLeads({
                 <TableCell>
                   <LeadStatusSelect leadId={lead.id} status={lead.status} />
                 </TableCell>
+                <TableCell>
+                  {lead.temperatura ? (
+                    <Badge className={TEMPERATURA_BADGE_CLASS[lead.temperatura]}>
+                      {TEMPERATURA_LABELS[lead.temperatura]}
+                    </Badge>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+                <TableCell className={vencida ? "font-medium text-amber-700 dark:text-amber-400" : undefined}>
+                  {formatDataCurta(lead.proxima_acao) ?? "—"}
+                </TableCell>
                 <TableCell>{formatDateBR(lead.created_at)}</TableCell>
                 <TableCell className="flex justify-end gap-1">
                   <Button
@@ -195,7 +294,8 @@ export function TabelaLeads({
                   <DeleteLeadButton id={lead.id} nome={lead.nome} />
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </Card>

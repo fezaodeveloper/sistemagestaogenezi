@@ -28,6 +28,7 @@ import {
   notificarConectaPagamentoConfirmado,
   notificarConectaAssinaturaCancelada,
   notificarNovaVagaConecta,
+  notificarFollowupLeadsResumo,
 } from "@/lib/automacoes/handlers/telegram";
 import { gerarResumoDiario } from "@/lib/automacoes/handlers/resumo-diario";
 import { gerarRelatorioSemanal } from "@/lib/automacoes/handlers/relatorio-semanal";
@@ -119,6 +120,9 @@ async function executarHandler(tipo: string, payload: EventoPayload): Promise<vo
       return;
     case "relatorio.semanal":
       await gerarRelatorioSemanal();
+      return;
+    case "lead.followup.resumo":
+      await notificarFollowupLeadsResumo(payload);
       return;
     case "whatsapp.stub":
       // Stub de verdade: os botões "Enviar via WhatsApp" (contrato,

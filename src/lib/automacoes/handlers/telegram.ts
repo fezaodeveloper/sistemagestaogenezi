@@ -371,3 +371,17 @@ export async function notificarResumoMensal(payload: Record<string, unknown>): P
     "📊",
   );
 }
+
+// Resumo diário do cron de follow-up automático de leads (roadmap, item 3)
+// — ver src/app/api/cron/followup-leads/route.ts.
+export async function notificarFollowupLeadsResumo(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Follow-up diário de Leads",
+    [
+      `📞 ${texto(payload.contatados)} lead(s) contatados automaticamente`,
+      `⚠️ ${texto(payload.aguardamAcaoManual)} lead(s) passaram a aguardar ação manual (7 dias sem resposta)`,
+      `🔗 Ver CRM: ${LINK_LEADS}`,
+    ],
+    "📊",
+  );
+}

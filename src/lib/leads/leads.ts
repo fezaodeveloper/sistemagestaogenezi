@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefone } from "@/lib/mensagens/texto";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
-import type { Lead, LeadFormValues } from "./schema";
+import type { KanbanColuna, Lead, LeadFormValues, Temperatura } from "./schema";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
@@ -40,11 +40,15 @@ export type LeadComCurso = Lead & { nomeCurso: string | null };
 export async function getLeads(
   supabase: SupabaseServerClient,
   paginacao?: { offset: number; limite: number },
+  filtros?: { temperatura?: Temperatura; kanbanColuna?: KanbanColuna },
 ): Promise<{ itens: LeadComCurso[]; total: number }> {
   let query = supabase
     .from("leads")
     .select("*, cursos(nome)", { count: "exact" })
     .order("created_at", { ascending: false });
+
+  if (filtros?.temperatura) query = query.eq("temperatura", filtros.temperatura);
+  if (filtros?.kanbanColuna) query = query.eq("kanban_coluna", filtros.kanbanColuna);
 
   if (paginacao) {
     query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
@@ -58,6 +62,38 @@ export async function getLeads(
   }));
 
   return { itens, total: count ?? 0 };
+}
+
+// Kanban precisa de todos os leads "em aberto" de uma vez (agrupados em 5
+// colunas no client), não faz sentido paginar — diferente de getLeads
+// (Lista), que pagina normalmente. Aceitável em v1 pro volume atual de
+// leads; se crescer muito, revisar com paginação por coluna.
+export async function getLeadsKanban(supabase: SupabaseServerClient): Promise<LeadComCurso[]> {
+  const { data } = await supabase
+    .from("leads")
+    .select("*, cursos(nome)")
+    .order("created_at", { ascending: false });
+
+  return ((data ?? []) as unknown as Array<Lead & { cursos: { nome: string } | null }>).map((l) => ({
+    ...l,
+    nomeCurso: l.cursos?.nome ?? null,
+  }));
+}
+
+// "Histórico de follow-ups" (drawer do Kanban) não tem tabela própria —
+// reaproveita o campo notas como um log reverso-cronológico de entradas
+// datadas, mesmo espírito do append em observacoes de
+// criarOuAtualizarLeadPublico. Cada entrada vira uma linha
+// "[DD/MM/AAAA HH:mm] texto", mais recente primeiro.
+export function formatarEntradaFollowup(nota: string): string {
+  const agora = new Date();
+  const data = agora.toLocaleDateString("pt-BR");
+  const hora = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `[${data} ${hora}] ${nota}`;
+}
+
+export function adicionarEntradaNotas(notasAtual: string | null, novaEntrada: string): string {
+  return [novaEntrada, notasAtual].filter(Boolean).join("\n");
 }
 
 export async function getLead(

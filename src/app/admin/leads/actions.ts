@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { leadFormSchema, leadStatusUpdateSchema, type LeadOrigem } from "@/lib/leads/schema";
+import {
+  kanbanColunaUpdateSchema,
+  leadCrmUpdateSchema,
+  leadFormSchema,
+  leadStatusUpdateSchema,
+  registrarFollowupSchema,
+  type LeadOrigem,
+} from "@/lib/leads/schema";
+import { adicionarEntradaNotas, formatarEntradaFollowup } from "@/lib/leads/leads";
 import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LeadFormState } from "@/components/admin/lead-form";
@@ -158,5 +166,91 @@ export async function enviarRecontatoLeads(leadIds: string[]): Promise<{ error?:
 
   revalidatePath("/admin/mensagens");
   revalidatePath("/admin");
+  return {};
+}
+
+// ===== CRM Kanban (roadmap, item 3) =====
+
+export async function moverLeadKanban(leadId: string, coluna: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const parsed = kanbanColunaUpdateSchema.safeParse({ kanban_coluna: coluna });
+  if (!parsed.success) {
+    return { error: "Coluna inválida." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leads")
+    .update({ kanban_coluna: parsed.data.kanban_coluna })
+    .eq("id", leadId);
+
+  if (error) {
+    return { error: "Não foi possível mover o lead. Tente novamente." };
+  }
+
+  revalidatePath("/admin/leads");
+  return {};
+}
+
+export async function atualizarLeadCrm(
+  leadId: string,
+  dados: { temperatura: string; proxima_acao: string; notas: string; campanha_origem: string },
+): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const parsed = leadCrmUpdateSchema.safeParse(dados);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("leads")
+    .update({
+      temperatura: parsed.data.temperatura,
+      proxima_acao: parsed.data.proxima_acao ?? null,
+      notas: parsed.data.notas ?? null,
+      campanha_origem: parsed.data.campanha_origem ?? null,
+    })
+    .eq("id", leadId);
+
+  if (error) {
+    return { error: "Não foi possível salvar. Tente novamente." };
+  }
+
+  revalidatePath("/admin/leads");
+  return {};
+}
+
+// Sem tabela própria de histórico — cada follow-up manual vira uma linha
+// datada no topo de notas (mais recente primeiro), ver
+// formatarEntradaFollowup/adicionarEntradaNotas em src/lib/leads/leads.ts.
+export async function registrarFollowup(leadId: string, nota: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const parsed = registrarFollowupSchema.safeParse({ nota });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Nota inválida." };
+  }
+
+  const supabase = await createClient();
+  const { data: leadAtual } = await supabase.from("leads").select("notas").eq("id", leadId).maybeSingle();
+
+  const notasAtualizadas = adicionarEntradaNotas(
+    leadAtual?.notas ?? null,
+    formatarEntradaFollowup(parsed.data.nota),
+  );
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ notas: notasAtualizadas, ultimo_followup: new Date().toISOString() })
+    .eq("id", leadId);
+
+  if (error) {
+    return { error: "Não foi possível registrar o follow-up. Tente novamente." };
+  }
+
+  revalidatePath("/admin/leads");
   return {};
 }

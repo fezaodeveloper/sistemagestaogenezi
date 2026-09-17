@@ -45,9 +45,95 @@ export type Lead = {
   origem: LeadOrigem;
   status: LeadStatus;
   observacoes: string | null;
+  kanban_coluna: KanbanColuna;
+  temperatura: Temperatura | null;
+  proxima_acao: string | null;
+  notas: string | null;
+  campanha_origem: string | null;
+  followup_count: number;
+  ultimo_followup: string | null;
   created_at: string;
   updated_at: string;
 };
+
+// ===== CRM Kanban (roadmap, item 3) =====
+//
+// Coluna do Kanban é um estágio de negociação manual do admin — deliberadamente
+// separado de `status` (que continua só sincronizado automaticamente pelas
+// triggers de matrícula/certificado, ver 20260902100000_create_leads.sql).
+// "Matricular" no drawer só move o card pra coluna matriculado; a matrícula de
+// verdade continua sendo feita no wizard (/admin/matriculas/nova).
+export const KANBAN_COLUNAS = ["novo", "contato", "negociacao", "matriculado", "perdido"] as const;
+export type KanbanColuna = (typeof KANBAN_COLUNAS)[number];
+
+export const KANBAN_COLUNA_LABELS: Record<KanbanColuna, string> = {
+  novo: "🆕 Novo",
+  contato: "📞 Em contato",
+  negociacao: "🤝 Negociação",
+  matriculado: "✅ Matriculado",
+  perdido: "❌ Perdido",
+};
+
+// Azul/âmbar/roxo/verde/vermelho-cinza, mesmo padrão de cores fixas via
+// className usado em CAMPANHA_STATUS_BADGE_CLASS.
+export const KANBAN_COLUNA_COR_CLASS: Record<KanbanColuna, string> = {
+  novo: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  contato: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  negociacao: "bg-purple-500/10 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400",
+  matriculado: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  perdido: "bg-muted text-muted-foreground",
+};
+
+export const TEMPERATURAS = ["quente", "morno", "frio"] as const;
+export type Temperatura = (typeof TEMPERATURAS)[number];
+
+export const TEMPERATURA_LABELS: Record<Temperatura, string> = {
+  quente: "🔥 Quente",
+  morno: "🌡️ Morno",
+  frio: "🧊 Frio",
+};
+
+export const TEMPERATURA_BADGE_CLASS: Record<Temperatura, string> = {
+  quente: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+  morno: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  frio: "bg-sky-500/10 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400",
+};
+
+export const FOLLOWUP_AUTOMATICO_LIMITE = 7;
+
+export const kanbanColunaUpdateSchema = z.object({
+  kanban_coluna: z.enum(KANBAN_COLUNAS, { error: "Coluna inválida." }),
+});
+
+export const leadCrmUpdateSchema = z.object({
+  temperatura: z.enum(TEMPERATURAS, { error: "Temperatura inválida." }),
+  proxima_acao: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined),
+  notas: z
+    .string()
+    .trim()
+    .max(5000, { error: "As notas podem ter no máximo 5000 caracteres." })
+    .optional()
+    .transform((v) => v || undefined),
+  campanha_origem: z
+    .string()
+    .trim()
+    .max(200, { error: "Máximo de 200 caracteres." })
+    .optional()
+    .transform((v) => v || undefined),
+});
+export type LeadCrmUpdateValues = z.infer<typeof leadCrmUpdateSchema>;
+
+export const registrarFollowupSchema = z.object({
+  nota: z
+    .string({ error: "Escreva uma nota sobre o follow-up." })
+    .trim()
+    .min(1, { error: "Escreva uma nota sobre o follow-up." })
+    .max(1000, { error: "A nota pode ter no máximo 1000 caracteres." }),
+});
 
 export const leadFormSchema = z.object({
   nome: z
