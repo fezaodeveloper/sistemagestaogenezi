@@ -2,8 +2,17 @@
 // manifest.json do PWA (roadmap, item 7) — Chrome só dispara
 // beforeinstallprompt com um ícone PNG >= 192x192, favicon.ico não serve.
 //
-// "G" simples sobre fundo dark navy, renderizado via SVG e rasterizado pelo
-// sharp — placeholder funcional até existir uma logo de verdade.
+// Logo real da Gênezi centralizada sobre fundo dark navy, com padding
+// proporcional — substitui o placeholder anterior ("G" em texto simples).
+//
+// A logo foi baixada uma única vez via conector do Google Drive (não por
+// fetch direto na URL pública "uc?export=download") e está versionada em
+// scripts/assets/logo-genezi-original.png. Esse endpoint não é uma API
+// estável: pra este arquivo o Google devolve uma página HTML de aviso ("não
+// foi possível verificar vírus") em vez dos bytes da imagem quando baixado
+// sem sessão de navegador, então um fetch direto quebraria silenciosamente
+// (content-type text/html salvo como se fosse PNG). Rodar de novo não
+// precisa de rede nem do link do Drive.
 //
 // Rodar com: node scripts/gerar-icones-pwa.ts
 // (Node 24 executa .ts diretamente via type-stripping, sem precisar de
@@ -15,30 +24,34 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 const OUTPUT_DIR = join(process.cwd(), "public", "icons");
+const LOGO_PATH = join(process.cwd(), "scripts", "assets", "logo-genezi-original.png");
 const COR_FUNDO = "#0f172a";
-const COR_LETRA = "#ffffff";
 
-function svgIcone(tamanho: number): string {
-  const fontSize = Math.round(tamanho * 0.55);
-  return `
-<svg xmlns="http://www.w3.org/2000/svg" width="${tamanho}" height="${tamanho}" viewBox="0 0 ${tamanho} ${tamanho}">
-  <rect width="${tamanho}" height="${tamanho}" fill="${COR_FUNDO}" />
-  <text
-    x="50%"
-    y="52%"
-    text-anchor="middle"
-    dominant-baseline="central"
-    font-family="Arial, Helvetica, sans-serif"
-    font-weight="700"
-    font-size="${fontSize}"
-    fill="${COR_LETRA}"
-  >G</text>
-</svg>`.trim();
-}
+// Logo ocupa ~72% do canvas (padding proporcional de ~14% por lado) — espaço
+// suficiente pra sobreviver ao corte circular/quadrado que Android aplica em
+// ícones maskable (o manifest reaproveita o icon-192 pros dois purposes).
+const PROPORCAO_LOGO = 0.72;
 
 async function gerarIcone(tamanho: number, arquivo: string): Promise<void> {
+  const tamanhoLogo = Math.round(tamanho * PROPORCAO_LOGO);
+
+  const logoRedimensionada = await sharp(LOGO_PATH)
+    .resize({ width: tamanhoLogo, height: tamanhoLogo, fit: "inside" })
+    .toBuffer();
+
   const destino = join(OUTPUT_DIR, arquivo);
-  await sharp(Buffer.from(svgIcone(tamanho))).png().toFile(destino);
+  await sharp({
+    create: {
+      width: tamanho,
+      height: tamanho,
+      channels: 4,
+      background: COR_FUNDO,
+    },
+  })
+    .composite([{ input: logoRedimensionada, gravity: "center" }])
+    .png()
+    .toFile(destino);
+
   console.log(`Gerado: public/icons/${arquivo} (${tamanho}x${tamanho})`);
 }
 
