@@ -2,13 +2,12 @@
 
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { enviarRespostaCampanha } from "@/app/campanha/[slug]/actions";
-import type { CampanhaPagina, Etapa, Questao } from "@/lib/campanha-paginas/schema";
+import { UFS_BRASIL, type CampanhaPagina, type Etapa, type Questao } from "@/lib/campanha-paginas/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Contagem = { dias: number; horas: number; minutos: number; segundos: number };
 
@@ -39,6 +38,89 @@ function hexParaRgba(hex: string, alpha: number): string {
   const g = parseInt(valor.slice(2, 4), 16);
   const b = parseInt(valor.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+type Rascunho = {
+  nome: string;
+  whatsapp: string;
+  idade: string;
+  email: string;
+  estado: string;
+  cidade: string;
+  respostas: Record<string, string | boolean>;
+};
+
+// Lê o rascunho do localStorage validando o formato campo a campo — o valor
+// vem de fora do React (pode ter sido salvo por uma versão antiga da página
+// ou editado à mão), então nunca é confiável.
+function lerRascunho(chave: string): Partial<Rascunho> | null {
+  try {
+    const bruto = localStorage.getItem(chave);
+    if (!bruto) return null;
+    const dados: unknown = JSON.parse(bruto);
+    if (typeof dados !== "object" || dados === null) return null;
+    const d = dados as Record<string, unknown>;
+    const texto = (v: unknown) => (typeof v === "string" ? v : undefined);
+    const respostas: Record<string, string | boolean> = {};
+    if (typeof d.respostas === "object" && d.respostas !== null) {
+      for (const [k, v] of Object.entries(d.respostas)) {
+        if (typeof v === "string" || typeof v === "boolean") respostas[k] = v;
+      }
+    }
+    return {
+      nome: texto(d.nome),
+      whatsapp: texto(d.whatsapp),
+      idade: texto(d.idade),
+      email: texto(d.email),
+      estado: texto(d.estado),
+      cidade: texto(d.cidade),
+      respostas,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// <select> HTML nativo (não o Select do Base UI) — pedido explícito, e o
+// nativo funciona bem em celular. Estilizado com cor_fonte/cor_fundo/
+// cor_primaria por valor direto, igual aos cards A/B/C/D.
+function SelectNativo({
+  id,
+  valor,
+  opcoes,
+  placeholder,
+  corPrimaria,
+  corFundo,
+  corFonte,
+  onChange,
+}: {
+  id?: string;
+  valor: string;
+  opcoes: { valor: string; texto: string }[];
+  placeholder: string;
+  corPrimaria: string;
+  corFundo: string;
+  corFonte: string;
+  onChange: (valor: string) => void;
+}) {
+  return (
+    <select
+      id={id}
+      value={valor}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-9 w-full rounded-md px-2.5 text-sm outline-none"
+      style={{ color: corFonte, backgroundColor: corFundo, border: `2px solid ${corPrimaria}` }}
+    >
+      <option value="" style={{ color: corFonte, backgroundColor: corFundo }}>
+        {placeholder}
+      </option>
+      {opcoes.map((opcao, indice) => (
+        <option key={`${indice}-${opcao.valor}`} value={opcao.valor} style={{ color: corFonte, backgroundColor: corFundo }}>
+          {opcao.texto}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function QuestaoCampo({
@@ -105,20 +187,16 @@ function QuestaoCampo({
   }
 
   if (questao.tipo === "select") {
-    const opcoesItems = Object.fromEntries((questao.opcoes ?? []).map((o) => [o.texto, o.texto]));
     return (
-      <Select items={opcoesItems} value={typeof valor === "string" ? valor : ""} onValueChange={(v) => v && onResponder(v)}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="Selecione" />
-        </SelectTrigger>
-        <SelectContent>
-          {(questao.opcoes ?? []).map((opcao) => (
-            <SelectItem key={opcao.letra} value={opcao.texto}>
-              {opcao.texto}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SelectNativo
+        valor={typeof valor === "string" ? valor : ""}
+        opcoes={(questao.opcoes ?? []).map((o) => ({ valor: o.texto, texto: o.texto }))}
+        placeholder="Selecione"
+        corPrimaria={corPrimaria}
+        corFundo={corFundo}
+        corFonte={corFonte}
+        onChange={onResponder}
+      />
     );
   }
 
@@ -150,6 +228,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   const [whatsapp, setWhatsapp] = useState("");
   const [idade, setIdade] = useState("");
   const [email, setEmail] = useState("");
+  const [estado, setEstado] = useState("");
   const [cidade, setCidade] = useState("");
   const [respostas, setRespostas] = useState<Record<string, string | boolean>>({});
   const [aceiteLgpd, setAceiteLgpd] = useState(false);
@@ -158,6 +237,41 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   const [sucesso, setSucesso] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [contagem, setContagem] = useState<Contagem | null>(null);
+
+  // Rascunho: localStorage só existe no client, então a restauração roda em
+  // efeito (nunca no render inicial — senão o HTML do server diverge do
+  // client e dá hydration mismatch). `rascunhoCarregado` impede o efeito de
+  // salvar rodar antes da restauração e sobrescrever o rascunho com o estado
+  // vazio inicial. Aceites de LGPD/declaração ficam de fora de propósito —
+  // consentimento tem que ser dado de novo a cada envio.
+  const chaveRascunho = `campanha_rascunho_${pagina.slug}`;
+  const [rascunhoCarregado, setRascunhoCarregado] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const rascunho = lerRascunho(chaveRascunho);
+      if (rascunho) {
+        setNome(rascunho.nome ?? "");
+        setWhatsapp(rascunho.whatsapp ?? "");
+        setIdade(rascunho.idade ?? "");
+        setEmail(rascunho.email ?? "");
+        setEstado(rascunho.estado ?? "");
+        setCidade(rascunho.cidade ?? "");
+        setRespostas(rascunho.respostas ?? {});
+      }
+      setRascunhoCarregado(true);
+    });
+  }, [chaveRascunho]);
+
+  useEffect(() => {
+    if (!rascunhoCarregado || sucesso) return;
+    const rascunho: Rascunho = { nome, whatsapp, idade, email, estado, cidade, respostas };
+    try {
+      localStorage.setItem(chaveRascunho, JSON.stringify(rascunho));
+    } catch {
+      // localStorage indisponível (modo privado, cota cheia) — rascunho é só conveniência.
+    }
+  }, [rascunhoCarregado, sucesso, chaveRascunho, nome, whatsapp, idade, email, estado, cidade, respostas]);
 
   useEffect(() => {
     if (!pagina.mostrar_contador || !pagina.contador_data_fim) return;
@@ -191,7 +305,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
       whatsapp.trim().length > 0 &&
       idade.trim().length > 0 &&
       (!pagina.coletar_email || email.trim().length > 0) &&
-      (!pagina.coletar_cidade || cidade.trim().length > 0)
+      (!pagina.coletar_cidade || (estado.length > 0 && cidade.trim().length > 0))
     );
   }
 
@@ -210,7 +324,8 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
     formData.set("whatsapp", whatsapp);
     formData.set("idade", idade);
     if (pagina.coletar_email) formData.set("email", email);
-    if (pagina.coletar_cidade) formData.set("cidade", cidade);
+    formData.set("estado", estado);
+    formData.set("cidade", cidade);
     formData.set("respostas", JSON.stringify(respostas));
     formData.set("aceite_lgpd", aceiteLgpd ? "on" : "");
     formData.set("aceite_declaracao", aceiteDeclaracao ? "on" : "");
@@ -220,6 +335,11 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
       if ("error" in resultado) {
         setError(resultado.error);
         return;
+      }
+      try {
+        localStorage.removeItem(chaveRascunho);
+      } catch {
+        // sem localStorage — nada a limpar.
       }
       setSucesso(true);
     });
@@ -352,20 +472,33 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
                   />
                 </div>
               )}
-              {pagina.coletar_cidade && (
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
-                    Cidade
-                  </Label>
-                  <Input
-                    id="cidade"
-                    value={cidade}
-                    onChange={(event) => setCidade(event.target.value)}
-                    style={{ color: pagina.cor_fonte }}
-                    required
-                  />
-                </div>
-              )}
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="estado" style={{ color: pagina.cor_fonte }}>
+                  Estado
+                </Label>
+                <SelectNativo
+                  id="estado"
+                  valor={estado}
+                  opcoes={UFS_BRASIL.map((uf) => ({ valor: uf, texto: uf }))}
+                  placeholder="Selecione o estado"
+                  corPrimaria={pagina.cor_primaria}
+                  corFundo={pagina.cor_fundo}
+                  corFonte={pagina.cor_fonte}
+                  onChange={setEstado}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
+                  Cidade
+                </Label>
+                <Input
+                  id="cidade"
+                  value={cidade}
+                  onChange={(event) => setCidade(event.target.value)}
+                  style={{ color: pagina.cor_fonte }}
+                  required={pagina.coletar_cidade}
+                />
+              </div>
               <Button type="button" disabled={!podeAvancarDadosBasicos()} style={{ backgroundColor: pagina.cor_primaria }} onClick={avancar}>
                 Continuar para a Etapa 2
               </Button>

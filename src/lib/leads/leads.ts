@@ -141,6 +141,7 @@ export async function getNotificacaoLeadsNovos(
 // outro).
 export async function criarOuAtualizarLeadPublico(
   input: LeadFormValues,
+  extras?: { campanha_origem?: string },
 ): Promise<{ error?: string }> {
   const admin = createAdminClient();
 
@@ -149,7 +150,7 @@ export async function criarOuAtualizarLeadPublico(
   if (normalizadoNovo) {
     const { data: abertos } = await admin
       .from("leads")
-      .select("id, telefone, observacoes")
+      .select("id, telefone, observacoes, campanha_origem")
       .eq("curso_id", input.curso_id)
       .in("status", ["novo", "contatado"]);
 
@@ -162,7 +163,13 @@ export async function criarOuAtualizarLeadPublico(
 
       const { error } = await admin
         .from("leads")
-        .update({ observacoes: observacoesFinal, updated_at: new Date().toISOString() })
+        .update({
+          observacoes: observacoesFinal,
+          // Só preenche se o lead ainda não tem campanha de origem — não
+          // sobrescreve a etiqueta que já estava lá.
+          campanha_origem: existente.campanha_origem ?? extras?.campanha_origem ?? null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", existente.id);
 
       if (error) {
@@ -178,6 +185,7 @@ export async function criarOuAtualizarLeadPublico(
     curso_id: input.curso_id,
     origem: input.origem,
     observacoes: input.observacoes ?? null,
+    campanha_origem: extras?.campanha_origem ?? null,
   });
 
   if (error && error.code !== "23505") {

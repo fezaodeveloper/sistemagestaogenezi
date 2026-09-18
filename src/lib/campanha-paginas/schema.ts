@@ -30,6 +30,12 @@ export const QUESTAO_TIPO_LABELS: Record<QuestaoTipo, string> = {
 // Chaves reservadas dentro de `respostas` (jsonb) pra consentimentos que não
 // têm coluna própria — nunca colidem com id de questão real, que vem do
 // editor como "q1", "q2" etc. (sempre sem "_" na frente).
+export const UFS_BRASIL = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
+  "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+] as const;
+export type UfBrasil = (typeof UFS_BRASIL)[number];
+
 export const RESPOSTA_CHAVE_LGPD = "_aceite_lgpd";
 export const RESPOSTA_CHAVE_DECLARACAO = "_aceite_declaracao";
 
@@ -44,7 +50,8 @@ export const questaoSchema = z.object({
   tipo: z.enum(QUESTAO_TIPOS),
   pergunta: z.string().trim().min(1).max(500),
   obrigatoria: z.boolean(),
-  opcoes: z.array(opcaoQuestaoSchema).max(10).optional(),
+  // Sem limite de quantidade de opções (multipla_escolha, checkbox e select).
+  opcoes: z.array(opcaoQuestaoSchema).optional(),
 });
 export type Questao = z.infer<typeof questaoSchema>;
 
@@ -148,6 +155,7 @@ export type CampanhaResposta = {
   whatsapp: string;
   idade: number | null;
   email: string | null;
+  estado: string | null;
   cidade: string | null;
   respostas: Record<string, string | boolean>;
   ip: string | null;
@@ -169,6 +177,7 @@ export const campanhaRespostaPublicaSchema = z.object({
     .max(30),
   idade: z.coerce.number({ error: "Informe sua idade." }).int().positive().max(120),
   email: z.string().trim().max(200).optional(),
+  estado: z.enum(UFS_BRASIL, { error: "Selecione um estado válido." }).optional(),
   cidade: z.string().trim().max(200).optional(),
   respostas: z.record(z.string(), z.union([z.string(), z.boolean()])).default({}),
 });

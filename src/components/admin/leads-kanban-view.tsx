@@ -11,6 +11,7 @@ import {
   KANBAN_COLUNA_LABELS,
   TEMPERATURA_BADGE_CLASS,
   TEMPERATURA_LABELS,
+  campanhaBadgeClass,
   type KanbanColuna,
 } from "@/lib/leads/schema";
 import type { LeadComCurso } from "@/lib/leads/leads";
@@ -72,6 +73,11 @@ function LeadCard({ lead, onMudou }: { lead: LeadComCurso; onMudou: () => void }
             {lead.temperatura && (
               <Badge className={TEMPERATURA_BADGE_CLASS[lead.temperatura]}>
                 {TEMPERATURA_LABELS[lead.temperatura]}
+              </Badge>
+            )}
+            {lead.campanha_origem && (
+              <Badge className={`max-w-full ${campanhaBadgeClass(lead.campanha_origem)}`} title={`Campanha: ${lead.campanha_origem}`}>
+                <span className="truncate">📣 {lead.campanha_origem}</span>
               </Badge>
             )}
             {proximaAcaoFormatada && (

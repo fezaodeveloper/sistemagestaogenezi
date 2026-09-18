@@ -100,6 +100,27 @@ export const TEMPERATURA_BADGE_CLASS: Record<Temperatura, string> = {
   frio: "bg-sky-500/10 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400",
 };
 
+// Cor do badge de "campanha de origem" no card do Kanban — determinística a
+// partir do nome (mesma campanha sempre com a mesma cor), sem precisar de
+// coluna de cor nem de tabela de campanhas. Classes literais pro Tailwind
+// enxergar todas na hora do build.
+const CAMPANHA_BADGE_CLASSES = [
+  "bg-violet-500/10 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400",
+  "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+  "bg-pink-500/10 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400",
+  "bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400",
+  "bg-orange-500/10 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400",
+  "bg-indigo-500/10 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400",
+  "bg-lime-500/10 text-lime-700 dark:bg-lime-500/15 dark:text-lime-400",
+  "bg-rose-500/10 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
+] as const;
+
+export function campanhaBadgeClass(campanha: string): string {
+  let hash = 0;
+  for (const char of campanha) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return CAMPANHA_BADGE_CLASSES[hash % CAMPANHA_BADGE_CLASSES.length];
+}
+
 export const FOLLOWUP_AUTOMATICO_LIMITE = 7;
 
 export const kanbanColunaUpdateSchema = z.object({

@@ -38,6 +38,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       WhatsApp: resposta.whatsapp,
       Idade: resposta.idade ?? "",
       Email: resposta.email ?? "",
+      Estado: resposta.estado ?? "",
       Cidade: resposta.cidade ?? "",
       "Data/Hora": new Date(resposta.created_at).toLocaleString("pt-BR"),
     };

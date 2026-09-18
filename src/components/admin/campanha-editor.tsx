@@ -48,8 +48,16 @@ function novaQuestao(): Questao {
   return { id: `q${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`, tipo: "texto", pergunta: "", obrigatoria: true, opcoes: [] };
 }
 
-function proximaLetra(quantidade: number): string {
-  return String.fromCharCode(65 + quantidade);
+// A, B, ... Z, AA, AB, ... — sem limite de opções (letra ganha mais um
+// caractere depois do Z, mesma lógica das colunas de planilha).
+function proximaLetra(indice: number): string {
+  let letra = "";
+  let n = indice;
+  do {
+    letra = String.fromCharCode(65 + (n % 26)) + letra;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return letra;
 }
 
 // Datas vêm de <input type="datetime-local"> (sem timezone) e são salvas
@@ -86,7 +94,9 @@ function QuestaoEditor({
   }
 
   function removerOpcao(index: number) {
-    onChange({ opcoes: opcoes.filter((_, i) => i !== index) });
+    // Reletra depois de remover — senão sobrariam letras duplicadas (A, C
+    // e a próxima opção nova nasceria como "C" de novo).
+    onChange({ opcoes: opcoes.filter((_, i) => i !== index).map((o, i) => ({ ...o, letra: proximaLetra(i) })) });
   }
 
   return (
@@ -138,11 +148,11 @@ function QuestaoEditor({
         </div>
       </div>
 
-      {questao.tipo === "multipla_escolha" && (
+      {(questao.tipo === "multipla_escolha" || questao.tipo === "select") && (
         <div className="flex flex-col gap-1.5 pl-2">
           {opcoes.map((opcao, index) => (
             <div key={index} className="flex items-center gap-2">
-              <span className="text-muted-foreground w-5 text-sm font-medium">{opcao.letra}</span>
+              <span className="text-muted-foreground min-w-5 text-sm font-medium">{opcao.letra}</span>
               <Input
                 value={opcao.texto}
                 onChange={(event) => atualizarOpcao(index, event.target.value)}
@@ -332,7 +342,14 @@ export function CampanhaEditor({
     setEnviando(true);
     try {
       const supabase = createClient();
-      const path = `${Date.now()}-${file.name}`;
+      // Nome saneado (sem acento/espaço/símbolo) — o Storage rejeita chaves
+      // com caracteres fora do ASCII seguro, o que fazia upload de PNG/JPG
+      // com nome tipo "Logo Gênezi (1).png" falhar.
+      const nomeSeguro = file.name
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const path = `${Date.now()}-${nomeSeguro}`;
       const { error: uploadError } = await supabase.storage.from(CAMPANHA_PAGINA_BUCKET).upload(path, file);
       if (uploadError) {
         setError("Não foi possível enviar a imagem. Tente novamente.");
@@ -545,7 +562,7 @@ export function CampanhaEditor({
                       <Switch checked={coletarEmail} onCheckedChange={setColetarEmail} />
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <Label className="font-normal">Coletar cidade</Label>
+                      <Label className="font-normal">Estado e cidade obrigatórios</Label>
                       <Switch checked={coletarCidade} onCheckedChange={setColetarCidade} />
                     </div>
                     <div className="flex items-center justify-between gap-4">
@@ -760,8 +777,7 @@ export function CampanhaEditor({
                     </>
                   ) : (
                     <p className="text-sm" style={{ color: tema === "escuro" ? "#cbd5e1" : "#475569" }}>
-                      Nome, WhatsApp, idade{coletarEmail ? ", email" : ""}
-                      {coletarCidade ? ", cidade" : ""}
+                      Nome, WhatsApp, idade{coletarEmail ? ", email" : ""}, estado, cidade
                     </p>
                   )}
                 </div>

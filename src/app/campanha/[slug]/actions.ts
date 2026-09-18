@@ -28,6 +28,7 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     whatsapp: formData.get("whatsapp"),
     idade: formData.get("idade"),
     email: formData.get("email") || undefined,
+    estado: formData.get("estado") || undefined,
     cidade: formData.get("cidade") || undefined,
     respostas: respostasRaw ? JSON.parse(String(respostasRaw)) : {},
   });
@@ -50,6 +51,10 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
   }
   if (pagina.mostrar_declaracao && !aceiteDeclaracao) {
     return { error: "É preciso confirmar a declaração de interesse." };
+  }
+
+  if (pagina.coletar_cidade && (!parsed.data.estado || !parsed.data.cidade)) {
+    return { error: "Informe seu estado e sua cidade." };
   }
 
   const agora = new Date();
@@ -79,6 +84,7 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     whatsapp: parsed.data.whatsapp,
     idade: parsed.data.idade,
     email: parsed.data.email ?? null,
+    estado: parsed.data.estado ?? null,
     cidade: parsed.data.cidade ?? null,
     respostas: respostasCompletas,
   });
@@ -93,13 +99,18 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
   // constraint). A resposta já foi salva com sucesso de qualquer forma.
   if (pagina.curso_id) {
     try {
-      await criarOuAtualizarLeadPublico({
-        nome: parsed.data.nome,
-        telefone: parsed.data.whatsapp,
-        curso_id: pagina.curso_id,
-        origem: "campanha",
-        observacoes: `Via página de campanha: ${pagina.titulo}`,
-      });
+      // campanha_origem = título da campanha — é o que aparece como badge
+      // colorido no card do Kanban (ver campanhaBadgeClass em leads/schema).
+      await criarOuAtualizarLeadPublico(
+        {
+          nome: parsed.data.nome,
+          telefone: parsed.data.whatsapp,
+          curso_id: pagina.curso_id,
+          origem: "campanha",
+          observacoes: `Via página de campanha: ${pagina.titulo}`,
+        },
+        { campanha_origem: pagina.titulo },
+      );
     } catch {
       // Best-effort — a resposta em campanha_respostas já é o registro
       // principal, o lead é um bônus pro CRM.

@@ -49,7 +49,9 @@ function RespostaCompletaDialog({
           <p>📱 {resposta.whatsapp}</p>
           {resposta.idade && <p>🎂 {resposta.idade} anos</p>}
           {resposta.email && <p>✉️ {resposta.email}</p>}
-          {resposta.cidade && <p>🏙️ {resposta.cidade}</p>}
+          {(resposta.cidade || resposta.estado) && (
+            <p>🏙️ {[resposta.cidade, resposta.estado].filter(Boolean).join(" - ")}</p>
+          )}
           <p className="text-muted-foreground text-xs">{formatDateHoraBR(resposta.created_at)}</p>
 
           {perguntaPorId.size > 0 && (
@@ -168,7 +170,7 @@ export function CampanhaRespostasView({
                       {resposta.whatsapp}
                     </a>
                   </TableCell>
-                  <TableCell>{resposta.cidade ?? "—"}</TableCell>
+                  <TableCell>{[resposta.cidade, resposta.estado].filter(Boolean).join(" - ") || "—"}</TableCell>
                   <TableCell>{formatDateHoraBR(resposta.created_at)}</TableCell>
                   <TableCell className="text-right">
                     <RespostaCompletaDialog
