@@ -5,6 +5,9 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
+  KANBAN_COLUNAS_PROTEGIDAS,
+  kanbanColunaCorSchema,
+  kanbanColunaNomeSchema,
   kanbanColunaUpdateSchema,
   leadCrmUpdateSchema,
   leadFormSchema,
@@ -186,7 +189,7 @@ export async function moverLeadKanban(leadId: string, coluna: string): Promise<{
     .eq("id", leadId);
 
   if (error) {
-    return { error: "Não foi possível mover o lead. Tente novamente." };
+    return { error: error.code === "23503" ? "Coluna inválida." : "Não foi possível mover o lead. Tente novamente." };
   }
 
   revalidatePath("/admin/leads");
@@ -195,7 +198,14 @@ export async function moverLeadKanban(leadId: string, coluna: string): Promise<{
 
 export async function atualizarLeadCrm(
   leadId: string,
-  dados: { temperatura: string; proxima_acao: string; notas: string; campanha_origem: string },
+  dados: {
+    temperatura: string;
+    proxima_acao: string;
+    notas: string;
+    campanha_origem: string;
+    curso_id?: string;
+    ultimo_contato?: string;
+  },
 ): Promise<{ error?: string }> {
   await requireRole("admin");
 
@@ -204,19 +214,35 @@ export async function atualizarLeadCrm(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
+  const atualizacao: Record<string, string | null> = {
+    temperatura: parsed.data.temperatura,
+    proxima_acao: parsed.data.proxima_acao ?? null,
+    notas: parsed.data.notas ?? null,
+    campanha_origem: parsed.data.campanha_origem ?? null,
+  };
+  // Só toca nesses dois quando o admin mexeu — evita sobrescrever o horário
+  // exato do último follow-up (ultimo_followup é timestamptz; o campo do
+  // drawer só tem a data) e trocar o curso à toa.
+  if (parsed.data.curso_id) atualizacao.curso_id = parsed.data.curso_id;
+  if (parsed.data.ultimo_contato !== undefined) {
+    // Meio-dia de Brasília: cai no mesmo dia tanto em UTC quanto em BRT.
+    atualizacao.ultimo_followup = parsed.data.ultimo_contato
+      ? new Date(`${parsed.data.ultimo_contato}T12:00:00-03:00`).toISOString()
+      : null;
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("leads")
-    .update({
-      temperatura: parsed.data.temperatura,
-      proxima_acao: parsed.data.proxima_acao ?? null,
-      notas: parsed.data.notas ?? null,
-      campanha_origem: parsed.data.campanha_origem ?? null,
-    })
-    .eq("id", leadId);
+  const { error } = await supabase.from("leads").update(atualizacao).eq("id", leadId);
 
   if (error) {
-    return { error: "Não foi possível salvar. Tente novamente." };
+    // Índice único parcial (telefone + curso, leads em aberto) — trocar o
+    // curso pode colidir com outro lead do mesmo telefone.
+    return {
+      error:
+        error.code === "23505"
+          ? "Já existe um lead em aberto com esse telefone nesse curso."
+          : "Não foi possível salvar. Tente novamente.",
+    };
   }
 
   revalidatePath("/admin/leads");
@@ -249,6 +275,113 @@ export async function registrarFollowup(leadId: string, nota: string): Promise<{
 
   if (error) {
     return { error: "Não foi possível registrar o follow-up. Tente novamente." };
+  }
+
+  revalidatePath("/admin/leads");
+  return {};
+}
+
+// ===== Combobox de curso do drawer =====
+
+export type CursoBusca = { id: string; nome: string };
+
+// Busca por nome (ilike) nos cursos cadastrados. Termo vazio devolve os
+// primeiros em ordem alfabética, pro combobox já abrir com sugestões.
+export async function buscarCursos(termo: string): Promise<CursoBusca[]> {
+  await requireRole("admin");
+
+  // % e _ são curingas do ilike — o admin digitando "100%" não deve casar tudo.
+  const termoSeguro = termo.trim().slice(0, 100).replace(/[\\%_]/g, (caractere) => `\\${caractere}`);
+
+  const supabase = await createClient();
+  let query = supabase.from("cursos").select("id, nome").order("nome", { ascending: true }).limit(10);
+  if (termoSeguro) query = query.ilike("nome", `%${termoSeguro}%`);
+
+  const { data } = await query;
+  return (data ?? []) as CursoBusca[];
+}
+
+// ===== Colunas do Kanban (tabela kanban_colunas) =====
+
+export async function criarKanbanColuna(nome: string, cor: string): Promise<{ error?: string; id?: string }> {
+  await requireRole("admin");
+
+  const nomeParsed = kanbanColunaNomeSchema.safeParse(nome);
+  if (!nomeParsed.success) return { error: nomeParsed.error.issues[0]?.message ?? "Nome inválido." };
+  const corParsed = kanbanColunaCorSchema.safeParse(cor);
+  if (!corParsed.success) return { error: "Cor inválida." };
+
+  const supabase = await createClient();
+  const { data: ultima } = await supabase
+    .from("kanban_colunas")
+    .select("ordem")
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data, error } = await supabase
+    .from("kanban_colunas")
+    .insert({ nome: nomeParsed.data, cor: corParsed.data, ordem: (ultima?.ordem ?? 0) + 1 })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { error: "Não foi possível criar a coluna. Tente novamente." };
+  }
+
+  revalidatePath("/admin/leads");
+  return { id: data.id };
+}
+
+export async function renomearKanbanColuna(id: string, nome: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const parsed = kanbanColunaNomeSchema.safeParse(nome);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Nome inválido." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("kanban_colunas").update({ nome: parsed.data }).eq("id", id).select("id");
+
+  if (error || !data?.length) {
+    return { error: "Não foi possível renomear a coluna. Tente novamente." };
+  }
+
+  revalidatePath("/admin/leads");
+  return {};
+}
+
+// Só apaga coluna vazia. A contagem aqui é pra devolver mensagem clara; a FK
+// (on delete restrict) em leads.kanban_coluna é a trava de banco caso um lead
+// caia na coluna entre a contagem e o delete.
+export async function excluirKanbanColuna(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  if (KANBAN_COLUNAS_PROTEGIDAS.includes(id)) {
+    return { error: "Essa coluna é usada pelo sistema e não pode ser apagada (só renomeada)." };
+  }
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("kanban_coluna", id);
+
+  if (count && count > 0) {
+    return { error: `Só é possível apagar colunas vazias. Mova os ${count} lead(s) dessa coluna antes.` };
+  }
+
+  const { data, error } = await supabase.from("kanban_colunas").delete().eq("id", id).select("id");
+
+  if (error) {
+    return {
+      error:
+        error.code === "23503"
+          ? "Só é possível apagar colunas vazias. Mova os leads dessa coluna antes."
+          : "Não foi possível apagar a coluna. Tente novamente.",
+    };
+  }
+  if (!data?.length) {
+    return { error: "Coluna não encontrada." };
   }
 
   revalidatePath("/admin/leads");

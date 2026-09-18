@@ -64,26 +64,53 @@ export type Lead = {
 // triggers de matrícula/certificado, ver 20260902100000_create_leads.sql).
 // "Matricular" no drawer só move o card pra coluna matriculado; a matrícula de
 // verdade continua sendo feita no wizard (/admin/matriculas/nova).
-export const KANBAN_COLUNAS = ["novo", "contato", "negociacao", "matriculado", "perdido"] as const;
-export type KanbanColuna = (typeof KANBAN_COLUNAS)[number];
+//
+// As colunas são configuráveis pelo admin e vivem na tabela `kanban_colunas`
+// (ver 20260918500000_kanban_colunas.sql). `leads.kanban_coluna` guarda o `id`
+// da coluna (texto): as 5 colunas originais mantêm os ids antigos ("novo",
+// "contato", ...), então nenhum lead precisou de migração de dados.
+export type KanbanColuna = string;
 
-export const KANBAN_COLUNA_LABELS: Record<KanbanColuna, string> = {
-  novo: "🆕 Novo",
-  contato: "📞 Em contato",
-  negociacao: "🤝 Negociação",
-  matriculado: "✅ Matriculado",
-  perdido: "❌ Perdido",
+export type KanbanColunaConfig = {
+  id: string;
+  nome: string;
+  ordem: number;
+  // Hex "#rrggbb" — usado inline (não dá pra gerar classe Tailwind pra uma
+  // cor escolhida em runtime).
+  cor: string;
 };
 
-// Azul/âmbar/roxo/verde/vermelho-cinza, mesmo padrão de cores fixas via
-// className usado em CAMPANHA_STATUS_BADGE_CLASS.
-export const KANBAN_COLUNA_COR_CLASS: Record<KanbanColuna, string> = {
-  novo: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
-  contato: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
-  negociacao: "bg-purple-500/10 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400",
-  matriculado: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
-  perdido: "bg-muted text-muted-foreground",
-};
+// Espelha o seed da migration. Só serve de fallback de leitura se a tabela
+// ainda não existir/estiver vazia (ver getKanbanColunas) — a fonte da
+// verdade é o banco.
+export const KANBAN_COLUNAS_PADRAO: KanbanColunaConfig[] = [
+  { id: "novo", nome: "🆕 Novo", ordem: 1, cor: "#3b82f6" },
+  { id: "contato", nome: "📞 Em contato", ordem: 2, cor: "#f59e0b" },
+  { id: "negociacao", nome: "🤝 Negociação", ordem: 3, cor: "#a855f7" },
+  { id: "matriculado", nome: "✅ Matriculado", ordem: 4, cor: "#22c55e" },
+  { id: "perdido", nome: "❌ Perdido", ordem: 5, cor: "#6b7280" },
+];
+
+// Colunas com significado fixo no app — não podem ser apagadas (renomear
+// pode): "novo" é o default de todo lead novo (coluna do banco + captação
+// pública) e "matriculado" é o destino do botão "Matricular".
+export const KANBAN_COLUNAS_PROTEGIDAS: readonly string[] = ["novo", "matriculado"];
+
+// Colunas onde "próxima ação vencida" não faz sentido (negócio já resolvido).
+export const KANBAN_COLUNAS_ENCERRADAS: readonly string[] = ["matriculado", "perdido"];
+
+export const kanbanColunaNomeSchema = z
+  .string({ error: "Informe o nome da coluna." })
+  .trim()
+  .min(1, { error: "Informe o nome da coluna." })
+  .max(40, { error: "Máximo de 40 caracteres." });
+
+export const kanbanColunaCorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." });
+
+// Cabeçalho da coluna: fundo com a cor a ~10% de opacidade + texto na cor.
+export function kanbanColunaEstilo(cor: string): { backgroundColor: string; color: string } {
+  return { backgroundColor: `${cor}1a`, color: cor };
+}
 
 export const TEMPERATURAS = ["quente", "morno", "frio"] as const;
 export type Temperatura = (typeof TEMPERATURAS)[number];
@@ -124,7 +151,7 @@ export function campanhaBadgeClass(campanha: string): string {
 export const FOLLOWUP_AUTOMATICO_LIMITE = 7;
 
 export const kanbanColunaUpdateSchema = z.object({
-  kanban_coluna: z.enum(KANBAN_COLUNAS, { error: "Coluna inválida." }),
+  kanban_coluna: z.string({ error: "Coluna inválida." }).trim().min(1, { error: "Coluna inválida." }).max(100),
 });
 
 export const leadCrmUpdateSchema = z.object({
@@ -146,6 +173,12 @@ export const leadCrmUpdateSchema = z.object({
     .max(200, { error: "Máximo de 200 caracteres." })
     .optional()
     .transform((v) => v || undefined),
+  // Curso de interesse (combobox do drawer) — só vem quando o admin trocou.
+  curso_id: z.uuid({ error: "Curso inválido." }).optional(),
+  // Data do último contato (YYYY-MM-DD). Ausente = não mexer; "" = limpar.
+  ultimo_contato: z
+    .union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Data do último contato inválida." })])
+    .optional(),
 });
 export type LeadCrmUpdateValues = z.infer<typeof leadCrmUpdateSchema>;
 
@@ -186,3 +219,36 @@ export const leadPublicoFormSchema = leadFormSchema;
 export const leadStatusUpdateSchema = z.object({
   status: z.enum(LEAD_STATUSES, { error: "Status inválido." }),
 });
+
+// ===== Formatação / CRM =====
+
+// Fuso fixo (Brasília) nas datas dos leads: o mesmo texto sai no server e no
+// client (senão a data poderia divergir perto da meia-noite e gerar
+// hydration mismatch) e "hoje" é o dia do admin, não o dia em UTC.
+const FUSO_LEADS = "America/Sao_Paulo";
+
+export function formatarDataLead(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", { timeZone: FUSO_LEADS });
+}
+
+// "YYYY-MM-DD" pra <input type="date">.
+export function dataLeadParaInput(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: FUSO_LEADS });
+}
+
+// "Histórico de follow-ups" não tem tabela própria (a migration só adicionou
+// um campo `notas` de texto livre em leads) — cada follow-up automático
+// (cron) ou manual (botão do drawer) vira uma linha "[data hora] texto" no
+// topo de notas, mais recente primeiro.
+export function extrairHistoricoFollowups(notas: string | null): string[] {
+  if (!notas) return [];
+  return notas.split("\n").filter((linha) => /^\[\d{2}\/\d{2}\/\d{4}/.test(linha));
+}
+
+// Total de follow-ups realizados (automáticos + manuais). `followup_count`
+// só conta os automáticos (é o contador do limite de 7 do cron), então o
+// total vem das entradas do histórico.
+export function contarFollowups(notas: string | null): number {
+  return extrairHistoricoFollowups(notas).length;
+}

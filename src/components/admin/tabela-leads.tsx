@@ -26,20 +26,20 @@ import {
 } from "@/components/ui/select";
 import { DeleteLeadButton } from "@/components/admin/delete-lead-button";
 import {
-  KANBAN_COLUNA_LABELS,
+  KANBAN_COLUNAS_ENCERRADAS,
   LEAD_ORIGEM_LABELS,
   LEAD_STATUSES,
   LEAD_STATUSES_AUTOMATICOS,
   LEAD_STATUS_LABELS,
   TEMPERATURA_BADGE_CLASS,
   TEMPERATURA_LABELS,
+  type KanbanColunaConfig,
 } from "@/lib/leads/schema";
 import type { LeadComCurso } from "@/lib/leads/leads";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 
 const FILTRO_TODOS = "todos";
 const TEMPERATURA_FILTRO_ITEMS: Record<string, string> = { [FILTRO_TODOS]: "Todas", ...TEMPERATURA_LABELS };
-const COLUNA_FILTRO_ITEMS: Record<string, string> = { [FILTRO_TODOS]: "Todas", ...KANBAN_COLUNA_LABELS };
 
 function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
@@ -55,8 +55,7 @@ function proximaAcaoVencida(lead: LeadComCurso): boolean {
   return (
     !!lead.proxima_acao &&
     lead.proxima_acao < new Date().toISOString().slice(0, 10) &&
-    lead.kanban_coluna !== "matriculado" &&
-    lead.kanban_coluna !== "perdido"
+    !KANBAN_COLUNAS_ENCERRADAS.includes(lead.kanban_coluna)
   );
 }
 
@@ -107,6 +106,9 @@ export function TabelaLeads({
   limite,
   temperatura,
   coluna,
+  campanha,
+  colunas,
+  campanhas,
 }: {
   itens: LeadComCurso[];
   paginaAtual: number;
@@ -115,19 +117,32 @@ export function TabelaLeads({
   limite: number;
   temperatura: string;
   coluna: string;
+  campanha: string;
+  colunas: KanbanColunaConfig[];
+  campanhas: string[];
 }) {
   const router = useRouter();
+  const colunaFiltroItems: Record<string, string> = {
+    [FILTRO_TODOS]: "Todas",
+    ...Object.fromEntries(colunas.map((c) => [c.id, c.nome])),
+  };
+  const campanhaFiltroItems: Record<string, string> = {
+    [FILTRO_TODOS]: "Todas",
+    ...Object.fromEntries(campanhas.map((c) => [c, c])),
+  };
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
-  function construirUrl(overrides: { temperatura?: string; coluna?: string }) {
+  function construirUrl(overrides: { temperatura?: string; coluna?: string; campanha?: string }) {
     const params = new URLSearchParams();
     const t = overrides.temperatura ?? temperatura;
     const c = overrides.coluna ?? coluna;
+    const camp = overrides.campanha ?? campanha;
     if (t && t !== FILTRO_TODOS) params.set("temperatura", t);
     if (c && c !== FILTRO_TODOS) params.set("coluna", c);
+    if (camp && camp !== FILTRO_TODOS) params.set("campanha", camp);
     if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
     const queryString = params.toString();
     return queryString ? `/admin/leads?${queryString}` : "/admin/leads";
@@ -141,6 +156,11 @@ export function TabelaLeads({
   function handleColunaChange(valor: string | null) {
     if (!valor) return;
     router.push(construirUrl({ coluna: valor }));
+  }
+
+  function handleCampanhaChange(valor: string | null) {
+    if (!valor) return;
+    router.push(construirUrl({ campanha: valor }));
   }
 
   function toggleUm(id: string) {
@@ -195,14 +215,29 @@ export function TabelaLeads({
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-muted-foreground text-xs">Coluna Kanban</span>
-          <Select items={COLUNA_FILTRO_ITEMS} value={coluna || FILTRO_TODOS} onValueChange={handleColunaChange}>
+          <Select items={colunaFiltroItems} value={coluna || FILTRO_TODOS} onValueChange={handleColunaChange}>
             <SelectTrigger className="w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.keys(COLUNA_FILTRO_ITEMS).map((chave) => (
+              {Object.keys(colunaFiltroItems).map((chave) => (
                 <SelectItem key={chave} value={chave}>
-                  {COLUNA_FILTRO_ITEMS[chave]}
+                  {colunaFiltroItems[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-muted-foreground text-xs">Campanha de origem</span>
+          <Select items={campanhaFiltroItems} value={campanha || FILTRO_TODOS} onValueChange={handleCampanhaChange}>
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(campanhaFiltroItems).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {campanhaFiltroItems[chave]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -306,6 +341,11 @@ export function TabelaLeads({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/leads"
+        searchParams={{
+          ...(temperatura ? { temperatura } : {}),
+          ...(coluna ? { coluna } : {}),
+          ...(campanha ? { campanha } : {}),
+        }}
       />
     </div>
   );

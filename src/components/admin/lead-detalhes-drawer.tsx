@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { atualizarLeadCrm, moverLeadKanban, registrarFollowup } from "@/app/admin/leads/actions";
+import { atualizarLeadCrm, moverLeadKanban, registrarFollowup, type CursoBusca } from "@/app/admin/leads/actions";
 import {
-  KANBAN_COLUNAS,
-  KANBAN_COLUNA_LABELS,
   LEAD_ORIGEM_LABELS,
   TEMPERATURAS,
   TEMPERATURA_LABELS,
-  type KanbanColuna,
+  dataLeadParaInput,
+  extrairHistoricoFollowups,
+  formatarDataLead,
+  type KanbanColunaConfig,
   type Temperatura,
 } from "@/lib/leads/schema";
 import type { LeadComCurso } from "@/lib/leads/leads";
@@ -21,33 +22,35 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { CopiarWhatsappButton } from "@/components/admin/copiar-whatsapp-button";
+import { CursoCombobox } from "@/components/admin/curso-combobox";
 
-// "Histórico de follow-ups" não tem tabela própria (a migration só adicionou
-// um campo `notas` de texto livre em leads) — cada follow-up automático
-// (cron) ou manual (botão abaixo) vira uma linha "[data hora] texto" no
-// topo de notas, mais recente primeiro. O textarea "Notas" edita o campo
-// inteiro; "Registrar follow-up" só acrescenta uma entrada nova sem
-// precisar reabrir o textarea.
-function extrairHistorico(notas: string | null): string[] {
-  if (!notas) return [];
-  return notas.split("\n").filter((linha) => /^\[\d{2}\/\d{2}\/\d{4}/.test(linha));
+function cursoDoLead(lead: LeadComCurso): CursoBusca | null {
+  return lead.nomeCurso ? { id: lead.curso_id, nome: lead.nomeCurso } : null;
 }
 
 export function LeadDetalhesDrawer({
   lead,
+  colunas,
   open,
   onOpenChange,
   onMudou,
 }: {
   lead: LeadComCurso;
+  colunas: KanbanColunaConfig[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onMudou: () => void;
 }) {
   const [temperatura, setTemperatura] = useState<Temperatura>(lead.temperatura ?? "morno");
   const [proximaAcao, setProximaAcao] = useState(lead.proxima_acao ?? "");
+  const [ultimoContato, setUltimoContato] = useState(dataLeadParaInput(lead.ultimo_followup));
   const [notas, setNotas] = useState(lead.notas ?? "");
   const [campanhaOrigem, setCampanhaOrigem] = useState(lead.campanha_origem ?? "");
+  const [curso, setCurso] = useState<CursoBusca | null>(cursoDoLead(lead));
+  // Muda a cada reidratação — o combobox guarda o texto digitado em estado
+  // próprio, então precisa remontar pra refletir o curso do lead atual.
+  const [versaoCombobox, setVersaoCombobox] = useState(0);
   const [novaNotaFollowup, setNovaNotaFollowup] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
@@ -65,26 +68,35 @@ export function LeadDetalhesDrawer({
     queueMicrotask(() => {
       setTemperatura(lead.temperatura ?? "morno");
       setProximaAcao(lead.proxima_acao ?? "");
+      setUltimoContato(dataLeadParaInput(lead.ultimo_followup));
       setNotas(lead.notas ?? "");
       setCampanhaOrigem(lead.campanha_origem ?? "");
+      setCurso(cursoDoLead(lead));
+      setVersaoCombobox((v) => v + 1);
       setNovaNotaFollowup("");
       setError(null);
       setSalvo(false);
     });
   }, [open, lead]);
 
-  const whatsappDigitos = lead.telefone.replace(/\D/g, "");
-  const historico = extrairHistorico(lead.notas);
+  const historico = extrairHistoricoFollowups(lead.notas);
+  const colunaItems = Object.fromEntries(colunas.map((c) => [c.id, c.nome]));
 
   function handleSalvar() {
     setError(null);
     setSalvo(false);
     startTransition(async () => {
+      const cursoAlterado = curso && curso.id !== lead.curso_id ? curso.id : undefined;
+      const ultimoContatoAlterado =
+        ultimoContato !== dataLeadParaInput(lead.ultimo_followup) ? ultimoContato : undefined;
+
       const resultado = await atualizarLeadCrm(lead.id, {
         temperatura,
         proxima_acao: proximaAcao,
         notas,
         campanha_origem: campanhaOrigem,
+        curso_id: cursoAlterado,
+        ultimo_contato: ultimoContatoAlterado,
       });
       if (resultado.error) {
         setError(resultado.error);
@@ -105,7 +117,7 @@ export function LeadDetalhesDrawer({
 
   function handleMatricular() {
     startTransitionColuna(async () => {
-      await moverLeadKanban(lead.id, "matriculado" satisfies KanbanColuna);
+      await moverLeadKanban(lead.id, "matriculado");
       onMudou();
     });
   }
@@ -132,22 +144,31 @@ export function LeadDetalhesDrawer({
         </SheetHeader>
 
         <div className="flex flex-col gap-4 px-4 pb-4">
-          <div className="flex flex-col gap-1 text-sm">
-            <a
-              href={`https://wa.me/55${whatsappDigitos}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-muted-foreground hover:text-foreground w-fit hover:underline"
-            >
-              📱 {lead.telefone}
-            </a>
-            <p>
-              📚 Curso de interesse: <span className="font-medium">{lead.nomeCurso ?? "—"}</span>
-            </p>
+          <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>📱 {lead.telefone}</span>
+              <CopiarWhatsappButton telefone={lead.telefone} comTexto />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={
+                  <a
+                    href={`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+              >
+                Abrir no WhatsApp
+              </Button>
+            </div>
             <p className="text-muted-foreground">
               Origem: {LEAD_ORIGEM_LABELS[lead.origem]}
               {lead.campanha_origem ? ` · ${lead.campanha_origem}` : ""}
             </p>
+            <p className="text-muted-foreground">Criado em {formatarDataLead(lead.created_at)}</p>
             {/* leads não tem email/cidade no schema atual (só nome, telefone,
                 curso_id, origem) — sinalizado ao admin em vez de omitir em
                 silêncio, ver conversa sobre esta migration. */}
@@ -157,6 +178,16 @@ export function LeadDetalhesDrawer({
           </div>
 
           <Separator />
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="curso-interesse">Curso de interesse</Label>
+            <CursoCombobox
+              key={`${lead.id}-${versaoCombobox}`}
+              id="curso-interesse"
+              selecionado={curso}
+              onSelecionar={setCurso}
+            />
+          </div>
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="temperatura">Temperatura</Label>
@@ -178,14 +209,25 @@ export function LeadDetalhesDrawer({
             </Select>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="proxima-acao">Próxima ação</Label>
-            <Input
-              id="proxima-acao"
-              type="date"
-              value={proximaAcao}
-              onChange={(event) => setProximaAcao(event.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ultimo-contato">Último contato</Label>
+              <Input
+                id="ultimo-contato"
+                type="date"
+                value={ultimoContato}
+                onChange={(event) => setUltimoContato(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="proxima-acao">Próxima ação</Label>
+              <Input
+                id="proxima-acao"
+                type="date"
+                value={proximaAcao}
+                onChange={(event) => setProximaAcao(event.target.value)}
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -221,7 +263,7 @@ export function LeadDetalhesDrawer({
           <div className="flex flex-col gap-2">
             <Label htmlFor="mover-coluna">Mover coluna</Label>
             <Select
-              items={KANBAN_COLUNA_LABELS}
+              items={colunaItems}
               value={lead.kanban_coluna}
               onValueChange={handleMoverColuna}
               disabled={isPendingColuna}
@@ -230,9 +272,9 @@ export function LeadDetalhesDrawer({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {KANBAN_COLUNAS.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {KANBAN_COLUNA_LABELS[c]}
+                {colunas.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome}
                   </SelectItem>
                 ))}
               </SelectContent>

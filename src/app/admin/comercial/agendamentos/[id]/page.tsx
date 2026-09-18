@@ -10,11 +10,12 @@ export default async function AgendamentoPaginaDetalhePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ data?: string; pagina?: string }>;
+  searchParams: Promise<{ data?: string; page?: string }>;
 }) {
   await requireRole("admin");
   const { id } = await params;
-  const { data, pagina: paginaParam } = await searchParams;
+  // `page` (não "pagina"): é o nome que o componente Paginacao coloca na URL.
+  const { data, page: paginaParam } = await searchParams;
 
   const supabase = await createClient();
   const pagina = await getAgendamentoPagina(supabase, id);

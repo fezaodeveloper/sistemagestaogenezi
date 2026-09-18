@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefone } from "@/lib/mensagens/texto";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
-import type { KanbanColuna, Lead, LeadFormValues, Temperatura } from "./schema";
+import { KANBAN_COLUNAS_PADRAO, type KanbanColuna, type KanbanColunaConfig, type Lead, type LeadFormValues, type Temperatura } from "./schema";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
@@ -40,7 +40,7 @@ export type LeadComCurso = Lead & { nomeCurso: string | null };
 export async function getLeads(
   supabase: SupabaseServerClient,
   paginacao?: { offset: number; limite: number },
-  filtros?: { temperatura?: Temperatura; kanbanColuna?: KanbanColuna },
+  filtros?: { temperatura?: Temperatura; kanbanColuna?: KanbanColuna; campanhaOrigem?: string },
 ): Promise<{ itens: LeadComCurso[]; total: number }> {
   let query = supabase
     .from("leads")
@@ -49,6 +49,7 @@ export async function getLeads(
 
   if (filtros?.temperatura) query = query.eq("temperatura", filtros.temperatura);
   if (filtros?.kanbanColuna) query = query.eq("kanban_coluna", filtros.kanbanColuna);
+  if (filtros?.campanhaOrigem) query = query.eq("campanha_origem", filtros.campanhaOrigem);
 
   if (paginacao) {
     query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
@@ -62,6 +63,30 @@ export async function getLeads(
   }));
 
   return { itens, total: count ?? 0 };
+}
+
+// Colunas do Kanban, em ordem (tabela kanban_colunas). Se a leitura falhar ou
+// vier vazia (ex.: migration ainda não aplicada), cai nas 5 colunas padrão —
+// o quadro continua funcionando em modo leitura em vez de sumir.
+export async function getKanbanColunas(supabase: SupabaseServerClient): Promise<KanbanColunaConfig[]> {
+  const { data, error } = await supabase
+    .from("kanban_colunas")
+    .select("id, nome, ordem, cor")
+    .order("ordem", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error || !data || data.length === 0) return KANBAN_COLUNAS_PADRAO;
+  return data as KanbanColunaConfig[];
+}
+
+// Valores distintos de campanha_origem, pro filtro da listagem/Kanban.
+export async function getCampanhasOrigem(supabase: SupabaseServerClient): Promise<string[]> {
+  const { data } = await supabase.from("leads").select("campanha_origem").not("campanha_origem", "is", null);
+  const nomes = new Set<string>();
+  for (const linha of (data ?? []) as { campanha_origem: string | null }[]) {
+    if (linha.campanha_origem) nomes.add(linha.campanha_origem);
+  }
+  return Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 
 // Kanban precisa de todos os leads "em aberto" de uma vez (agrupados em 5
