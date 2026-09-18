@@ -281,6 +281,7 @@ export function CampanhaEditor({
   const [tema, setTema] = useState<CampanhaTema>(pagina?.tema ?? "escuro");
   const [corPrimaria, setCorPrimaria] = useState(pagina?.cor_primaria ?? "#06b6d4");
   const [corFundo, setCorFundo] = useState(pagina?.cor_fundo ?? "#0f172a");
+  const [corFonte, setCorFonte] = useState(pagina?.cor_fonte ?? "#ffffff");
   const [logoUrl, setLogoUrl] = useState(pagina?.logo_url ?? "");
   const [imagemTopoUrl, setImagemTopoUrl] = useState(pagina?.imagem_topo_url ?? "");
   const [enviandoLogo, setEnviandoLogo] = useState(false);
@@ -384,6 +385,7 @@ export function CampanhaEditor({
     formData.set("descricao", descricao);
     formData.set("cor_primaria", corPrimaria);
     formData.set("cor_fundo", corFundo);
+    formData.set("cor_fonte", corFonte);
     formData.set("logo_url", logoUrl);
     formData.set("imagem_topo_url", imagemTopoUrl);
     formData.set("tema", tema);
@@ -588,7 +590,7 @@ export function CampanhaEditor({
                         ))}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div className="flex flex-col gap-2">
                         <Label>Cor primária</Label>
                         <div className="flex items-center gap-2">
@@ -601,6 +603,13 @@ export function CampanhaEditor({
                         <div className="flex items-center gap-2">
                           <input type="color" value={corFundo} onChange={(e) => setCorFundo(e.target.value)} className="border-input h-8 w-14 cursor-pointer rounded-md border bg-transparent p-0.5" />
                           <span className="text-muted-foreground text-sm">{corFundo}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label>Cor da fonte / texto</Label>
+                        <div className="flex items-center gap-2">
+                          <input type="color" value={corFonte} onChange={(e) => setCorFonte(e.target.value)} className="border-input h-8 w-14 cursor-pointer rounded-md border bg-transparent p-0.5" />
+                          <span className="text-muted-foreground text-sm">{corFonte}</span>
                         </div>
                       </div>
                     </div>

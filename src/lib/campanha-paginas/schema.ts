@@ -75,6 +75,7 @@ export const campanhaPaginaFormSchema = z
     curso_id: z.uuid().optional(),
     cor_primaria: z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." }),
     cor_fundo: z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." }),
+    cor_fonte: z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." }),
     logo_url: z.string().trim().optional(),
     imagem_topo_url: z.string().trim().optional(),
     tema: z.enum(CAMPANHA_TEMAS),
@@ -115,6 +116,7 @@ export type CampanhaPagina = {
   curso_id: string | null;
   cor_primaria: string;
   cor_fundo: string;
+  cor_fonte: string;
   logo_url: string | null;
   imagem_topo_url: string | null;
   tema: CampanhaTema;

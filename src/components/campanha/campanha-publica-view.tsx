@@ -29,13 +29,27 @@ function respostaPreenchida(questao: Questao, valor: string | boolean | undefine
   return typeof valor === "string" && valor.trim().length > 0;
 }
 
+// Fundo dos cards A/B/C/D é cor_primaria com opacidade reduzida quando não
+// selecionado (pedido explícito) — não dá pra fazer isso só com a variável
+// CSS --cor-primaria (não carrega canal alpha), por isso converte o hex pra
+// rgba() aqui.
+function hexParaRgba(hex: string, alpha: number): string {
+  const valor = hex.replace("#", "");
+  const r = parseInt(valor.slice(0, 2), 16);
+  const g = parseInt(valor.slice(2, 4), 16);
+  const b = parseInt(valor.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function QuestaoCampo({
   questao,
   valor,
+  corPrimaria,
   onResponder,
 }: {
   questao: Questao;
   valor: string | boolean | undefined;
+  corPrimaria: string;
   onResponder: (valor: string | boolean) => void;
 }) {
   if (questao.tipo === "multipla_escolha") {
@@ -48,13 +62,20 @@ function QuestaoCampo({
               key={opcao.letra}
               type="button"
               onClick={() => onResponder(opcao.letra)}
-              style={selecionada ? { borderColor: "var(--cor-primaria)", backgroundColor: "var(--cor-primaria)", color: "#fff" } : undefined}
-              className={"flex items-center gap-3 rounded-md border p-3 text-left text-sm transition-colors " + (selecionada ? "" : "hover:bg-white/5")}
+              style={{
+                borderColor: corPrimaria,
+                backgroundColor: selecionada ? corPrimaria : hexParaRgba(corPrimaria, 0.12),
+                color: "var(--cor-fonte)",
+              }}
+              className="flex items-center gap-3 rounded-md border p-3 text-left text-sm transition-colors"
             >
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold">
+              <span
+                className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold"
+                style={{ color: "var(--cor-fonte)", borderColor: "var(--cor-fonte)" }}
+              >
                 {opcao.letra}
               </span>
-              {opcao.texto}
+              <span style={{ color: "var(--cor-fonte)" }}>{opcao.texto}</span>
             </button>
           );
         })}
@@ -64,7 +85,7 @@ function QuestaoCampo({
 
   if (questao.tipo === "checkbox") {
     return (
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-2 text-sm" style={{ color: "var(--cor-fonte)" }}>
         <input type="checkbox" checked={valor === true} onChange={(event) => onResponder(event.target.checked)} />
         Sim
       </label>
@@ -100,9 +121,11 @@ function QuestaoCampo({
 
 export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   const escuro = pagina.tema === "escuro";
-  const corTextoSecundario = escuro ? "#cbd5e1" : "#475569";
   const corCard = escuro ? "#1e293b" : "#f1f5f9";
-  const style = { "--cor-primaria": pagina.cor_primaria } as CSSProperties;
+  // --cor-fonte fica disponível via CSS var pra QuestaoCampo (componente
+  // separado, sem acesso direto a `pagina`) — mesmo mecanismo já usado por
+  // --cor-primaria.
+  const style = { "--cor-primaria": pagina.cor_primaria, "--cor-fonte": pagina.cor_fonte } as CSSProperties;
 
   // Telas: 0 = dados básicos, 1..N = etapas configuradas, N+1 = termos/envio.
   const totalTelas = 1 + pagina.etapas.length + 1;
@@ -193,8 +216,10 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
         <span className="flex size-16 items-center justify-center rounded-full text-3xl" style={{ backgroundColor: "var(--cor-primaria)" }}>
           ✓
         </span>
-        <h2 className="text-xl font-bold">{pagina.titulo_sucesso}</h2>
-        {pagina.mensagem_sucesso && <p style={{ color: corTextoSecundario }}>{pagina.mensagem_sucesso}</p>}
+        <h2 className="text-xl font-bold" style={{ color: pagina.cor_fonte }}>
+          {pagina.titulo_sucesso}
+        </h2>
+        {pagina.mensagem_sucesso && <p style={{ color: pagina.cor_fonte }}>{pagina.mensagem_sucesso}</p>}
       </div>
     );
   }
@@ -213,10 +238,12 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
           // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
           <img src={pagina.imagem_topo_url} alt="" className="w-full rounded-lg object-cover" />
         )}
-        <h1 className="text-2xl font-bold sm:text-3xl">{pagina.titulo}</h1>
-        {pagina.subtitulo && <p style={{ color: corTextoSecundario }}>{pagina.subtitulo}</p>}
+        <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: pagina.cor_fonte }}>
+          {pagina.titulo}
+        </h1>
+        {pagina.subtitulo && <p style={{ color: pagina.cor_fonte }}>{pagina.subtitulo}</p>}
         {pagina.descricao && (
-          <p className="text-sm" style={{ color: corTextoSecundario }}>
+          <p className="text-sm" style={{ color: pagina.cor_fonte }}>
             {pagina.descricao}
           </p>
         )}
@@ -224,7 +251,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
 
       {contagem && (
         <div className="flex flex-col items-center gap-1">
-          <p className="text-xs" style={{ color: corTextoSecundario }}>
+          <p className="text-xs" style={{ color: pagina.cor_fonte }}>
             Inscrições encerram em
           </p>
           <div className="flex gap-3 text-center">
@@ -238,7 +265,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
                 <span className="text-2xl font-bold" style={{ color: "var(--cor-primaria)" }}>
                   {String(item.valor).padStart(2, "0")}
                 </span>
-                <span className="text-[10px] uppercase" style={{ color: corTextoSecundario }}>
+                <span className="text-[10px] uppercase" style={{ color: pagina.cor_fonte }}>
                   {item.label}
                 </span>
               </div>
@@ -249,33 +276,33 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
 
       <Card style={{ backgroundColor: corCard, borderColor: "transparent" }}>
         <CardContent className="flex flex-col gap-4">
-          <p className="text-xs font-medium" style={{ color: "var(--cor-primaria)" }}>
+          <p className="text-xs font-medium" style={{ color: pagina.cor_fonte }}>
             Etapa {tela + 1} de {totalTelas}
           </p>
 
           {tela === 0 && (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="nome" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                <Label htmlFor="nome" style={{ color: pagina.cor_fonte }}>
                   Nome completo
                 </Label>
                 <Input id="nome" value={nome} onChange={(event) => setNome(event.target.value)} required />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="whatsapp" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                <Label htmlFor="whatsapp" style={{ color: pagina.cor_fonte }}>
                   WhatsApp
                 </Label>
                 <Input id="whatsapp" type="tel" placeholder="(11) 99999-9999" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} required />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="idade" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                <Label htmlFor="idade" style={{ color: pagina.cor_fonte }}>
                   Idade
                 </Label>
                 <Input id="idade" type="number" min="1" value={idade} onChange={(event) => setIdade(event.target.value)} required />
               </div>
               {pagina.coletar_email && (
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="email" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                  <Label htmlFor="email" style={{ color: pagina.cor_fonte }}>
                     Email
                   </Label>
                   <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
@@ -283,7 +310,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
               )}
               {pagina.coletar_cidade && (
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="cidade" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                  <Label htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
                     Cidade
                   </Label>
                   <Input id="cidade" value={cidade} onChange={(event) => setCidade(event.target.value)} required />
@@ -298,11 +325,11 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
           {etapaAtual && (
             <div className="flex flex-col gap-4">
               <div>
-                <p className="font-medium" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                <p className="font-medium" style={{ color: pagina.cor_fonte }}>
                   {etapaAtual.titulo}
                 </p>
                 {etapaAtual.descricao && (
-                  <p className="text-sm" style={{ color: corTextoSecundario }}>
+                  <p className="text-sm" style={{ color: pagina.cor_fonte }}>
                     {etapaAtual.descricao}
                   </p>
                 )}
@@ -310,10 +337,11 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
 
               {etapaAtual.questoes.map((questao) => (
                 <div key={questao.id} className="flex flex-col gap-2">
-                  <Label style={{ color: escuro ? "#fff" : "#0f172a" }}>{questao.pergunta}</Label>
+                  <Label style={{ color: pagina.cor_fonte }}>{questao.pergunta}</Label>
                   <QuestaoCampo
                     questao={questao}
                     valor={respostas[questao.id]}
+                    corPrimaria={pagina.cor_primaria}
                     onResponder={(valor) => {
                       responderQuestao(questao.id, valor);
                       // Múltipla escolha com uma única pergunta na etapa
@@ -347,19 +375,19 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
 
           {naEtapaFinal && (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1 text-sm" style={{ color: corTextoSecundario }}>
+              <div className="flex flex-col gap-1 text-sm" style={{ color: pagina.cor_fonte }}>
                 <p>👤 {nome}</p>
                 <p>📱 {whatsapp}</p>
               </div>
 
               {pagina.mostrar_lgpd && (
-                <label className="flex items-start gap-2 text-sm" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
                   <input type="checkbox" checked={aceiteLgpd} onChange={(event) => setAceiteLgpd(event.target.checked)} className="mt-0.5" />
                   {pagina.texto_lgpd || "Autorizo o tratamento dos meus dados pessoais conforme a LGPD."}
                 </label>
               )}
               {pagina.mostrar_declaracao && (
-                <label className="flex items-start gap-2 text-sm" style={{ color: escuro ? "#fff" : "#0f172a" }}>
+                <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
                   <input type="checkbox" checked={aceiteDeclaracao} onChange={(event) => setAceiteDeclaracao(event.target.checked)} className="mt-0.5" />
                   {pagina.texto_declaracao || "Declaro ter interesse real nesta oportunidade."}
                 </label>
