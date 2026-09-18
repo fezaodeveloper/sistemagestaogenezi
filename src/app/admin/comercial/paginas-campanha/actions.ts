@@ -118,8 +118,11 @@ export async function criarCampanhaPagina(formData: FormData): Promise<{ error?:
     .single();
 
   if (error || !data) {
-    const mensagem = error?.code === "23505" ? "Já existe uma página com esse slug." : "Não foi possível criar a página. Tente novamente.";
-    return { error: mensagem };
+    if (error?.code === "23505") {
+      return { error: "Já existe uma página com esse slug." };
+    }
+    console.error("[CAMPANHA] Erro ao criar página:", error);
+    return { error: `Erro: ${error?.code} — ${error?.message}` };
   }
 
   revalidatePath("/admin/comercial/paginas-campanha");
