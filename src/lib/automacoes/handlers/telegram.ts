@@ -408,3 +408,18 @@ export async function notificarLembretesAgendamentosResumo(payload: Record<strin
     "📅",
   );
 }
+
+// ===== Construtor de páginas de campanha (roadmap, item 1) =====
+
+export async function notificarCampanhaResposta(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Nova inscrição em campanha",
+    [
+      `📄 Campanha: ${texto(payload.titulo_pagina)}`,
+      `👤 Nome: ${texto(payload.nome)}`,
+      `📞 WhatsApp: ${texto(payload.whatsapp)}`,
+      `🏙️ Cidade: ${texto(payload.cidade)}`,
+    ],
+    "📋",
+  );
+}

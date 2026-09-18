@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const LEAD_ORIGENS = ["indicacao", "redes_sociais", "google", "panfleto", "outro"] as const;
+export const LEAD_ORIGENS = ["indicacao", "redes_sociais", "google", "panfleto", "campanha", "outro"] as const;
 export type LeadOrigem = (typeof LEAD_ORIGENS)[number];
 
 export const LEAD_ORIGEM_LABELS: Record<LeadOrigem, string> = {
@@ -8,6 +8,7 @@ export const LEAD_ORIGEM_LABELS: Record<LeadOrigem, string> = {
   redes_sociais: "Redes sociais",
   google: "Google",
   panfleto: "Panfleto",
+  campanha: "Página de campanha",
   outro: "Outro",
 };
 
