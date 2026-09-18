@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampanhaPaginaPublica, contarRespostasAdmin } from "@/lib/campanha-paginas/campanha-paginas";
 import { CampanhaPublicaView } from "@/components/campanha/campanha-publica-view";
@@ -13,13 +12,17 @@ export const dynamic = "force-dynamic";
 export default async function CampanhaPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  const supabase = await createClient();
-  const pagina = await getCampanhaPaginaPublica(supabase, slug);
+  // client admin (service_role), não o client autenticado normal — ver
+  // comentário em getCampanhaPaginaPublica (src/lib/campanha-paginas/campanha-paginas.ts)
+  // sobre o erro "JWT failed verification" com cookie de sessão inválido no
+  // navegador do visitante (admin/aluno/empresa logado antes no mesmo
+  // navegador). Página pública nunca deve depender de sessão nenhuma.
+  const admin = createAdminClient();
+  const pagina = await getCampanhaPaginaPublica(admin, slug);
   if (!pagina) notFound();
 
   const encerrada = pagina.status === "encerrada" || (pagina.data_fim && new Date() > new Date(pagina.data_fim));
 
-  const admin = createAdminClient();
   const totalRespostas = pagina.vagas_limite ? await contarRespostasAdmin(admin, pagina.id) : 0;
   const vagasEsgotadas = !!pagina.vagas_limite && totalRespostas >= pagina.vagas_limite;
 

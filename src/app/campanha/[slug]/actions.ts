@@ -1,6 +1,5 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { criarOuAtualizarLeadPublico } from "@/lib/leads/leads";
@@ -37,8 +36,11 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const supabase = await createClient();
-  const pagina = await getCampanhaPaginaPublica(supabase, slug);
+  // client admin (service_role) já aqui em vez do client autenticado normal
+  // — mesmo motivo do page.tsx (evitar "JWT failed verification" com cookie
+  // de sessão inválido no navegador do visitante).
+  const admin = createAdminClient();
+  const pagina = await getCampanhaPaginaPublica(admin, slug);
   if (!pagina) {
     return { error: "Página de campanha não encontrada." };
   }
@@ -57,8 +59,6 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
   if (pagina.data_fim && agora > new Date(pagina.data_fim)) {
     return { error: "As inscrições para esta campanha já encerraram." };
   }
-
-  const admin = createAdminClient();
 
   if (pagina.vagas_limite) {
     const totalAtual = await contarRespostasAdmin(admin, pagina.id);

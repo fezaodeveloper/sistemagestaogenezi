@@ -45,11 +45,15 @@ function QuestaoCampo({
   questao,
   valor,
   corPrimaria,
+  corFundo,
+  corFonte,
   onResponder,
 }: {
   questao: Questao;
   valor: string | boolean | undefined;
   corPrimaria: string;
+  corFundo: string;
+  corFonte: string;
   onResponder: (valor: string | boolean) => void;
 }) {
   if (questao.tipo === "multipla_escolha") {
@@ -57,25 +61,33 @@ function QuestaoCampo({
       <div className="flex flex-col gap-2">
         {(questao.opcoes ?? []).map((opcao) => {
           const selecionada = valor === opcao.letra;
+          // Cores sempre passadas por valor direto (nunca via var(--...) CSS)
+          // — mais fácil de depurar e não depende de herança através da
+          // árvore do DOM. Selecionado: fundo sólido cor_primaria, texto
+          // cor_fundo (contraste garantido). Não selecionado: contorno
+          // cor_primaria, fundo cor_fundo bem translúcido, texto cor_fonte.
+          const corTexto = selecionada ? corFundo : corFonte;
           return (
             <button
               key={opcao.letra}
               type="button"
               onClick={() => onResponder(opcao.letra)}
               style={{
+                borderWidth: 2,
+                borderStyle: "solid",
                 borderColor: corPrimaria,
-                backgroundColor: selecionada ? corPrimaria : hexParaRgba(corPrimaria, 0.12),
-                color: "var(--cor-fonte)",
+                backgroundColor: selecionada ? corPrimaria : hexParaRgba(corFundo, 0.3),
+                color: corTexto,
               }}
-              className="flex items-center gap-3 rounded-md border p-3 text-left text-sm transition-colors"
+              className="flex items-center gap-3 rounded-md p-3 text-left text-sm transition-colors"
             >
               <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold"
-                style={{ color: "var(--cor-fonte)", borderColor: "var(--cor-fonte)" }}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold"
+                style={{ color: selecionada ? corFundo : corPrimaria, borderColor: selecionada ? corFundo : corPrimaria }}
               >
                 {opcao.letra}
               </span>
-              <span style={{ color: "var(--cor-fonte)" }}>{opcao.texto}</span>
+              <span style={{ color: corTexto }}>{opcao.texto}</span>
             </button>
           );
         })}
@@ -85,7 +97,7 @@ function QuestaoCampo({
 
   if (questao.tipo === "checkbox") {
     return (
-      <label className="flex items-center gap-2 text-sm" style={{ color: "var(--cor-fonte)" }}>
+      <label className="flex items-center gap-2 text-sm" style={{ color: corFonte }}>
         <input type="checkbox" checked={valor === true} onChange={(event) => onResponder(event.target.checked)} />
         Sim
       </label>
@@ -122,10 +134,12 @@ function QuestaoCampo({
 export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   const escuro = pagina.tema === "escuro";
   const corCard = escuro ? "#1e293b" : "#f1f5f9";
-  // --cor-fonte fica disponível via CSS var pra QuestaoCampo (componente
-  // separado, sem acesso direto a `pagina`) — mesmo mecanismo já usado por
-  // --cor-primaria.
-  const style = { "--cor-primaria": pagina.cor_primaria, "--cor-fonte": pagina.cor_fonte } as CSSProperties;
+  // QuestaoCampo recebe cor_fundo/cor_fonte/cor_primaria como props diretas
+  // (não via variável CSS) — mais fácil de depurar e sem depender de
+  // herança pela árvore do DOM. --cor-primaria continua como variável CSS
+  // só para os dois usos que ficam dentro deste próprio componente (check
+  // de sucesso e dígitos do contador), sem necessidade de prop.
+  const style = { "--cor-primaria": pagina.cor_primaria } as CSSProperties;
 
   // Telas: 0 = dados básicos, 1..N = etapas configuradas, N+1 = termos/envio.
   const totalTelas = 1 + pagina.etapas.length + 1;
@@ -342,6 +356,8 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
                     questao={questao}
                     valor={respostas[questao.id]}
                     corPrimaria={pagina.cor_primaria}
+                    corFundo={pagina.cor_fundo}
+                    corFonte={pagina.cor_fonte}
                     onResponder={(valor) => {
                       responderQuestao(questao.id, valor);
                       // Múltipla escolha com uma única pergunta na etapa

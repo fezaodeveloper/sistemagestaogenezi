@@ -44,14 +44,21 @@ export async function getCampanhaPagina(supabase: SupabaseServerClient, id: stri
   return data as CampanhaPagina | null;
 }
 
-// Lida pelo Server Component público (/campanha/[slug]) — o client normal já
-// funciona sem sessão porque a policy "Público pode ver páginas ativas"
-// libera select por status, e há grant de select pra anon (ver migration).
+// Lida pelo Server Component público (/campanha/[slug]) e pela Server Action
+// de envio (enviarRespostaCampanha) — usa o client admin (service_role), não
+// o client autenticado normal: um visitante com cookie de sessão
+// expirado/inválido de outro login (admin/aluno/empresa no mesmo navegador)
+// fazia o client normal tentar validar esse JWT e falhar ("JWT... failed
+// verification"), mesmo essa rota sendo pública. service_role nunca depende
+// de cookie nenhum, então esse problema não existe aqui — o filtro
+// `.eq("status", "ativa")` abaixo já garante que só página ativa é
+// retornada, então bypassar a RLS não abre nada que a policy não abriria de
+// qualquer forma.
 export async function getCampanhaPaginaPublica(
-  supabase: SupabaseServerClient,
+  admin: SupabaseAdminClient,
   slug: string,
 ): Promise<CampanhaPagina | null> {
-  const { data } = await supabase
+  const { data } = await admin
     .from("campanha_paginas")
     .select("*")
     .eq("slug", slug)
