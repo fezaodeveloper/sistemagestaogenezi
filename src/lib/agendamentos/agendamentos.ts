@@ -75,6 +75,50 @@ export async function getAgendamentos(
   return (data as Agendamento[] | null) ?? [];
 }
 
+// Listagem do Kanban (admin) — paginada. Exclui `cancelado`: o Kanban só tem
+// as colunas Agendado/Faltou/Realizado, e contar cancelados no total da
+// paginação deixaria a página com menos cards do que o limite. Mais recentes
+// primeiro (data e horário decrescentes).
+export async function getAgendamentosPaginados(
+  supabase: SupabaseServerClient,
+  paginaId: string,
+  filtros: { data?: string; offset: number; limite: number },
+): Promise<{ itens: Agendamento[]; total: number }> {
+  let query = supabase
+    .from("agendamentos")
+    .select("*", { count: "exact" })
+    .eq("pagina_id", paginaId)
+    .neq("status", "cancelado")
+    .order("data_agendada", { ascending: false })
+    .order("horario", { ascending: false });
+
+  if (filtros.data) query = query.eq("data_agendada", filtros.data);
+
+  query = query.range(filtros.offset, filtros.offset + filtros.limite - 1);
+
+  const { data, count } = await query;
+  return { itens: (data as Agendamento[] | null) ?? [], total: count ?? 0 };
+}
+
+export type ResumoAgendamentos = Record<AgendamentoStatus, number> & { total: number };
+
+// Contadores do histórico completo da página (ignora filtro de data e
+// paginação) — só a coluna `status` é lida, então a query é leve mesmo com
+// muitas linhas.
+export async function getResumoAgendamentos(
+  supabase: SupabaseServerClient,
+  paginaId: string,
+): Promise<ResumoAgendamentos> {
+  const { data } = await supabase.from("agendamentos").select("status").eq("pagina_id", paginaId);
+
+  const resumo: ResumoAgendamentos = { total: 0, confirmado: 0, cancelado: 0, realizado: 0, faltou: 0 };
+  for (const linha of (data as { status: AgendamentoStatus }[] | null) ?? []) {
+    resumo.total += 1;
+    resumo[linha.status] += 1;
+  }
+  return resumo;
+}
+
 // Contagem de vagas ocupadas por dia/horário, só pra calcular disponibilidade
 // na página pública — nunca expõe nome/whatsapp (só data_agendada/horario),
 // e roda com o client admin (service_role) porque `anon` não tem select em

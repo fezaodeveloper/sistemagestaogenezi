@@ -1,30 +1,34 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getAgendamentoPagina, getAgendamentos } from "@/lib/agendamentos/agendamentos";
-import { AGENDAMENTO_STATUSES, type AgendamentoStatus } from "@/lib/agendamentos/schema";
-import { AgendamentosListaView } from "@/components/admin/agendamentos-lista-view";
+import { getAgendamentoPagina, getAgendamentosPaginados, getResumoAgendamentos } from "@/lib/agendamentos/agendamentos";
+import { calcularOffset, calcularTotalPaginas, LIMITE_PADRAO, parsePagina } from "@/lib/paginacao";
+import { AgendamentosKanbanView } from "@/components/admin/agendamentos-kanban-view";
 
 export default async function AgendamentoPaginaDetalhePage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ data?: string; status?: string }>;
+  searchParams: Promise<{ data?: string; pagina?: string }>;
 }) {
   await requireRole("admin");
   const { id } = await params;
-  const { data, status } = await searchParams;
+  const { data, pagina: paginaParam } = await searchParams;
 
   const supabase = await createClient();
   const pagina = await getAgendamentoPagina(supabase, id);
   if (!pagina) notFound();
 
-  const statusFiltro = AGENDAMENTO_STATUSES.includes(status as AgendamentoStatus)
-    ? (status as AgendamentoStatus)
-    : undefined;
-
-  const agendamentos = await getAgendamentos(supabase, id, { data: data || undefined, status: statusFiltro });
+  const paginaAtual = parsePagina(paginaParam);
+  const [{ itens, total }, resumo] = await Promise.all([
+    getAgendamentosPaginados(supabase, id, {
+      data: data || undefined,
+      offset: calcularOffset(paginaAtual, LIMITE_PADRAO),
+      limite: LIMITE_PADRAO,
+    }),
+    getResumoAgendamentos(supabase, id),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -33,12 +37,15 @@ export default async function AgendamentoPaginaDetalhePage({
         <p className="text-muted-foreground text-sm">/agendar/{pagina.slug}</p>
       </div>
 
-      <AgendamentosListaView
+      <AgendamentosKanbanView
         paginaId={id}
-        agendamentos={agendamentos}
+        agendamentos={itens}
         camposExtrasConfigurados={pagina.campos_extras}
+        resumo={resumo}
         dataFiltro={data ?? ""}
-        statusFiltro={statusFiltro ?? ""}
+        totalRegistros={total}
+        paginaAtual={paginaAtual}
+        totalPaginas={calcularTotalPaginas(total, LIMITE_PADRAO)}
       />
     </div>
   );

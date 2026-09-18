@@ -3,19 +3,36 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, Copy, Pencil, Plus } from "lucide-react";
-import { alternarStatusPagina } from "@/app/admin/comercial/agendamentos/actions";
+import { Calendar, Copy, CopyPlus, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  alternarStatusPagina,
+  duplicarAgendamentoPagina,
+  excluirAgendamentoPagina,
+} from "@/app/admin/comercial/agendamentos/actions";
 import type { AgendamentoPaginaComContagem } from "@/lib/agendamentos/agendamentos";
 import { AgendamentoPaginaDialog } from "@/components/admin/agendamento-pagina-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const BASE_URL = "https://sistemagestaogenezi.vercel.app";
 
 function AgendamentoPaginaCard({ pagina }: { pagina: AgendamentoPaginaComContagem }) {
   const router = useRouter();
   const [copiado, setCopiado] = useState(false);
+  const [excluindoOpen, setExcluindoOpen] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const linkPublico = `${BASE_URL}/agendar/${pagina.slug}`;
 
@@ -35,6 +52,31 @@ function AgendamentoPaginaCard({ pagina }: { pagina: AgendamentoPaginaComContage
   function alternarAtivo() {
     startTransition(async () => {
       await alternarStatusPagina(pagina.id, pagina.status !== "ativa");
+      router.refresh();
+    });
+  }
+
+  function duplicar() {
+    setErro(null);
+    startTransition(async () => {
+      const resultado = await duplicarAgendamentoPagina(pagina.id);
+      if (resultado.error) {
+        setErro(resultado.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function excluir() {
+    setErro(null);
+    startTransition(async () => {
+      const resultado = await excluirAgendamentoPagina(pagina.id);
+      setExcluindoOpen(false);
+      if (resultado.error) {
+        setErro(resultado.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -66,6 +108,11 @@ function AgendamentoPaginaCard({ pagina }: { pagina: AgendamentoPaginaComContage
         {copiado && <span className="text-muted-foreground text-xs">Link copiado!</span>}
 
         <p className="text-muted-foreground text-sm">{pagina.totalAgendamentos} agendamento(s)</p>
+        {erro && (
+          <p role="alert" className="text-destructive text-xs">
+            {erro}
+          </p>
+        )}
 
         <div className="flex flex-wrap justify-end gap-1.5 pt-1">
           <AgendamentoPaginaDialog
@@ -90,6 +137,49 @@ function AgendamentoPaginaCard({ pagina }: { pagina: AgendamentoPaginaComContage
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={alternarAtivo}>
             {pagina.status === "ativa" ? "Desativar" : "Ativar"}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            disabled={isPending}
+            onClick={duplicar}
+            aria-label="Duplicar página"
+            title="Duplicar página"
+          >
+            <CopyPlus className="size-3.5" />
+          </Button>
+          <AlertDialog open={excluindoOpen} onOpenChange={setExcluindoOpen}>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-destructive"
+                  aria-label="Excluir página"
+                  title="Excluir página"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir página de agendamento</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir &quot;{pagina.titulo}&quot;? Os {pagina.totalAgendamentos}{" "}
+                  agendamento(s) dessa página também serão excluídos e o link público deixará de funcionar. Esta
+                  ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" disabled={isPending} onClick={excluir}>
+                  {isPending ? "Excluindo..." : "Excluir"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </CardContent>
     </Card>
