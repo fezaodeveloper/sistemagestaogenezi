@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AlertTriangle, FileSpreadsheet, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
+import { useBuscaUrl } from "@/hooks/use-busca-url";
 import {
   Select,
   SelectContent,
@@ -33,7 +36,6 @@ import {
   formatDataHora,
   formatTelefone,
   isMinor,
-  onlyDigits,
   STATUS_ALUNO_BADGE_CLASS,
   STATUS_ALUNO_LABELS,
   type AlunoWithRelations,
@@ -190,11 +192,20 @@ const PDF_COLUNAS = [
   { chave: "cadastro", label: "Cadastrado em", width: "14%" },
 ] as const;
 
-function AlunosPdfDocument({ alunos, geradoEm }: { alunos: AlunoListItem[]; geradoEm: string }) {
+function AlunosPdfDocument({
+  alunos,
+  geradoEm,
+  escolaLogo,
+}: {
+  alunos: AlunoListItem[];
+  geradoEm: string;
+  escolaLogo: string | null;
+}) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Educação Profissional</Text>
           <Text style={pdfStyles.subtitle}>Lista de alunos — impresso em {geradoEm}</Text>
         </View>
@@ -237,6 +248,7 @@ export function AlunosTable({
   totalRegistros,
   limite,
   orderBy,
+  q,
 }: {
   alunos: AlunoListItem[];
   paginaAtual: number;
@@ -244,9 +256,15 @@ export function AlunosTable({
   totalRegistros: number;
   limite: number;
   orderBy: string;
+  // Termo da busca (parâmetro `q` da URL) — o filtro roda no servidor,
+  // sobre todos os alunos, e volta pra página 1 (ver useBuscaUrl).
+  q: string;
 }) {
   const router = useRouter();
-  const [busca, setBusca] = useState("");
+  const { busca, alterarBusca } = useBuscaUrl("/admin/alunos", q, {
+    ...(orderBy !== "nome" ? { orderBy } : {}),
+    ...(limite !== LIMITE_PADRAO ? { limit: String(limite) } : {}),
+  });
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [faixaFiltro, setFaixaFiltro] = useState<string>(FAIXA_FILTRO_TODAS);
   const [riscoFiltro, setRiscoFiltro] = useState<string>(RISCO_FILTRO_TODOS);
@@ -255,14 +273,10 @@ export function AlunosTable({
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
 
-  // Filtro client-side simples: a lista de alunos já vem inteira do
-  // Server Component (sem paginação hoje), então não há necessidade de ida
-  // e volta ao servidor só pra buscar/filtrar por nome, CPF, telefone,
-  // status, faixa etária ou período de cadastro — todos combinam entre si.
+  // A BUSCA (nome, CPF, telefone) é feita no servidor (parâmetro q) e vale
+  // pra todos os registros. Status, faixa etária, risco e período de cadastro
+  // continuam filtros client-side, só sobre a página carregada.
   const alunosFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    const termoDigits = onlyDigits(busca);
-
     return alunos.filter((aluno) => {
       if (statusFiltro !== STATUS_FILTRO_TODOS && aluno.status_aluno !== statusFiltro) {
         return false;
@@ -289,14 +303,9 @@ export function AlunosTable({
         if (riscoFiltro === RISCO_FILTRO_ALTO && aluno.indiceEvasao < 70) return false;
       }
 
-      if (!termo) return true;
-
-      const nome = (aluno.profiles?.full_name ?? "").toLowerCase();
-      if (nome.includes(termo)) return true;
-      if (termoDigits.length === 0) return false;
-      return aluno.cpf.includes(termoDigits) || aluno.telefone.includes(termoDigits);
+      return true;
     });
-  }, [alunos, busca, statusFiltro, faixaFiltro, riscoFiltro, dataDe, dataAte]);
+  }, [alunos, statusFiltro, faixaFiltro, riscoFiltro, dataDe, dataAte]);
 
   // Mesma convenção de URL "limpa" de construirHref (paginacao.tsx): só
   // entra na URL o que difere do padrão. Volta pra página 1 ao trocar a
@@ -304,6 +313,7 @@ export function AlunosTable({
   function handleOrderByChange(novoOrderBy: string) {
     const params = new URLSearchParams();
     if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
+    if (q) params.set("q", q);
     if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
     const query = params.toString();
     router.push(query ? `/admin/alunos?${query}` : "/admin/alunos");
@@ -317,8 +327,9 @@ export function AlunosTable({
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <AlunosPdfDocument alunos={alunosFiltrados} geradoEm={geradoEm} />,
+        <AlunosPdfDocument alunos={alunosFiltrados} geradoEm={geradoEm} escolaLogo={escolaLogo} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
@@ -379,7 +390,7 @@ export function AlunosTable({
         <Input
           placeholder="Buscar por nome, CPF ou telefone..."
           value={busca}
-          onChange={(event) => setBusca(event.target.value)}
+          onChange={(event) => alterarBusca(event.target.value)}
           className="max-w-sm"
         />
 
@@ -567,7 +578,7 @@ export function AlunosTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/alunos"
-        searchParams={orderBy !== "nome" ? { orderBy } : {}}
+        searchParams={{ ...(orderBy !== "nome" ? { orderBy } : {}), ...(q ? { q } : {}) }}
       />
     </div>
   );

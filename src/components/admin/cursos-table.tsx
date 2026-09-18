@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
+import { useBuscaUrl } from "@/hooks/use-busca-url";
 import {
   Select,
   SelectContent,
@@ -115,11 +118,20 @@ const PDF_COLUNAS = [
   { chave: "status", label: "Status", width: "16%" },
 ] as const;
 
-function CursosPdfDocument({ cursos, geradoEm }: { cursos: CursoListItem[]; geradoEm: string }) {
+function CursosPdfDocument({
+  cursos,
+  geradoEm,
+  escolaLogo,
+}: {
+  cursos: CursoListItem[];
+  geradoEm: string;
+  escolaLogo: string | null;
+}) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Educação Profissional</Text>
           <Text style={pdfStyles.subtitle}>Lista de cursos — impresso em {geradoEm}</Text>
         </View>
@@ -163,6 +175,7 @@ export function CursosTable({
   totalRegistros,
   limite,
   orderBy,
+  q,
 }: {
   cursos: CursoListItem[];
   paginaAtual: number;
@@ -170,9 +183,15 @@ export function CursosTable({
   totalRegistros: number;
   limite: number;
   orderBy: string;
+  // Termo da busca (parâmetro `q` da URL) — filtrado no servidor, sobre todos
+  // os cursos, voltando pra página 1 (ver useBuscaUrl).
+  q: string;
 }) {
   const router = useRouter();
-  const [busca, setBusca] = useState("");
+  const { busca, alterarBusca } = useBuscaUrl("/admin/cursos", q, {
+    ...(orderBy !== "nome" ? { orderBy } : {}),
+    ...(limite !== LIMITE_PADRAO ? { limit: String(limite) } : {}),
+  });
   const [modalidadeFiltro, setModalidadeFiltro] = useState<string>(MODALIDADE_FILTRO_TODAS);
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -184,18 +203,16 @@ export function CursosTable({
   function handleOrderByChange(novoOrderBy: string) {
     const params = new URLSearchParams();
     if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
+    if (q) params.set("q", q);
     if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
     const query = params.toString();
     router.push(query ? `/admin/cursos?${query}` : "/admin/cursos");
   }
 
-  // Filtro client-side simples: a lista de cursos já vem inteira do Server
-  // Component (sem paginação hoje), então não há necessidade de ida e volta
-  // ao servidor só pra buscar por nome ou filtrar por modalidade/status —
-  // os três filtros combinam entre si.
+  // A BUSCA por nome é feita no servidor (parâmetro q) e vale pra todos os
+  // cursos. Modalidade e status continuam filtros client-side, só sobre a
+  // página carregada.
   const cursosFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-
     return cursos.filter((curso) => {
       if (modalidadeFiltro !== MODALIDADE_FILTRO_TODAS && curso.tipo !== modalidadeFiltro) {
         return false;
@@ -203,10 +220,9 @@ export function CursosTable({
       if (statusFiltro !== STATUS_FILTRO_TODOS && curso.status !== statusFiltro) {
         return false;
       }
-      if (!termo) return true;
-      return curso.nome.toLowerCase().includes(termo);
+      return true;
     });
-  }, [cursos, busca, modalidadeFiltro, statusFiltro]);
+  }, [cursos, modalidadeFiltro, statusFiltro]);
 
   async function handleImprimir() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -216,8 +232,9 @@ export function CursosTable({
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <CursosPdfDocument cursos={cursosFiltrados} geradoEm={geradoEm} />,
+        <CursosPdfDocument cursos={cursosFiltrados} geradoEm={geradoEm} escolaLogo={escolaLogo} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
@@ -237,7 +254,7 @@ export function CursosTable({
           <Input
             placeholder="Buscar por nome..."
             value={busca}
-            onChange={(event) => setBusca(event.target.value)}
+            onChange={(event) => alterarBusca(event.target.value)}
             className="max-w-sm"
           />
 
@@ -369,7 +386,7 @@ export function CursosTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/cursos"
-        searchParams={orderBy !== "nome" ? { orderBy } : {}}
+        searchParams={{ ...(orderBy !== "nome" ? { orderBy } : {}), ...(q ? { q } : {}) }}
       />
     </div>
   );

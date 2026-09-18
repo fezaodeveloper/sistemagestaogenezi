@@ -133,8 +133,9 @@ export function AlunoEditForm({
     <form
       key={JSON.stringify(state?.values)}
       action={formAction}
-      className="flex max-w-2xl flex-col gap-6"
+      className="grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2"
     >
+      <div className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-col gap-4">
         <SectionTitle>Acesso ao sistema</SectionTitle>
 
@@ -242,6 +243,26 @@ export function AlunoEditForm({
         </div>
       </div>
 
+      <div className="flex flex-col gap-4">
+        <SectionTitle>Observações</SectionTitle>
+        <div className="flex flex-col gap-2">
+          <Textarea
+            id="observacoes"
+            name="observacoes"
+            rows={3}
+            defaultValue={values.observacoes}
+            placeholder="Anotações internas sobre o aluno (não visíveis para ele)."
+          />
+          {errors?.observacoes && (
+            <p role="alert" className="text-destructive text-sm">
+              {errors.observacoes[0]}
+            </p>
+          )}
+        </div>
+      </div>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-col gap-4">
         <SectionTitle>Endereço</SectionTitle>
 
@@ -429,32 +450,15 @@ export function AlunoEditForm({
           </div>
         </div>
       )}
-
-      <div className="flex flex-col gap-4">
-        <SectionTitle>Observações</SectionTitle>
-        <div className="flex flex-col gap-2">
-          <Textarea
-            id="observacoes"
-            name="observacoes"
-            rows={3}
-            defaultValue={values.observacoes}
-            placeholder="Anotações internas sobre o aluno (não visíveis para ele)."
-          />
-          {errors?.observacoes && (
-            <p role="alert" className="text-destructive text-sm">
-              {errors.observacoes[0]}
-            </p>
-          )}
-        </div>
       </div>
 
       {state?.error && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className="text-destructive text-sm md:col-span-2">
           {state.error}
         </p>
       )}
 
-      <div>
+      <div className="md:col-span-2">
         <SubmitButton />
       </div>
     </form>

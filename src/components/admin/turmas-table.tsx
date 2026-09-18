@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { DeleteTurmaButton } from "@/components/admin/delete-turma-button";
 import { DuplicarTurmaButton } from "@/components/admin/duplicar-turma-button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
+import { useBuscaUrl } from "@/hooks/use-busca-url";
 import {
   Select,
   SelectContent,
@@ -124,14 +127,17 @@ const PDF_COLUNAS = [
 function TurmasPdfDocument({
   turmas,
   geradoEm,
+  escolaLogo,
 }: {
   turmas: TurmaWithCurso[];
   geradoEm: string;
+  escolaLogo: string | null;
 }) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Educação Profissional — Lista de Turmas</Text>
           <Text style={pdfStyles.subtitle}>Impresso em {geradoEm}</Text>
         </View>
@@ -178,6 +184,7 @@ export function TurmasTable({
   totalRegistros,
   limite,
   orderBy,
+  q,
 }: {
   turmas: TurmaWithCurso[];
   paginaAtual: number;
@@ -185,9 +192,15 @@ export function TurmasTable({
   totalRegistros: number;
   limite: number;
   orderBy: string;
+  // Termo da busca (parâmetro `q` da URL) — filtrado no servidor, sobre todas
+  // as turmas, voltando pra página 1 (ver useBuscaUrl).
+  q: string;
 }) {
   const router = useRouter();
-  const [busca, setBusca] = useState("");
+  const { busca, alterarBusca } = useBuscaUrl("/admin/turmas", q, {
+    ...(orderBy !== "nome" ? { orderBy } : {}),
+    ...(limite !== LIMITE_PADRAO ? { limit: String(limite) } : {}),
+  });
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [turnoFiltro, setTurnoFiltro] = useState<string>(TURNO_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
@@ -198,27 +211,22 @@ export function TurmasTable({
   function handleOrderByChange(novoOrderBy: string) {
     const params = new URLSearchParams();
     if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
+    if (q) params.set("q", q);
     if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
     const query = params.toString();
     router.push(query ? `/admin/turmas?${query}` : "/admin/turmas");
   }
 
-  // Filtros client-side: a lista já vem inteira do Server Component (sem
-  // paginação), mesmo padrão de matriculas-table.tsx — busca e os dois
-  // selects combinam entre si.
+  // A BUSCA (turma ou curso) é feita no servidor (parâmetro q) e vale pra
+  // todas as turmas. Status e turno continuam filtros client-side, só sobre a
+  // página carregada.
   const turmasFiltradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-
     return turmas.filter((turma) => {
       if (statusFiltro !== STATUS_FILTRO_TODOS && turma.status !== statusFiltro) return false;
       if (turnoFiltro !== TURNO_FILTRO_TODOS && turma.turno !== turnoFiltro) return false;
-      if (!termo) return true;
-
-      const nomeTurma = turma.nome.toLowerCase();
-      const nomeCurso = (turma.cursos?.nome ?? "").toLowerCase();
-      return nomeTurma.includes(termo) || nomeCurso.includes(termo);
+      return true;
     });
-  }, [turmas, busca, statusFiltro, turnoFiltro]);
+  }, [turmas, statusFiltro, turnoFiltro]);
 
   async function handleImprimir() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -227,8 +235,9 @@ export function TurmasTable({
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <TurmasPdfDocument turmas={turmasFiltradas} geradoEm={geradoEm} />,
+        <TurmasPdfDocument turmas={turmasFiltradas} geradoEm={geradoEm} escolaLogo={escolaLogo} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
@@ -248,7 +257,7 @@ export function TurmasTable({
           <Input
             placeholder="Buscar por turma ou curso..."
             value={busca}
-            onChange={(event) => setBusca(event.target.value)}
+            onChange={(event) => alterarBusca(event.target.value)}
             className="max-w-sm"
           />
 
@@ -405,7 +414,7 @@ export function TurmasTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/turmas"
-        searchParams={orderBy !== "nome" ? { orderBy } : {}}
+        searchParams={{ ...(orderBy !== "nome" ? { orderBy } : {}), ...(q ? { q } : {}) }}
       />
     </div>
   );

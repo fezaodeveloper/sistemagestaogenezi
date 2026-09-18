@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { atualizarGasto, criarGasto, excluirGasto, getGastos } from "@/app/admin/financeiro/gastos/actions";
 import type { Categoria } from "@/app/admin/financeiro/categorias/actions";
@@ -486,12 +486,29 @@ export function GastosView({
   // periodoInicio/Fim na mesma chamada (diferente de handleModoFiltro e
   // handleAplicarPeriodo, que têm sua própria lógica abaixo pra não ler um
   // valor de estado ainda não atualizado).
+  // Termo da busca aplicado às consultas (o texto do campo é `busca`). Vai por
+  // ref porque buscar()/handlePaginar/etc. são closures de outros renders — a
+  // ref garante que todas leem o termo mais recente, e a busca roda no
+  // SERVIDOR (parâmetro query da Server Action), sobre todos os registros do
+  // período, voltando pra página 1.
+  const termoRef = useRef("");
+  const debounceBuscaRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceBuscaRef.current) clearTimeout(debounceBuscaRef.current);
+    debounceBuscaRef.current = setTimeout(() => {
+      termoRef.current = valor.trim();
+      buscar(ano, mes, 1, limite);
+    }, 400);
+  }
+
   function buscar(novoAno: number, novoMes: number, novaPagina: number, novoLimite: number) {
     startTransition(async () => {
       const resultado =
         modoFiltro === "periodo" && periodoInicio && periodoFim
-          ? await getGastos(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite)
-          : await getGastos(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite);
+          ? await getGastos(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite, termoRef.current)
+          : await getGastos(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite, termoRef.current);
       setAno(novoAno);
       setMes(novoMes);
       setPagina(novaPagina);
@@ -527,7 +544,7 @@ export function GastosView({
     setModoFiltro(modo);
     if (modo === "mes") {
       startTransition(async () => {
-        const resultado = await getGastos(ano, mes, undefined, undefined, 1, limite);
+        const resultado = await getGastos(ano, mes, undefined, undefined, 1, limite, termoRef.current);
         setPagina(1);
         setGastos(resultado.itens);
         setTotal(resultado.total);
@@ -538,7 +555,7 @@ export function GastosView({
   function handleAplicarPeriodo() {
     if (!periodoInicio || !periodoFim) return;
     startTransition(async () => {
-      const resultado = await getGastos(ano, mes, periodoInicio, periodoFim, 1, limite);
+      const resultado = await getGastos(ano, mes, periodoInicio, periodoFim, 1, limite, termoRef.current);
       setPagina(1);
       setGastos(resultado.itens);
       setTotal(resultado.total);
@@ -554,12 +571,10 @@ export function GastosView({
     setTotal((prev) => Math.max(0, prev - 1));
   }
 
-  // Busca por descrição: filtro client-side sobre os registros já
-  // carregados (a página atual), combinando com o filtro de categoria —
-  // mesmo padrão (e mesma limitação: não busca fora da página carregada)
-  // das outras tabelas paginadas do admin (alunos, matrículas etc.).
+  // A BUSCA por descrição é feita no servidor (ver handleBuscaChange) e vale
+  // pro período inteiro. Aqui sobra só o filtro de categoria, client-side,
+  // sobre a página carregada.
   const gastosFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
     return gastos.filter((gasto) => {
       if (categoriaFiltro !== CATEGORIA_FILTRO_TODAS) {
         const combina =
@@ -572,10 +587,9 @@ export function GastosView({
             GASTO_CATEGORIA_LABELS[gasto.categoria] === categoriaPorId.get(categoriaFiltro)?.nome);
         if (!combina) return false;
       }
-      if (!termo) return true;
-      return gasto.descricao.toLowerCase().includes(termo);
+      return true;
     });
-  }, [gastos, categoriaFiltro, categoriaPorId, busca]);
+  }, [gastos, categoriaFiltro, categoriaPorId]);
 
   const totalPeriodo = useMemo(
     () => gastosFiltrados.reduce((soma, gasto) => soma + Number(gasto.valor), 0),
@@ -718,7 +732,7 @@ export function GastosView({
         <Input
           placeholder="Buscar por descrição..."
           value={busca}
-          onChange={(event) => setBusca(event.target.value)}
+          onChange={(event) => handleBuscaChange(event.target.value)}
           className="max-w-sm"
         />
         <Select

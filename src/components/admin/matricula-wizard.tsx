@@ -55,6 +55,7 @@ import {
   type TurmaParaMatricula,
 } from "@/app/admin/matriculas/actions";
 import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { ResponsavelMenorDialog, type ResponsavelMenor } from "@/components/admin/responsavel-menor-dialog";
 
 const ETAPAS = ["Aluno", "Curso e Turma", "Valores", "Datas", "Materiais", "Confirmação"] as const;
@@ -445,6 +446,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
         <MatriculaComprovantePdf
           resumo={{
@@ -474,6 +476,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             taxaMatriculaFormaPagamento: cobrarTaxaMatricula ? taxaMatriculaFormaPagamento : null,
             taxaMatriculaPaga: cobrarTaxaMatricula ? taxaMatriculaPaga : false,
             escola_nome: escola.nome,
+            escola_logo_url: escolaLogo,
             escola_endereco: escola.endereco,
             escola_telefone: escola.telefone,
             termo_imagem_texto: escola.termoImagemTexto,
@@ -603,7 +606,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
     const termo = buscaAluno.trim();
 
     return (
-      <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="busca_aluno">Buscar aluno</Label>
           <Input
@@ -613,21 +617,6 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             onChange={(event) => setBuscaAluno(event.target.value)}
           />
         </div>
-
-        {aluno && (
-          <Card className="border-primary">
-            <CardContent className="flex items-center justify-between py-4">
-              <div className="flex flex-col">
-                <span className="font-medium">{aluno.full_name ?? "—"}</span>
-                <span className="text-muted-foreground text-sm">{aluno.email}</span>
-                <span className="text-muted-foreground text-sm">
-                  CPF: {formatCpf(aluno.cpf)} · Tel: {formatTelefone(aluno.telefone)}
-                </span>
-              </div>
-              <Badge>Selecionado</Badge>
-            </CardContent>
-          </Card>
-        )}
 
         <div className="flex max-h-80 flex-col overflow-y-auto rounded-md border">
           {termo.length < 2 ? (
@@ -657,6 +646,23 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             ))
           )}
         </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+        {aluno && (
+          <Card className="border-primary">
+            <CardContent className="flex items-center justify-between py-4">
+              <div className="flex flex-col">
+                <span className="font-medium">{aluno.full_name ?? "—"}</span>
+                <span className="text-muted-foreground text-sm">{aluno.email}</span>
+                <span className="text-muted-foreground text-sm">
+                  CPF: {formatCpf(aluno.cpf)} · Tel: {formatTelefone(aluno.telefone)}
+                </span>
+              </div>
+              <Badge>Selecionado</Badge>
+            </CardContent>
+          </Card>
+        )}
+        </div>
       </div>
     );
   }
@@ -673,6 +679,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
           </p>
         </div>
 
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="busca_curso">Buscar curso</Label>
           <Input
@@ -735,7 +743,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             )}
           </div>
         </div>
-
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
         {curso && (
           <div className="animate-in fade-in slide-in-from-top-2 flex flex-col gap-2 duration-300">
             <Label>2. Agora selecione uma turma:</Label>
@@ -827,6 +836,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             </CardContent>
           </Card>
         )}
+        </div>
+      </div>
       </div>
     );
   }
@@ -834,6 +845,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
   function renderEtapaValores() {
     return (
       <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="valor_original">Valor Original</Label>
           <Input id="valor_original" readOnly value={formatValor(valorOriginal)} className="max-w-40" />
@@ -908,7 +921,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
           <Label htmlFor="valor_final">Valor Final</Label>
           <Input id="valor_final" readOnly value={formatValor(valorFinal)} className="max-w-40" />
         </div>
-
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-3 rounded-md border p-4">
           <div className="flex items-center justify-between">
             <Label htmlFor="cobrar_taxa_matricula" className="font-normal">
@@ -1108,6 +1122,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             />
           </div>
         </div>
+        </div>
+      </div>
       </div>
     );
   }
@@ -1118,6 +1134,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
         <p className="text-muted-foreground text-sm">
           As datas são baseadas na turma selecionada. Apenas a data de início pode ser ajustada.
         </p>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="data_inicio">Data de Início</Label>
@@ -1141,6 +1159,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             </p>
           </div>
         </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="dias_semana">Dias da Semana</Label>
@@ -1155,6 +1175,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             <Input id="horario" readOnly value={turma?.horario_aula ?? "—"} />
           </div>
         </div>
+        </div>
+      </div>
       </div>
     );
   }
@@ -1162,6 +1184,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
   function renderEtapaMateriais() {
     return (
       <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex items-center gap-2">
           <Checkbox
             id="apostila_entregue"
@@ -1192,6 +1216,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             Kit entregue
           </Label>
         </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="observacoes">Observações adicionais</Label>
           <Textarea
@@ -1202,6 +1228,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             placeholder="Opcional"
           />
         </div>
+        </div>
+      </div>
       </div>
     );
   }
@@ -1215,8 +1243,11 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
 
     return (
       <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
         {renderResumoCard()}
-
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
         <div className="flex max-w-48 flex-col gap-2">
           <Label htmlFor="status_inicial">Status Inicial</Label>
           <Select
@@ -1242,6 +1273,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             {erro}
           </p>
         )}
+        </div>
+      </div>
       </div>
     );
   }
@@ -1284,7 +1317,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-5xl flex-col gap-6">
       <StepIndicator currentStep={step} />
 
       <Card>

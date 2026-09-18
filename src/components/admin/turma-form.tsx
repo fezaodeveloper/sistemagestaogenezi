@@ -70,8 +70,9 @@ export function TurmaForm({
     <form
       key={JSON.stringify(state?.values)}
       action={formAction}
-      className="flex max-w-2xl flex-col gap-6"
+      className="grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2"
     >
+      <div className="flex min-w-0 flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle>Informações básicas</CardTitle>
@@ -140,6 +141,66 @@ export function TurmaForm({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Período e vagas</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="data_inicio">Início</Label>
+              <Input
+                id="data_inicio"
+                name="data_inicio"
+                type="date"
+                defaultValue={values?.data_inicio}
+                required
+              />
+              {state?.errors?.data_inicio && (
+                <p role="alert" className="text-destructive text-sm">
+                  {state.errors.data_inicio[0]}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="data_fim">Término</Label>
+              <Input
+                id="data_fim"
+                name="data_fim"
+                type="date"
+                defaultValue={values?.data_fim}
+                required
+              />
+              {state?.errors?.data_fim && (
+                <p role="alert" className="text-destructive text-sm">
+                  {state.errors.data_fim[0]}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="capacidade_maxima">Número de vagas</Label>
+            <Input
+              id="capacidade_maxima"
+              name="capacidade_maxima"
+              type="number"
+              min={1}
+              defaultValue={values?.capacidade_maxima}
+              className="max-w-40"
+              required
+            />
+            {state?.errors?.capacidade_maxima && (
+              <p role="alert" className="text-destructive text-sm">
+                {state.errors.capacidade_maxima[0]}
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle>Horários e local</CardTitle>
@@ -260,64 +321,6 @@ export function TurmaForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>Período e vagas</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="data_inicio">Início</Label>
-              <Input
-                id="data_inicio"
-                name="data_inicio"
-                type="date"
-                defaultValue={values?.data_inicio}
-                required
-              />
-              {state?.errors?.data_inicio && (
-                <p role="alert" className="text-destructive text-sm">
-                  {state.errors.data_inicio[0]}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="data_fim">Término</Label>
-              <Input
-                id="data_fim"
-                name="data_fim"
-                type="date"
-                defaultValue={values?.data_fim}
-                required
-              />
-              {state?.errors?.data_fim && (
-                <p role="alert" className="text-destructive text-sm">
-                  {state.errors.data_fim[0]}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="capacidade_maxima">Número de vagas</Label>
-            <Input
-              id="capacidade_maxima"
-              name="capacidade_maxima"
-              type="number"
-              min={1}
-              defaultValue={values?.capacidade_maxima}
-              className="max-w-40"
-              required
-            />
-            {state?.errors?.capacidade_maxima && (
-              <p role="alert" className="text-destructive text-sm">
-                {state.errors.capacidade_maxima[0]}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Observações</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -335,14 +338,15 @@ export function TurmaForm({
           )}
         </CardContent>
       </Card>
+      </div>
 
       {state?.error && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className="text-destructive text-sm md:col-span-2">
           {state.error}
         </p>
       )}
 
-      <div>
+      <div className="md:col-span-2">
         <SubmitButton label={submitLabel} />
       </div>
     </form>

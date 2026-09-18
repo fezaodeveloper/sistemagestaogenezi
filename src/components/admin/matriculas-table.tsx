@@ -5,6 +5,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { updateMatriculaStatus } from "@/app/admin/alunos/matriculas-actions";
 import { alterarStatusEmLote, downloadContrato } from "@/app/admin/matriculas/actions";
 import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
@@ -13,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO } from "@/lib/paginacao";
+import { useBuscaUrl } from "@/hooks/use-busca-url";
 import {
   Select,
   SelectContent,
@@ -320,14 +324,17 @@ const PDF_COLUNAS = [
 function MatriculasPdfDocument({
   matriculas,
   geradoEm,
+  escolaLogo,
 }: {
   matriculas: MatriculaListItem[];
   geradoEm: string;
+  escolaLogo: string | null;
 }) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Educação Profissional — Lista de Matrículas</Text>
           <Text style={pdfStyles.subtitle}>Impresso em {geradoEm}</Text>
         </View>
@@ -439,37 +446,36 @@ export function MatriculasTable({
   totalPaginas,
   totalRegistros,
   limite,
+  q,
+  buscaTruncada,
 }: {
   matriculas: MatriculaListItem[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
+  // Termo da busca (parâmetro `q` da URL) — filtrado no servidor, sobre todas
+  // as matrículas, voltando pra página 1 (ver useBuscaUrl).
+  q: string;
+  // true quando a busca casou com alunos/cursos demais e o servidor limitou.
+  buscaTruncada: boolean;
 }) {
   const router = useRouter();
-  const [busca, setBusca] = useState("");
+  const { busca, alterarBusca } = useBuscaUrl("/admin/matriculas", q, {
+    ...(limite !== LIMITE_PADRAO ? { limit: String(limite) } : {}),
+  });
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
-  // Filtro client-side simples: a lista já vem inteira do Server Component
-  // (sem paginação hoje), então não há necessidade de ida e volta ao
-  // servidor só pra buscar por aluno/curso ou filtrar por status — os dois
-  // filtros combinam entre si.
+  // A BUSCA (aluno ou curso) é feita no servidor (parâmetro q) e vale pra
+  // todas as matrículas. O filtro de status continua client-side, só sobre a
+  // página carregada.
   const matriculasFiltradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-
-    return matriculas.filter((matricula) => {
-      if (statusFiltro !== STATUS_FILTRO_TODOS && matricula.status !== statusFiltro) {
-        return false;
-      }
-      if (!termo) return true;
-
-      const nomeAluno = (matricula.alunos?.full_name ?? "").toLowerCase();
-      const nomeCurso = (matricula.turmas?.cursos?.nome ?? "").toLowerCase();
-      return nomeAluno.includes(termo) || nomeCurso.includes(termo);
-    });
-  }, [matriculas, busca, statusFiltro]);
+    return matriculas.filter(
+      (matricula) => statusFiltro === STATUS_FILTRO_TODOS || matricula.status === statusFiltro,
+    );
+  }, [matriculas, statusFiltro]);
 
   const idsVisiveis = useMemo(
     () => new Set(matriculasFiltradas.map((matricula) => matricula.id)),
@@ -516,8 +522,9 @@ export function MatriculasTable({
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <MatriculasPdfDocument matriculas={matriculasFiltradas} geradoEm={geradoEm} />,
+        <MatriculasPdfDocument matriculas={matriculasFiltradas} geradoEm={geradoEm} escolaLogo={escolaLogo} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
@@ -537,7 +544,7 @@ export function MatriculasTable({
           <Input
             placeholder="Buscar por aluno ou curso..."
             value={busca}
-            onChange={(event) => setBusca(event.target.value)}
+            onChange={(event) => alterarBusca(event.target.value)}
             className="max-w-sm"
           />
 
@@ -662,7 +669,13 @@ export function MatriculasTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/matriculas"
+        searchParams={q ? { q } : {}}
       />
+      {buscaTruncada && (
+        <p className="text-muted-foreground text-xs">
+          A busca encontrou muitos alunos/cursos — refine o termo para ver todos os resultados.
+        </p>
+      )}
     </div>
   );
 }

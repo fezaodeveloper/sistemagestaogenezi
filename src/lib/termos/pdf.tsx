@@ -2,6 +2,8 @@ import "server-only";
 
 import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { tiptapJsonParaRuns } from "@/lib/certificados/texto";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { carregarLogoEscolaParaPdf } from "@/lib/pdf/logo-escola";
 import type { Termo } from "./schema";
 
 const styles = StyleSheet.create({
@@ -33,12 +35,14 @@ function TermoPdfDocument({
   nomeEscola,
   nomeAssinatura,
   dataAceite,
+  escolaLogo,
 }: {
   termo: Termo;
   variaveis: Record<string, string>;
   nomeEscola: string;
   nomeAssinatura: string | null;
   dataAceite: string | null;
+  escolaLogo: string | null;
 }) {
   const paragrafos = extrairParagrafos(termo.conteudo_json, variaveis);
 
@@ -46,6 +50,7 @@ function TermoPdfDocument({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={styles.nomeEscola}>{nomeEscola}</Text>
         </View>
 
@@ -79,6 +84,7 @@ export async function gerarTermoPdfBuffer(
   nomeAssinatura: string | null,
   dataAceite: string | null,
 ): Promise<Buffer> {
+  const escolaLogo = await carregarLogoEscolaParaPdf();
   return renderToBuffer(
     <TermoPdfDocument
       termo={termo}
@@ -86,6 +92,7 @@ export async function gerarTermoPdfBuffer(
       nomeEscola={nomeEscola}
       nomeAssinatura={nomeAssinatura}
       dataAceite={dataAceite}
+      escolaLogo={escolaLogo}
     />,
   );
 }

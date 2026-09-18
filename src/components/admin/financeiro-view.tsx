@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, Paperclip, Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import {
   cancelarParcela,
   criarParcelaManual,
@@ -117,11 +119,12 @@ const carneStyles = StyleSheet.create({
   footer: { marginTop: 16, fontSize: 9, textAlign: "center", color: "#555555" },
 });
 
-function CarneDocument({ parcelas }: { parcelas: ParcelaComRelacoes[] }) {
+function CarneDocument({ parcelas, escolaLogo }: { parcelas: ParcelaComRelacoes[]; escolaLogo: string | null }) {
   return (
     <Document>
       <Page size="A4" orientation="portrait" style={carneStyles.page}>
         <View style={carneStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={carneStyles.title}>GÊNEZI — Educação Profissional — Carnê de Pagamento</Text>
         </View>
 
@@ -812,12 +815,29 @@ export function FinanceiroView({
   // Sempre busca com o modo de filtro (mês ou período) e a página/limite
   // atuais — centraliza a lógica que antes estava duplicada em
   // irParaMes/recarregar/handleModoFiltro/handleAplicarPeriodo.
+  // Termo da busca aplicado às consultas (o texto do campo é `busca`). Vai por
+  // ref porque buscar()/handlePaginar/etc. são closures de outros renders — a
+  // ref garante que todas leem o termo mais recente, e a busca roda no
+  // SERVIDOR (parâmetro query da Server Action), sobre todos os registros do
+  // período, voltando pra página 1.
+  const termoRef = useRef("");
+  const debounceBuscaRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceBuscaRef.current) clearTimeout(debounceBuscaRef.current);
+    debounceBuscaRef.current = setTimeout(() => {
+      termoRef.current = valor.trim();
+      buscar(ano, mes, 1, limite);
+    }, 400);
+  }
+
   function buscar(novoAno: number, novoMes: number, novaPagina: number, novoLimite: number) {
     startTransition(async () => {
       const novosDados =
         modoFiltro === "periodo" && periodoInicio && periodoFim
-          ? await getFinanceiroDados(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite)
-          : await getFinanceiroDados(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite);
+          ? await getFinanceiroDados(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite, termoRef.current)
+          : await getFinanceiroDados(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite, termoRef.current);
       setAno(novoAno);
       setMes(novoMes);
       setPagina(novaPagina);
@@ -850,7 +870,7 @@ export function FinanceiroView({
     setModoFiltro(modo);
     if (modo === "mes") {
       startTransition(async () => {
-        const novosDados = await getFinanceiroDados(ano, mes, undefined, undefined, 1, limite);
+        const novosDados = await getFinanceiroDados(ano, mes, undefined, undefined, 1, limite, termoRef.current);
         setPagina(1);
         setDados(novosDados);
         setSelecionadas(new Set());
@@ -861,7 +881,7 @@ export function FinanceiroView({
   function handleAplicarPeriodo() {
     if (!periodoInicio || !periodoFim) return;
     startTransition(async () => {
-      const novosDados = await getFinanceiroDados(ano, mes, periodoInicio, periodoFim, 1, limite);
+      const novosDados = await getFinanceiroDados(ano, mes, periodoInicio, periodoFim, 1, limite, termoRef.current);
       setPagina(1);
       setDados(novosDados);
       setSelecionadas(new Set());
@@ -872,15 +892,11 @@ export function FinanceiroView({
     buscar(ano, mes, novaPagina, novoLimite);
   }
 
+  // A BUSCA por aluno é feita no servidor (ver handleBuscaChange) e vale pro
+  // período inteiro; o filtro de status continua client-side, sobre a página.
   const parcelasFiltradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return dados.parcelas.filter((parcela) => {
-      if (statusFiltro !== STATUS_FILTRO_TODOS && parcela.status !== statusFiltro) return false;
-      if (!termo) return true;
-      const nomeAluno = (parcela.alunos?.full_name ?? "").toLowerCase();
-      return nomeAluno.includes(termo);
-    });
-  }, [dados.parcelas, busca, statusFiltro]);
+    return dados.parcelas.filter((parcela) => statusFiltro === STATUS_FILTRO_TODOS || parcela.status === statusFiltro);
+  }, [dados.parcelas, statusFiltro]);
 
   const adimplencia = useMemo(() => {
     const denominador = dados.kpis.totalRecebido + dados.kpis.totalAtrasado;
@@ -917,7 +933,8 @@ export function FinanceiroView({
     const novaAba = window.open("", "_blank");
     setGerandoCarne(true);
     try {
-      const blob = await pdf(<CarneDocument parcelas={parcelasComFatura} />).toBlob();
+      const escolaLogo = await getLogoEscolaPdf();
+      const blob = await pdf(<CarneDocument parcelas={parcelasComFatura} escolaLogo={escolaLogo} />).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
         novaAba.location.href = url;
@@ -1059,7 +1076,7 @@ export function FinanceiroView({
         <Input
           placeholder="Buscar por aluno..."
           value={busca}
-          onChange={(event) => setBusca(event.target.value)}
+          onChange={(event) => handleBuscaChange(event.target.value)}
           className="max-w-sm"
         />
         <Select

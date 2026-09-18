@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
+import { normalizarBusca, parseBusca, somenteDigitos } from "@/lib/busca";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlunosTable, type AlunoListItem } from "@/components/admin/alunos-table";
@@ -19,10 +20,11 @@ function parseAlunosOrderBy(valor: string | undefined): AlunosOrderBy {
 export default async function AlunosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ criado?: string; page?: string; limit?: string; orderBy?: string }>;
+  searchParams: Promise<{ criado?: string; page?: string; limit?: string; orderBy?: string; q?: string }>;
 }) {
   await requireRole("admin");
-  const { criado, page, limit, orderBy: orderByRaw } = await searchParams;
+  const { criado, page, limit, orderBy: orderByRaw, q: qRaw } = await searchParams;
+  const q = parseBusca(qRaw);
 
   const paginaAtual = parsePagina(page);
   const limite = parseLimite(limit);
@@ -42,7 +44,9 @@ export default async function AlunosPage({
   // o MAIOR índice entre linhas de indices_evasao do aluno) — busca a
   // lista inteira nesses dois casos, sem .range(), pra ordenar e paginar
   // depois em JS.
-  if (orderBy === "recente") {
+  // Com busca (q) também carrega a lista inteira: o filtro por nome/CPF/telefone
+  // é feito em JS abaixo (o nome vem de profiles via embed) e só depois pagina.
+  if (orderBy === "recente" && !q) {
     alunosQuery = alunosQuery.range(offset, offset + limite - 1);
   }
 
@@ -65,6 +69,19 @@ export default async function AlunosPage({
     ...aluno,
     indiceEvasao: indicePorAluno.get(aluno.id) ?? null,
   }));
+
+  if (q && alunos) {
+    const termo = normalizarBusca(q);
+    const termoDigitos = somenteDigitos(q);
+    alunos = alunos.filter((aluno) => {
+      if (normalizarBusca(aluno.profiles?.full_name).includes(termo)) return true;
+      if (termoDigitos.length === 0) return false;
+      return aluno.cpf.includes(termoDigitos) || aluno.telefone.includes(termoDigitos);
+    });
+    totalRegistros = alunos.length;
+    // "recente" já vem ordenado por created_at desc do banco; só falta paginar.
+    if (orderBy === "recente") alunos = alunos.slice(offset, offset + limite);
+  }
 
   if (orderBy === "nome" && alunos) {
     alunos = [...alunos].sort((a, b) =>
@@ -105,7 +122,7 @@ export default async function AlunosPage({
             Não foi possível carregar os alunos. Tente recarregar a página.
           </CardContent>
         </Card>
-      ) : !alunos || totalRegistros === 0 ? (
+      ) : !alunos || (totalRegistros === 0 && !q) ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <p className="text-muted-foreground text-sm">Nenhum aluno cadastrado ainda.</p>
@@ -128,6 +145,7 @@ export default async function AlunosPage({
             totalRegistros={totalRegistros}
             limite={limite}
             orderBy={orderBy}
+            q={q}
           />
         </Card>
       )}

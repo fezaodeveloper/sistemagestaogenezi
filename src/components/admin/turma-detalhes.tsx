@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, Pencil, Printer } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { TurmaFrequenciaPdf } from "@/components/admin/turma-frequencia-pdf";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -139,8 +140,9 @@ export function TurmaDetalhes({
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <TurmaFrequenciaPdf turma={turma} frequencias={frequencias} geradoEm={geradoEm} />,
+        <TurmaFrequenciaPdf turma={turma} frequencias={frequencias} geradoEm={geradoEm} escolaLogo={escolaLogo} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {

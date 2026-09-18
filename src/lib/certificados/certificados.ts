@@ -1,6 +1,7 @@
 import { FileBadge } from "lucide-react";
 import type { createClient } from "@/lib/supabase/server";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
+import { normalizarBusca } from "@/lib/busca";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -63,7 +64,7 @@ export type CertificadoAguardandoLiberacao = {
 // EAD falhar por algum motivo, o certificado aparece aqui pro admin agir.
 export async function getCertificadosAguardandoLiberacao(
   supabase: SupabaseServerClient,
-  paginacao?: { offset: number; limite: number },
+  paginacao?: { offset: number; limite: number; busca?: string },
 ): Promise<{ itens: CertificadoAguardandoLiberacao[]; total: number }> {
   let query = supabase
     .from("certificados")
@@ -74,13 +75,19 @@ export async function getCertificadosAguardandoLiberacao(
     .eq("liberado", false)
     .order("created_at");
 
-  if (paginacao) {
+  // Com busca, carrega todos os pendentes (conjunto naturalmente pequeno:
+  // só quem aguarda liberação) e filtra por aluno/curso em JS ANTES de
+  // paginar — assim a busca vale pra todos os registros, não só pra página.
+  // Nome do aluno e do curso vêm por embed, que um filtro do banco não
+  // alcança de forma simples aqui.
+  const termoBusca = normalizarBusca(paginacao?.busca);
+  if (paginacao && !termoBusca) {
     query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
   }
 
   const { data, count } = await query;
 
-  const itens = ((data ?? []) as unknown as Array<{
+  let itens = ((data ?? []) as unknown as Array<{
     id: string;
     created_at: string;
     aproveitamento_percentual: number | null;
@@ -103,7 +110,17 @@ export async function getCertificadosAguardandoLiberacao(
     frequencia: c.frequencia_percentual,
   }));
 
-  return { itens, total: count ?? 0 };
+  let total = count ?? 0;
+  if (termoBusca) {
+    itens = itens.filter(
+      (item) =>
+        normalizarBusca(item.alunoNome).includes(termoBusca) || normalizarBusca(item.nomeCurso).includes(termoBusca),
+    );
+    total = itens.length;
+    if (paginacao) itens = itens.slice(paginacao.offset, paginacao.offset + paginacao.limite);
+  }
+
+  return { itens, total };
 }
 
 // count com head:true, mesmo padrão de getNotificacaoResgatesPendentes.

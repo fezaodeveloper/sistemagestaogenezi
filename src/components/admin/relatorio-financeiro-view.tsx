@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { FileSpreadsheet, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { getRelatorioFinanceiro, type RelatorioFinanceiro } from "@/app/admin/relatorios/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,15 +66,18 @@ function RelatorioFinanceiroDocument({
   dados,
   subtitulo,
   geradoEm,
+  escolaLogo,
 }: {
   dados: RelatorioFinanceiro;
   subtitulo: string;
   geradoEm: string;
+  escolaLogo: string | null;
 }) {
   return (
     <Document>
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Relatório Financeiro</Text>
           <Text style={pdfStyles.subtitle}>{subtitulo}</Text>
           <Text style={pdfStyles.meta}>Gerado em {geradoEm}</Text>
@@ -209,8 +214,9 @@ export function RelatorioFinanceiroView() {
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <RelatorioFinanceiroDocument dados={dados} subtitulo={subtitulo} geradoEm={geradoEm} />,
+        <RelatorioFinanceiroDocument dados={dados} subtitulo={subtitulo} geradoEm={geradoEm} escolaLogo={escolaLogo} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {

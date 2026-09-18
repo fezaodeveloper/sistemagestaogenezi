@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
+import { parseBusca, termoIlike } from "@/lib/busca";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CursosTable, type CursoListItem } from "@/components/admin/cursos-table";
@@ -26,10 +27,11 @@ function contarAulas(curso: CursoListItem): number {
 export default async function CursosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; limit?: string; orderBy?: string }>;
+  searchParams: Promise<{ page?: string; limit?: string; orderBy?: string; q?: string }>;
 }) {
   await requireRole("admin");
-  const { page, limit, orderBy: orderByRaw } = await searchParams;
+  const { page, limit, orderBy: orderByRaw, q: qRaw } = await searchParams;
+  const q = parseBusca(qRaw);
 
   const paginaAtual = parsePagina(page);
   const limite = parseLimite(limit);
@@ -46,7 +48,9 @@ export default async function CursosPage({
     // "Total de aulas" não é coluna nem agregação nativa do Postgres — sem
     // migration nesta rodada, busca todos os cursos, ordena e pagina em
     // memória (volume baixo: catálogo de cursos de uma escola).
-    const resultado = await supabase.from("cursos").select("*, modulos(aulas(id))");
+    let queryAulas = supabase.from("cursos").select("*, modulos(aulas(id))");
+    if (q) queryAulas = queryAulas.ilike("nome", `%${termoIlike(q)}%`);
+    const resultado = await queryAulas;
     error = resultado.error;
     if (!resultado.error) {
       const todos = ((resultado.data as CursoListItem[] | null) ?? []).sort(
@@ -57,6 +61,7 @@ export default async function CursosPage({
     }
   } else {
     let query = supabase.from("cursos").select("*, modulos(aulas(id))", { count: "exact" });
+    if (q) query = query.ilike("nome", `%${termoIlike(q)}%`);
     query =
       orderBy === "recente"
         ? query.order("created_at", { ascending: false })
@@ -82,7 +87,7 @@ export default async function CursosPage({
             Não foi possível carregar os cursos. Tente recarregar a página.
           </CardContent>
         </Card>
-      ) : !cursos || totalRegistros === 0 ? (
+      ) : !cursos || (totalRegistros === 0 && !q) ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <p className="text-muted-foreground text-sm">Nenhum curso cadastrado ainda.</p>
@@ -105,6 +110,7 @@ export default async function CursosPage({
             totalRegistros={totalRegistros}
             limite={limite}
             orderBy={orderBy}
+            q={q}
           />
         </Card>
       )}

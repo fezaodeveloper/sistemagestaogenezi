@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   atualizarPagamentoAvulso,
@@ -621,12 +621,29 @@ export function AvulsosView({
   // irParaMes/recarregar/handlePaginar, que não mudam modoFiltro nem
   // periodoInicio/Fim na mesma chamada. handleModoFiltro e
   // handleAplicarPeriodo têm lógica própria abaixo por esse motivo.
+  // Termo da busca aplicado às consultas (o texto do campo é `busca`). Vai por
+  // ref porque buscar()/handlePaginar/etc. são closures de outros renders — a
+  // ref garante que todas leem o termo mais recente, e a busca roda no
+  // SERVIDOR (parâmetro query da Server Action), sobre todos os registros do
+  // período, voltando pra página 1.
+  const termoRef = useRef("");
+  const debounceBuscaRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceBuscaRef.current) clearTimeout(debounceBuscaRef.current);
+    debounceBuscaRef.current = setTimeout(() => {
+      termoRef.current = valor.trim();
+      buscar(ano, mes, 1, limite);
+    }, 400);
+  }
+
   function buscar(novoAno: number, novoMes: number, novaPagina: number, novoLimite: number) {
     startTransition(async () => {
       const resultado =
         modoFiltro === "periodo" && periodoInicio && periodoFim
-          ? await getPagamentosAvulsos(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite)
-          : await getPagamentosAvulsos(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite);
+          ? await getPagamentosAvulsos(novoAno, novoMes, periodoInicio, periodoFim, novaPagina, novoLimite, termoRef.current)
+          : await getPagamentosAvulsos(novoAno, novoMes, undefined, undefined, novaPagina, novoLimite, termoRef.current);
       setAno(novoAno);
       setMes(novoMes);
       setPagina(novaPagina);
@@ -660,7 +677,7 @@ export function AvulsosView({
     setModoFiltro(modo);
     if (modo === "mes") {
       startTransition(async () => {
-        const resultado = await getPagamentosAvulsos(ano, mes, undefined, undefined, 1, limite);
+        const resultado = await getPagamentosAvulsos(ano, mes, undefined, undefined, 1, limite, termoRef.current);
         setPagina(1);
         setPagamentos(resultado.itens);
         setTotal(resultado.total);
@@ -671,7 +688,7 @@ export function AvulsosView({
   function handleAplicarPeriodo() {
     if (!periodoInicio || !periodoFim) return;
     startTransition(async () => {
-      const resultado = await getPagamentosAvulsos(ano, mes, periodoInicio, periodoFim, 1, limite);
+      const resultado = await getPagamentosAvulsos(ano, mes, periodoInicio, periodoFim, 1, limite, termoRef.current);
       setPagina(1);
       setPagamentos(resultado.itens);
       setTotal(resultado.total);
@@ -857,7 +874,7 @@ export function AvulsosView({
         <Input
           placeholder="Buscar por descrição ou aluno..."
           value={busca}
-          onChange={(event) => setBusca(event.target.value)}
+          onChange={(event) => handleBuscaChange(event.target.value)}
           className="max-w-sm"
         />
         <Select

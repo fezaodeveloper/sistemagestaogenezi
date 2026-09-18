@@ -2,6 +2,8 @@ import "server-only";
 
 import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { FrequenciaTurmaDados } from "@/lib/relatorios/frequencia-turma";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { carregarLogoEscolaParaPdf } from "@/lib/pdf/logo-escola";
 
 // Landscape (REGRA da tarefa) — tabela com 5 colunas fica apertada em
 // retrato. Mesma convenção de estilos de src/lib/contratos/pdf.tsx.
@@ -20,11 +22,12 @@ const pdfStyles = StyleSheet.create({
   footer: { marginTop: 16, fontSize: 8, color: "#555555", textAlign: "right" },
 });
 
-function FrequenciaTurmaPdfDocument({ dados }: { dados: FrequenciaTurmaDados }) {
+function FrequenciaTurmaPdfDocument({ dados, escolaLogo }: { dados: FrequenciaTurmaDados; escolaLogo: string | null }) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.nomeEscola}>{dados.escolaNome}</Text>
           <Text style={pdfStyles.subtitulo}>
             {dados.cursoNome} — Turma {dados.turmaNome}
@@ -58,5 +61,6 @@ function FrequenciaTurmaPdfDocument({ dados }: { dados: FrequenciaTurmaDados }) 
 }
 
 export async function gerarPdfFrequenciaTurma(dados: FrequenciaTurmaDados): Promise<Buffer> {
-  return renderToBuffer(<FrequenciaTurmaPdfDocument dados={dados} />);
+  const escolaLogo = await carregarLogoEscolaParaPdf();
+  return renderToBuffer(<FrequenciaTurmaPdfDocument dados={dados} escolaLogo={escolaLogo} />);
 }

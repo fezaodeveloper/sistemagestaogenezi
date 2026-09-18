@@ -1,5 +1,6 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { formatCpf, formatTelefone } from "@/lib/alunos/schema";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { CURSO_TIPO_LABELS, type CURSO_TIPOS } from "@/lib/cursos/schema";
 import { DIA_SEMANA_LABELS, type DIAS_SEMANA } from "@/lib/turmas/schema";
 import {
@@ -58,6 +59,8 @@ export type ResumoMatricula = {
   // cai no nome fixo "GÊNEZI — Educação Profissional" já usado antes desses
   // campos existirem, e o Termo de Imagem simplesmente não é impresso.
   escola_nome?: string;
+  // Data URI do logo (configuracoes.escola_logo_url) — ver getLogoEscolaPdf.
+  escola_logo_url?: string | null;
   escola_endereco?: string;
   escola_telefone?: string;
   termo_imagem_texto?: string;
@@ -154,6 +157,7 @@ export function MatriculaComprovantePdf({
     <Document>
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={resumo.escola_logo_url} />
           <Text style={pdfStyles.title}>{resumo.escola_nome ?? "GÊNEZI — Educação Profissional"}</Text>
           <Text style={pdfStyles.subtitle}>Comprovante de Matrícula</Text>
           {(resumo.escola_endereco || resumo.escola_telefone) && (

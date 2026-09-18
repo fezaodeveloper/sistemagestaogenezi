@@ -10,6 +10,7 @@ import {
   type MatriculaDetalhada,
 } from "@/app/admin/matriculas/actions";
 import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { ResponsavelMenorDialog, type ResponsavelMenor } from "@/components/admin/responsavel-menor-dialog";
 import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
@@ -194,6 +195,7 @@ export function MatriculaDetalhes({
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
         <MatriculaComprovantePdf
           resumo={{
@@ -235,6 +237,7 @@ export function MatriculaDetalhes({
             taxaMatriculaFormaPagamento: matriculaAtual.taxa_matricula_forma_pagamento,
             taxaMatriculaPaga: matriculaAtual.taxa_matricula_paga,
             escola_nome: escola.nome,
+            escola_logo_url: escolaLogo,
             escola_endereco: escola.endereco,
             escola_telefone: escola.telefone,
             termo_imagem_texto: escola.termoImagemTexto,

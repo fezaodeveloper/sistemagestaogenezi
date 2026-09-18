@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
+import { parseBusca, termoIlike } from "@/lib/busca";
 import type { TurmaWithCurso } from "@/lib/turmas/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,10 +21,11 @@ function parseTurmasOrderBy(valor: string | undefined): TurmasOrderBy {
 export default async function TurmasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; limit?: string; orderBy?: string }>;
+  searchParams: Promise<{ page?: string; limit?: string; orderBy?: string; q?: string }>;
 }) {
   await requireRole("admin");
-  const { page, limit, orderBy: orderByRaw } = await searchParams;
+  const { page, limit, orderBy: orderByRaw, q: qRaw } = await searchParams;
+  const q = parseBusca(qRaw);
 
   const paginaAtual = parsePagina(page);
   const limite = parseLimite(limit);
@@ -32,6 +34,21 @@ export default async function TurmasPage({
 
   const supabase = await createClient();
   let query = supabase.from("turmas").select("*, cursos(nome)", { count: "exact" });
+  if (q) {
+    // Nome da turma OU nome do curso. O curso vem por embed, e um filtro `or`
+    // não alcança colunas de tabela embutida — então primeiro acha os cursos
+    // cujo nome bate e filtra as turmas por curso_id.
+    const termo = termoIlike(q);
+    const { data: cursosEncontrados } = await supabase
+      .from("cursos")
+      .select("id")
+      .ilike("nome", `%${termo}%`)
+      .limit(100);
+    const idsCursos = (cursosEncontrados ?? []).map((curso) => curso.id as string);
+    const condicoes = [`nome.ilike.%${termo}%`];
+    if (idsCursos.length > 0) condicoes.push(`curso_id.in.(${idsCursos.join(",")})`);
+    query = query.or(condicoes.join(","));
+  }
   if (orderBy === "recente") {
     query = query.order("created_at", { ascending: false });
   } else if (orderBy === "inicio") {
@@ -58,7 +75,7 @@ export default async function TurmasPage({
             Não foi possível carregar as turmas. Tente recarregar a página.
           </CardContent>
         </Card>
-      ) : !turmas || totalRegistros === 0 ? (
+      ) : !turmas || (totalRegistros === 0 && !q) ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <p className="text-muted-foreground text-sm">Nenhuma turma cadastrada ainda.</p>
@@ -81,6 +98,7 @@ export default async function TurmasPage({
             totalRegistros={totalRegistros}
             limite={limite}
             orderBy={orderBy}
+            q={q}
           />
         </Card>
       )}

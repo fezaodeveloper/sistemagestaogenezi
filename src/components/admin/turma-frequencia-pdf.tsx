@@ -1,4 +1,5 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import type { TurmaWithCurso } from "@/lib/turmas/schema";
 
 export type FrequenciaAlunoPdf = {
@@ -55,15 +56,18 @@ export function TurmaFrequenciaPdf({
   turma,
   frequencias,
   geradoEm,
+  escolaLogo,
 }: {
   turma: TurmaWithCurso;
   frequencias: FrequenciaAlunoPdf[];
   geradoEm: string;
+  escolaLogo?: string | null;
 }) {
   return (
     <Document>
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Relatório de Frequência</Text>
           <Text style={pdfStyles.subtitle}>
             {turma.nome} — {turma.cursos?.nome ?? "—"}

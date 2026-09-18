@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
+import { LIMITE_PADRAO } from "@/lib/paginacao";
+import { useBuscaUrl } from "@/hooks/use-busca-url";
 import {
   Select,
   SelectContent,
@@ -52,18 +54,24 @@ export function TabelaCertificadosLiberacao({
   totalPaginas,
   totalRegistros,
   limite,
+  q,
 }: {
   itens: CertificadoAguardandoLiberacao[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
   limite: number;
+  // Termo da busca (parâmetro `q` da URL) — filtrado no servidor, sobre todos
+  // os pendentes, voltando pra página 1 (ver useBuscaUrl).
+  q: string;
 }) {
+  const { busca, alterarBusca } = useBuscaUrl("/admin/certificados", q, {
+    ...(limite !== LIMITE_PADRAO ? { limit: String(limite) } : {}),
+  });
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
-  const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState<string>(TIPO_FILTRO_TODOS);
 
   useEffect(() => {
@@ -72,16 +80,11 @@ export function TabelaCertificadosLiberacao({
     return () => clearTimeout(timer);
   }, [sucesso]);
 
+  // A BUSCA (aluno ou curso) é feita no servidor (parâmetro q); o filtro de
+  // tipo de curso continua client-side, só sobre a página carregada.
   const itensFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return itens.filter((item) => {
-      if (tipoFiltro !== TIPO_FILTRO_TODOS && item.cursoTipo !== tipoFiltro) return false;
-      if (!termo) return true;
-      const nomeAluno = (item.alunoNome ?? "").toLowerCase();
-      const nomeCurso = item.nomeCurso.toLowerCase();
-      return nomeAluno.includes(termo) || nomeCurso.includes(termo);
-    });
-  }, [itens, busca, tipoFiltro]);
+    return itens.filter((item) => tipoFiltro === TIPO_FILTRO_TODOS || item.cursoTipo === tipoFiltro);
+  }, [itens, tipoFiltro]);
 
   const idsVisiveis = useMemo(() => new Set(itensFiltrados.map((item) => item.id)), [itensFiltrados]);
 
@@ -136,7 +139,7 @@ export function TabelaCertificadosLiberacao({
         <Input
           placeholder="Buscar por aluno ou curso..."
           value={busca}
-          onChange={(event) => setBusca(event.target.value)}
+          onChange={(event) => alterarBusca(event.target.value)}
           className="max-w-sm"
         />
         <Select
@@ -260,6 +263,7 @@ export function TabelaCertificadosLiberacao({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/certificados"
+        searchParams={q ? { q } : {}}
       />
     </div>
   );

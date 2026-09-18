@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { termoIlike } from "@/lib/busca";
 import { pagamentoAvulsoFormSchema, type PagamentoAvulso } from "@/lib/financeiro/schema";
 
 function iniciosEFimDoMes(ano: number, mes: number) {
@@ -39,9 +40,20 @@ export async function getPagamentosAvulsos(
     .gte("data_pagamento", inicio)
     .lte("data_pagamento", fim);
 
+  // Busca por descrição OU nome do aluno vinculado (o nome vem por embed, que
+  // um filtro `or` não alcança — então acha os ids em profiles primeiro).
   const termo = query?.trim();
   if (termo) {
-    consulta = consulta.ilike("descricao", `%${termo}%`);
+    const termoSeguro = termoIlike(termo);
+    const { data: perfis } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("full_name", `%${termoSeguro}%`)
+      .limit(100);
+    const idsAlunos = (perfis ?? []).map((perfil) => perfil.id as string);
+    const condicoes = [`descricao.ilike.%${termoSeguro}%`];
+    if (idsAlunos.length > 0) condicoes.push(`aluno_id.in.(${idsAlunos.join(",")})`);
+    consulta = consulta.or(condicoes.join(","));
   }
 
   const { data, count } = await consulta

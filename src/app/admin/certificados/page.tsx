@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
+import { parseBusca } from "@/lib/busca";
 import { getCertificadosAguardandoLiberacao } from "@/lib/certificados/certificados";
 import { TabelaCertificadosLiberacao } from "@/components/admin/tabela-certificados-liberacao";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,10 +9,11 @@ import { Card, CardContent } from "@/components/ui/card";
 export default async function CertificadosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; limit?: string }>;
+  searchParams: Promise<{ page?: string; limit?: string; q?: string }>;
 }) {
   await requireRole("admin");
-  const { page, limit } = await searchParams;
+  const { page, limit, q: qRaw } = await searchParams;
+  const q = parseBusca(qRaw);
 
   const paginaAtual = parsePagina(page);
   const limite = parseLimite(limit);
@@ -21,6 +23,7 @@ export default async function CertificadosPage({
   const { itens, total: totalRegistros } = await getCertificadosAguardandoLiberacao(supabase, {
     offset,
     limite,
+    busca: q,
   });
   const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
 
@@ -38,7 +41,7 @@ export default async function CertificadosPage({
         </p>
       </div>
 
-      {itens.length === 0 ? (
+      {itens.length === 0 && !q ? (
         <Card>
           <CardContent className="text-muted-foreground py-8 text-center text-sm">
             Nenhum certificado aguardando liberação no momento.
@@ -51,6 +54,7 @@ export default async function CertificadosPage({
           totalPaginas={totalPaginas}
           totalRegistros={totalRegistros}
           limite={limite}
+          q={q}
         />
       )}
     </div>

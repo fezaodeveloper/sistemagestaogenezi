@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { termoIlike } from "@/lib/busca";
 import { onlyDigits } from "@/lib/alunos/schema";
 import {
   criarClienteAsaas,
@@ -57,6 +58,7 @@ export async function getFinanceiroDados(
   dataFim?: string,
   page = 1,
   limit = 20,
+  query?: string,
 ): Promise<FinanceiroDados> {
   await requireRole("admin");
   const supabase = await createClient();
@@ -64,22 +66,44 @@ export async function getFinanceiroDados(
     dataInicio && dataFim ? { inicio: dataInicio, fim: dataFim } : iniciosEFimDoMes(ano, mes);
   const offset = (page - 1) * limit;
 
+  // Busca por nome do aluno (nome mora em profiles; alunos.id = profiles.id):
+  // acha os ids e filtra as parcelas por aluno_id. Só a lista paginada é
+  // filtrada — os KPIs continuam olhando o período inteiro.
+  const termoBusca = query?.trim();
+  let idsAlunosBusca: string[] | null = null;
+  if (termoBusca) {
+    const { data: perfis } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("full_name", `%${termoIlike(termoBusca)}%`)
+      .limit(100);
+    idsAlunosBusca = (perfis ?? []).map((perfil) => perfil.id as string);
+  }
+
   const [
     { data: parcelasData, count: totalParcelas },
     { data: receberData },
     { data: recebidoData },
     { data: atrasadoData },
   ] = await Promise.all([
-    supabase
-      .from("parcelas")
-      .select(
-        "*, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, asaas_installment_id, turmas(nome, cursos(nome)))",
-        { count: "exact" },
-      )
-      .gte("data_vencimento", inicio)
-      .lte("data_vencimento", fim)
-      .order("data_vencimento")
-      .range(offset, offset + limit - 1),
+    (() => {
+      let consultaParcelas = supabase
+        .from("parcelas")
+        .select(
+          "*, alunos(full_name, cpf, email, telefone), matriculas(num_parcelas, asaas_installment_id, turmas(nome, cursos(nome)))",
+          { count: "exact" },
+        )
+        .gte("data_vencimento", inicio)
+        .lte("data_vencimento", fim);
+      if (idsAlunosBusca) {
+        // Lista vazia (nenhum aluno bate com o termo) = nenhum resultado.
+        consultaParcelas = consultaParcelas.in(
+          "aluno_id",
+          idsAlunosBusca.length > 0 ? idsAlunosBusca : ["00000000-0000-0000-0000-000000000000"],
+        );
+      }
+      return consultaParcelas.order("data_vencimento").range(offset, offset + limit - 1);
+    })(),
     // KPIs sempre olham o mês/período inteiro, nunca só a página atual —
     // por isso essas 3 queries abaixo continuam sem .range().
     supabase

@@ -1,15 +1,19 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { useRef, useState, useTransition } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Copy, ExternalLink, Eye, FileDown, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { pdf } from "@react-pdf/renderer";
 import {
+  alternarStatusCampanha,
   atualizarCampanha,
   criarCampanha,
   duplicarCampanha,
   excluirCampanha,
 } from "@/app/admin/comercial/campanhas/actions";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
+import { CampanhaMarketingPdf } from "@/components/admin/campanha-marketing-pdf";
 import { createClient } from "@/lib/supabase/client";
 import { CAMPANHA_BUCKET, CAMPANHA_FOTO_MAXIMO_BYTES, CAMPANHA_FOTO_TIPOS_ACEITOS } from "@/lib/storage/campanhas";
 import {
@@ -26,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -43,6 +48,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -248,6 +254,18 @@ function CampanhaDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="meta_alunos">Meta de alunos</Label>
+              <Input
+                id="meta_alunos"
+                name="meta_alunos"
+                type="number"
+                step="1"
+                min="0"
+                defaultValue={campanha?.meta_alunos ?? ""}
+                placeholder="Opcional"
+              />
             </div>
           </div>
 
@@ -510,9 +528,186 @@ function ExcluirCampanhaButton({ campanha, onExcluida }: { campanha: CampanhaMar
   );
 }
 
+function CampanhaDetalhesDialog({ campanha }: { campanha: CampanhaMarketing }) {
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [erroPdf, setErroPdf] = useState<string | null>(null);
+  const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
+  const periodo = periodoCampanha(campanha);
+
+  async function handleExportarPdf() {
+    // Abre a aba em branco já dentro do handler de clique (síncrono), antes de
+    // qualquer await — navegadores bloqueiam window.open() chamado depois de
+    // uma Promise resolver (mesmo padrão de matricula-detalhes.tsx).
+    const novaAba = window.open("", "_blank");
+    setGerandoPdf(true);
+    setErroPdf(null);
+    try {
+      const escolaLogo = await getLogoEscolaPdf();
+      const geradoEm = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      const blob = await pdf(
+        <CampanhaMarketingPdf campanha={campanha} escolaLogo={escolaLogo} geradoEm={geradoEm} />,
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      if (novaAba) {
+        novaAba.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+    } catch {
+      novaAba?.close();
+      setErroPdf("Não foi possível gerar o PDF. Tente novamente.");
+    } finally {
+      setGerandoPdf(false);
+    }
+  }
+
+  return (
+    <Dialog onOpenChange={(aberto) => aberto && setErroPdf(null)}>
+      <DialogTrigger
+        render={
+          <Button type="button" variant="ghost" size="sm">
+            <Eye />
+            Ver detalhes
+          </Button>
+        }
+      />
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2 pr-8">
+            {campanha.nome}
+            <Badge className={CAMPANHA_STATUS_BADGE_CLASS[campanha.status]}>
+              {CAMPANHA_STATUS_LABELS[campanha.status]}
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4 text-sm">
+          {campanha.foto_url && (
+            // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+            <img src={campanha.foto_url} alt={campanha.nome} className="max-h-56 w-full rounded-md border object-cover" />
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-muted-foreground text-xs">Período</p>
+              <p>{periodo ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Meta de alunos</p>
+              <p>{campanha.meta_alunos !== null ? campanha.meta_alunos : "—"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Orçamento tráfego</p>
+              <p>{campanha.orcamento_trafego !== null ? formatMoeda(campanha.orcamento_trafego) : "—"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Orçamento impressão</p>
+              <p>{campanha.orcamento_impressao !== null ? formatMoeda(campanha.orcamento_impressao) : "—"}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-muted-foreground text-xs">Orçamento total</p>
+              <p className="font-medium">{formatMoeda(orcamentoTotal)}</p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="text-muted-foreground text-xs">Descrição</p>
+            <p className="whitespace-pre-wrap">{campanha.descricao || "—"}</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground text-xs">Como fazer (passo a passo)</p>
+            <p className="whitespace-pre-wrap">{campanha.como_fazer || "—"}</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1 text-xs">Links</p>
+            {campanha.links.length === 0 ? (
+              <p>—</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {campanha.links.map((link, indice) => (
+                  <li key={`${link.url}-${indice}`}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary inline-flex items-center gap-1 hover:underline"
+                    >
+                      {link.label}
+                      <ExternalLink className="size-3" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-1 text-xs">Tags</p>
+            {campanha.tags && campanha.tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {campanha.tags.map((tag) => (
+                  <Badge key={tag} variant="secondary">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p>—</p>
+            )}
+          </div>
+
+          <p className="text-muted-foreground text-xs">
+            Cadastrada em {new Date(campanha.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+          </p>
+
+          {erroPdf && (
+            <p role="alert" className="text-destructive text-sm">
+              {erroPdf}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" onClick={handleExportarPdf} disabled={gerandoPdf}>
+            <FileDown />
+            {gerandoPdf ? "Gerando PDF..." : "Exportar PDF"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaMarketing; onMudou: () => void }) {
   const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
   const periodo = periodoCampanha(campanha);
+  const [erro, setErro] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  // Liga/desliga otimista: o switch e o badge mudam na hora; se a Server
+  // Action falhar (ou o update não atingir nenhuma linha), o React descarta o
+  // estado otimista ao fim da transição e volta pro status real do banco.
+  const [statusVisivel, aplicarStatus] = useOptimistic(
+    campanha.status,
+    (_atual, novo: CampanhaStatus) => novo,
+  );
+
+  function handleToggle(ativa: boolean) {
+    setErro(null);
+    startTransition(async () => {
+      aplicarStatus(ativa ? "ativa" : "inativa");
+      const resultado = await alternarStatusCampanha(campanha.id, ativa);
+      if ("error" in resultado) {
+        setErro(resultado.error);
+        return;
+      }
+      onMudou();
+    });
+  }
 
   return (
     <Card className="overflow-hidden pt-0">
@@ -525,26 +720,41 @@ function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaMarketing; onMu
       <CardContent className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium">{campanha.nome}</p>
-          <Badge className={CAMPANHA_STATUS_BADGE_CLASS[campanha.status]}>
-            {CAMPANHA_STATUS_LABELS[campanha.status]}
+          <Badge className={CAMPANHA_STATUS_BADGE_CLASS[statusVisivel]}>
+            {CAMPANHA_STATUS_LABELS[statusVisivel]}
           </Badge>
         </div>
         {periodo && <p className="text-muted-foreground text-sm">{periodo}</p>}
+        {campanha.meta_alunos !== null && (
+          <p className="text-muted-foreground text-sm">Meta: {campanha.meta_alunos} aluno(s)</p>
+        )}
         {orcamentoTotal > 0 && (
           <p className="text-muted-foreground text-sm">Orçamento total: {formatMoeda(orcamentoTotal)}</p>
         )}
-        <div className="flex justify-end gap-1 pt-1">
-          <CampanhaDialog
-            campanha={campanha}
-            trigger={
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="Editar campanha">
-                <Pencil />
-              </Button>
-            }
-            onSalvo={onMudou}
-          />
-          <DuplicarCampanhaButton campanha={campanha} onDuplicada={onMudou} />
-          <ExcluirCampanhaButton campanha={campanha} onExcluida={onMudou} />
+        <label className="flex items-center gap-2 pt-1 text-sm">
+          <Switch checked={statusVisivel === "ativa"} onCheckedChange={handleToggle} />
+          {statusVisivel === "ativa" ? "Ativa" : "Ativar campanha"}
+        </label>
+        {erro && (
+          <p role="alert" className="text-destructive text-xs">
+            {erro}
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-1 pt-1">
+          <CampanhaDetalhesDialog campanha={campanha} />
+          <div className="flex gap-1">
+            <CampanhaDialog
+              campanha={campanha}
+              trigger={
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Editar campanha">
+                  <Pencil />
+                </Button>
+              }
+              onSalvo={onMudou}
+            />
+            <DuplicarCampanhaButton campanha={campanha} onDuplicada={onMudou} />
+            <ExcluirCampanhaButton campanha={campanha} onExcluida={onMudou} />
+          </div>
         </div>
       </CardContent>
     </Card>

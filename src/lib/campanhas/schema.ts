@@ -34,6 +34,11 @@ export const campanhaFormSchema = z.object({
   status: z.enum(CAMPANHA_STATUSES, { error: "Selecione o status." }),
   data_inicio: z.string().trim().optional(),
   data_fim: z.string().trim().optional(),
+  meta_alunos: z.coerce
+    .number({ error: "Informe um número." })
+    .int({ error: "A meta precisa ser um número inteiro." })
+    .nonnegative({ error: "A meta não pode ser negativa." })
+    .optional(),
   orcamento_trafego: z.coerce.number().nonnegative({ error: "Informe um valor válido." }).optional(),
   orcamento_impressao: z.coerce.number().nonnegative({ error: "Informe um valor válido." }).optional(),
   links: z.array(campanhaLinkSchema).max(20).optional(),
@@ -52,6 +57,7 @@ export type CampanhaMarketing = {
   status: CampanhaStatus;
   data_inicio: string | null;
   data_fim: string | null;
+  meta_alunos: number | null;
   orcamento_trafego: number | null;
   orcamento_impressao: number | null;
   links: CampanhaLink[];

@@ -68,6 +68,7 @@ function parseCampanhaForm(formData: FormData) {
     status: formData.get("status"),
     data_inicio: formData.get("data_inicio") || undefined,
     data_fim: formData.get("data_fim") || undefined,
+    meta_alunos: formData.get("meta_alunos") || undefined,
     orcamento_trafego: formData.get("orcamento_trafego") || undefined,
     orcamento_impressao: formData.get("orcamento_impressao") || undefined,
     links,
@@ -84,6 +85,7 @@ function camposCampanha(dados: {
   status: CampanhaStatus;
   data_inicio?: string;
   data_fim?: string;
+  meta_alunos?: number;
   orcamento_trafego?: number;
   orcamento_impressao?: number;
   links?: CampanhaLink[];
@@ -98,6 +100,7 @@ function camposCampanha(dados: {
     status: dados.status,
     data_inicio: dados.data_inicio ?? null,
     data_fim: dados.data_fim ?? null,
+    meta_alunos: dados.meta_alunos ?? null,
     orcamento_trafego: dados.orcamento_trafego ?? null,
     orcamento_impressao: dados.orcamento_impressao ?? null,
     links: dados.links ?? [],
@@ -135,13 +138,42 @@ export async function atualizarCampanha(id: string, formData: FormData): Promise
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // .select("id") pra saber quantas linhas o UPDATE realmente atingiu: com RLS
+  // um update bloqueado NÃO devolve erro, só afeta 0 linhas — sem essa checagem
+  // a action responderia "sucesso" sem ter salvado nada.
+  const { data, error } = await supabase
     .from("campanhas_marketing")
     .update(camposCampanha(parsed.data))
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
-  if (error) {
+  if (error || !data?.length) {
     return { error: "Não foi possível salvar as alterações. Tente novamente." };
+  }
+
+  revalidatePath("/admin/comercial/campanhas");
+  return { success: true };
+}
+
+// Ativa/desativa a campanha alterando SÓ a coluna status (o formulário de
+// edição regrava todos os campos, e é um caminho pesado pra um simples
+// liga/desliga). "planejada" também vira "ativa" ao ligar. Confere as linhas
+// afetadas pelo mesmo motivo de atualizarCampanha: update bloqueado por RLS
+// não dá erro, só não muda nada.
+export async function alternarStatusCampanha(id: string, ativa: boolean): Promise<CampanhaActionResult> {
+  await requireRole("admin");
+
+  const novoStatus: CampanhaStatus = ativa ? "ativa" : "inativa";
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campanhas_marketing")
+    .update({ status: novoStatus })
+    .eq("id", id)
+    .select("id, status");
+
+  if (error || !data?.length || data[0].status !== novoStatus) {
+    return { error: "Não foi possível alterar o status da campanha." };
   }
 
   revalidatePath("/admin/comercial/campanhas");
@@ -173,6 +205,7 @@ export async function duplicarCampanha(id: string): Promise<CampanhaActionResult
     status: original.status,
     data_inicio: original.data_inicio,
     data_fim: original.data_fim,
+    meta_alunos: original.meta_alunos,
     orcamento_trafego: original.orcamento_trafego,
     orcamento_impressao: original.orcamento_impressao,
     links: original.links,

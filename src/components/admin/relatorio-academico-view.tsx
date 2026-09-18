@@ -3,6 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { FileSpreadsheet, Printer, X } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import {
   getRelatorioAcademico,
   type AlunoRelatorioAcademico,
@@ -98,11 +100,13 @@ function RelatorioAcademicoDocument({
   dataInicio,
   dataFim,
   geradoEm,
+  escolaLogo,
 }: {
   dados: RelatorioAcademico;
   dataInicio: string;
   dataFim: string;
   geradoEm: string;
+  escolaLogo: string | null;
 }) {
   const total = dados.alunos.length;
   const mediaFrequencia =
@@ -114,6 +118,7 @@ function RelatorioAcademicoDocument({
     <Document>
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
+          <LogoEscolaPdf logoUrl={escolaLogo} />
           <Text style={pdfStyles.title}>GÊNEZI — Relatório de Frequência</Text>
           <Text style={pdfStyles.subtitle}>
             {dados.turma.nome} — {dados.turma.curso}
@@ -245,8 +250,15 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
     setGerandoPdf(true);
     try {
       const geradoEm = formatDataHora(new Date().toISOString());
+      const escolaLogo = await getLogoEscolaPdf();
       const blob = await pdf(
-        <RelatorioAcademicoDocument dados={dados} dataInicio={dataInicio} dataFim={dataFim} geradoEm={geradoEm} />,
+        <RelatorioAcademicoDocument
+          dados={dados}
+          dataInicio={dataInicio}
+          dataFim={dataFim}
+          geradoEm={geradoEm}
+          escolaLogo={escolaLogo}
+        />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       if (novaAba) {
