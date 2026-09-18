@@ -368,18 +368,40 @@ export function CampanhaEditor({
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    // O editor é organizado em abas (Tabs do Base UI) e cada TabsContent
+    // desmonta de verdade (return null) quando não é a aba ativa —
+    // keepMounted é false por padrão (ver node_modules/@base-ui/react/tabs/panel/TabsPanel.js).
+    // Isso significa que TODO input nativo (name="...") que vive dentro de
+    // uma aba que não seja a atual no momento do clique em "Salvar" está
+    // fora do DOM e não é enviado pelo form. Por isso todo campo abaixo é
+    // sincronizado manualmente a partir do estado do React, nunca confiando
+    // no FormData nativo — mesmo os que "sempre pareciam funcionar" nos
+    // testes (porque só falham quando o Salvar é clicado numa aba diferente
+    // da que contém aquele campo).
+    formData.set("titulo", titulo);
+    formData.set("slug", slug);
+    formData.set("subtitulo", subtitulo);
+    formData.set("descricao", descricao);
     formData.set("cor_primaria", corPrimaria);
     formData.set("cor_fundo", corFundo);
     formData.set("logo_url", logoUrl);
     formData.set("imagem_topo_url", imagemTopoUrl);
     formData.set("tema", tema);
     formData.set("status", status);
+    formData.set("data_inicio", dataInicio);
+    formData.set("data_fim", dataFim);
+    formData.set("vagas_limite", vagasLimite);
     formData.set("mostrar_contador", String(mostrarContador));
+    formData.set("contador_data_fim", contadorDataFim);
     formData.set("coletar_email", String(coletarEmail));
     formData.set("coletar_cidade", String(coletarCidade));
     formData.set("etapas", JSON.stringify(etapas));
     formData.set("mostrar_lgpd", String(mostrarLgpd));
+    formData.set("texto_lgpd", textoLgpd);
     formData.set("mostrar_declaracao", String(mostrarDeclaracao));
+    formData.set("texto_declaracao", textoDeclaracao);
+    formData.set("titulo_sucesso", tituloSucesso);
+    formData.set("mensagem_sucesso", mensagemSucesso);
     formData.set("notificar_telegram", String(notificarTelegram));
     if (cursoId) formData.set("curso_id", cursoId);
 
