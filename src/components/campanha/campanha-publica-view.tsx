@@ -127,6 +127,7 @@ function QuestaoCampo({
       rows={3}
       value={typeof valor === "string" ? valor : ""}
       onChange={(event) => onResponder(event.target.value)}
+      style={{ color: corFonte }}
     />
   );
 }
@@ -300,26 +301,55 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
                 <Label htmlFor="nome" style={{ color: pagina.cor_fonte }}>
                   Nome completo
                 </Label>
-                <Input id="nome" value={nome} onChange={(event) => setNome(event.target.value)} required />
+                <Input
+                  id="nome"
+                  value={nome}
+                  onChange={(event) => setNome(event.target.value)}
+                  style={{ color: pagina.cor_fonte }}
+                  required
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="whatsapp" style={{ color: pagina.cor_fonte }}>
                   WhatsApp
                 </Label>
-                <Input id="whatsapp" type="tel" placeholder="(11) 99999-9999" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} required />
+                <Input
+                  id="whatsapp"
+                  type="tel"
+                  placeholder="(11) 99999-9999"
+                  value={whatsapp}
+                  onChange={(event) => setWhatsapp(event.target.value)}
+                  style={{ color: pagina.cor_fonte }}
+                  required
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="idade" style={{ color: pagina.cor_fonte }}>
                   Idade
                 </Label>
-                <Input id="idade" type="number" min="1" value={idade} onChange={(event) => setIdade(event.target.value)} required />
+                <Input
+                  id="idade"
+                  type="number"
+                  min="1"
+                  value={idade}
+                  onChange={(event) => setIdade(event.target.value)}
+                  style={{ color: pagina.cor_fonte }}
+                  required
+                />
               </div>
               {pagina.coletar_email && (
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="email" style={{ color: pagina.cor_fonte }}>
                     Email
                   </Label>
-                  <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    style={{ color: pagina.cor_fonte }}
+                    required
+                  />
                 </div>
               )}
               {pagina.coletar_cidade && (
@@ -327,7 +357,13 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
                   <Label htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
                     Cidade
                   </Label>
-                  <Input id="cidade" value={cidade} onChange={(event) => setCidade(event.target.value)} required />
+                  <Input
+                    id="cidade"
+                    value={cidade}
+                    onChange={(event) => setCidade(event.target.value)}
+                    style={{ color: pagina.cor_fonte }}
+                    required
+                  />
                 </div>
               )}
               <Button type="button" disabled={!podeAvancarDadosBasicos()} style={{ backgroundColor: pagina.cor_primaria }} onClick={avancar}>
