@@ -15,6 +15,7 @@ import { BannersLoginForm } from "@/components/admin/banners-login-form";
 import { LogoEscolaForm } from "@/components/admin/logo-escola-form";
 import { RodapeLoginForm } from "@/components/admin/rodape-login-form";
 import { TermoImagemMatriculaForm } from "@/components/admin/termo-imagem-matricula-form";
+import { AlterarEmailAdminForm } from "@/components/admin/alterar-email-admin-form";
 import { BackupSection } from "@/components/admin/backup-section";
 import { LogSistemaView } from "@/components/admin/log-sistema-view";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TAB_IDS = [
+  "conta",
   "geral",
   "gamificacao",
   "calculadora",
@@ -44,11 +46,14 @@ export default async function ConfiguracoesPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  await requireRole("admin");
+  const admin = await requireRole("admin");
   const { tab } = await searchParams;
   const abaInicial = parseTab(tab);
 
   const supabase = await createClient();
+  // new_email só existe no usuário completo (getUser), não nos claims do JWT.
+  const { data: usuarioAuth } = await supabase.auth.getUser();
+  const emailPendente = usuarioAuth.user?.new_email ?? null;
   const [{ data }, banners] = await Promise.all([
     supabase
       .from("configuracoes")
@@ -68,6 +73,7 @@ export default async function ConfiguracoesPage({
 
       <Tabs defaultValue={abaInicial}>
         <TabsList>
+          <TabsTrigger value="conta">Minha conta</TabsTrigger>
           <TabsTrigger value="geral">Geral</TabsTrigger>
           <TabsTrigger value="gamificacao">Gamificação</TabsTrigger>
           <TabsTrigger value="calculadora">🧮 Calculadora</TabsTrigger>
@@ -77,6 +83,17 @@ export default async function ConfiguracoesPage({
           <TabsTrigger value="backup">Backup</TabsTrigger>
           <TabsTrigger value="log">Log do sistema</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="conta" className="flex flex-col gap-6">
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>E-mail de acesso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AlterarEmailAdminForm emailAtual={admin.email ?? "—"} emailPendente={emailPendente} />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="geral" className="flex flex-col gap-6">
           <Card className="max-w-xl">

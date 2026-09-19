@@ -117,6 +117,12 @@ function CardAgendamento({
 
           {camposExtras && <p className="text-muted-foreground text-xs">{camposExtras}</p>}
 
+          {agendamento.mensagem && (
+            <p className="text-muted-foreground line-clamp-3 text-xs" title={agendamento.mensagem}>
+              💬 {agendamento.mensagem}
+            </p>
+          )}
+
           {agendamento.status === "faltou" && (
             <AgendamentoReagendarDialog agendamento={agendamento} onReagendado={onReagendado} />
           )}

@@ -3,8 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAgendamentoPaginaPublica, getContagemPorHorario } from "@/lib/agendamentos/agendamentos";
 import { AgendamentoPublicoView } from "@/components/agendamentos/agendamento-publico-view";
+import { AGENDAMENTO_JANELA_DIAS } from "@/lib/agendamentos/schema";
 
-const JANELA_DIAS = 90;
+const JANELA_DIAS = AGENDAMENTO_JANELA_DIAS;
 
 // Página pública (sem login), acessível por qualquer visitante — sem
 // requireRole. force-dynamic: a disponibilidade de horários (contagem de

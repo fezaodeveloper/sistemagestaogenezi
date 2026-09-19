@@ -63,6 +63,12 @@ export default async function LoginPage({
             <h2 className="text-xl font-semibold">Bem-vindo!</h2>
             <p className="text-muted-foreground text-sm">Acesse sua conta para continuar.</p>
           </div>
+          {error === "link_invalido" && (
+            <p role="alert" className="text-destructive text-sm">
+              Link inválido ou expirado. Se você estava confirmando a troca de e-mail, abra o link no mesmo navegador
+              em que fez o pedido (ou entre e peça a troca de novo).
+            </p>
+          )}
           {error === "google" && (
             <p role="alert" className="text-destructive text-sm">
               Não foi possível entrar com o Google. Tente novamente.

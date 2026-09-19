@@ -3,6 +3,11 @@ import { z } from "zod";
 export const AGENDAMENTO_PAGINA_STATUSES = ["ativa", "inativa"] as const;
 export type AgendamentoPaginaStatus = (typeof AGENDAMENTO_PAGINA_STATUSES)[number];
 
+// Quantos dias à frente a página pública mostra/calcula disponibilidade
+// (contagem de vagas ocupadas). Compartilhado entre o Server Component
+// (/agendar/[slug]) e o calendário do client, que não deixa navegar além disso.
+export const AGENDAMENTO_JANELA_DIAS = 90;
+
 export const AGENDAMENTO_STATUSES = ["confirmado", "cancelado", "realizado", "faltou"] as const;
 export type AgendamentoStatus = (typeof AGENDAMENTO_STATUSES)[number];
 
@@ -119,6 +124,8 @@ export type Agendamento = {
   horario: string;
   campos_extras: Record<string, string>;
   status: AgendamentoStatus;
+  // Recado opcional do visitante (coluna nova; ausente antes da migration).
+  mensagem?: string | null;
   whatsapp_enviado: boolean;
   lembrete_enviado: boolean;
   created_at: string;
@@ -137,10 +144,13 @@ export const agendamentoPublicoSchema = z.object({
     .string({ error: "Informe seu WhatsApp." })
     .trim()
     .min(8, { error: "Informe um WhatsApp válido." })
-    .max(30),
+    .max(30)
+    // DDD + número: pelo menos 10 dígitos (mesma regra do formulário).
+    .refine((valor) => valor.replace(/\D/g, "").length >= 10, { error: "Informe um WhatsApp válido, com DDD." }),
   data_agendada: z.string({ error: "Selecione uma data." }).trim().min(1, { error: "Selecione uma data." }),
   horario: z.string({ error: "Selecione um horário." }).trim().min(1, { error: "Selecione um horário." }),
   campos_extras: z.record(z.string(), z.string()).optional(),
+  mensagem: z.string().trim().max(500, { error: "A mensagem pode ter no máximo 500 caracteres." }).optional(),
   aceite_whatsapp: z.literal(true, { error: "É preciso concordar em receber mensagens pelo WhatsApp." }),
 });
 export type AgendamentoPublicoValues = z.infer<typeof agendamentoPublicoSchema>;

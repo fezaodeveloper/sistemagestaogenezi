@@ -399,6 +399,10 @@ export async function notificarAgendamentoCriado(payload: Record<string, unknown
       // Dia da semana por extenso antes da data: "Quarta-feira, 25/09/2026".
       `📅 ${dataComDiaSemana(payload.data_agendada)} às ${texto(payload.horario)}`,
       `📋 Página: ${texto(payload.titulo_pagina)}`,
+      // Recado opcional do visitante (só aparece quando foi preenchido).
+      ...(typeof payload.mensagem === "string" && payload.mensagem.trim() !== ""
+        ? [`💬 Mensagem: ${escapeHtml(payload.mensagem)}`]
+        : []),
     ],
     "📅",
   );

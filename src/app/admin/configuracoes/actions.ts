@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -789,6 +791,51 @@ export async function salvarPushSubscription(subscription: {
   }
 
   return {};
+}
+
+// ===== Troca do e-mail de acesso do admin =====
+
+export type TrocarEmailAdminResultado = { success: true; email: string } | { error: string };
+
+// Pede a troca do e-mail de acesso. O Supabase envia o e-mail de confirmação
+// (auth.updateUser) e a troca só vale depois do clique no link. O e-mail mora
+// APENAS em auth.users — profiles não tem coluna de e-mail (o app lê o e-mail
+// dos claims do JWT), então não há nada a sincronizar por trigger: quando o
+// link é confirmado, o e-mail novo passa a valer no próximo refresh do token.
+export async function solicitarTrocaEmailAdmin(novoEmail: string): Promise<TrocarEmailAdminResultado> {
+  const user = await requireRole("admin");
+
+  const email = String(novoEmail ?? "").trim().toLowerCase();
+  if (!z.email().safeParse(email).success || email.length > 254) {
+    return { error: "Informe um e-mail válido." };
+  }
+  if (email === (user.email ?? "").toLowerCase()) {
+    return { error: "Esse já é o seu e-mail de acesso atual." };
+  }
+
+  // O link de confirmação volta pra esta mesma origem (precisa estar na lista
+  // de Redirect URLs do Supabase Auth; senão o Supabase usa a Site URL).
+  const cabecalhos = await headers();
+  const host = cabecalhos.get("x-forwarded-host") ?? cabecalhos.get("host");
+  const protocolo = cabecalhos.get("x-forwarded-proto") ?? "https";
+  const destino = encodeURIComponent("/admin/configuracoes?tab=conta");
+  const emailRedirectTo = host ? `${protocolo}://${host}/auth/callback?next=${destino}` : undefined;
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ email }, { emailRedirectTo });
+
+  if (error) {
+    console.error("[auth] erro ao solicitar troca de e-mail do admin:", { code: error.code, status: error.status });
+    if (error.code === "email_exists" || error.status === 422) {
+      return { error: "Já existe uma conta com esse e-mail." };
+    }
+    if (error.code === "over_email_send_rate_limit" || error.status === 429) {
+      return { error: "Muitas solicitações em pouco tempo. Aguarde alguns minutos e tente de novo." };
+    }
+    return { error: "Não foi possível solicitar a troca de e-mail. Tente novamente." };
+  }
+
+  return { success: true, email };
 }
 
 // ===== Controle de recursos por tipo de curso (TAREFA 5) =====
