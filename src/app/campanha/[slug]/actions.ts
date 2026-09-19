@@ -3,6 +3,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { criarOuAtualizarLeadPublico } from "@/lib/leads/leads";
+import { MUNICIPIOS_POR_UF } from "@/lib/ibge/municipios";
+import { normalizarBusca } from "@/lib/busca";
 import { getCampanhaPaginaPublica, contarRespostasAdmin } from "@/lib/campanha-paginas/campanha-paginas";
 import {
   campanhaRespostaPublicaSchema,
@@ -64,7 +66,16 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
   }
 
   if (pagina.coletar_cidade && (!parsed.data.estado || !parsed.data.cidade)) {
-    return { error: "Informe seu estado e sua cidade." };
+    return { error: "Informe seu estado e seu município." };
+  }
+  // O município vem de um select filtrado pelo estado: confere contra a mesma
+  // lista estática (o formulário é alcançável por POST direto).
+  if (parsed.data.estado && parsed.data.cidade) {
+    const municipios = MUNICIPIOS_POR_UF[parsed.data.estado] ?? [];
+    const cidadeNormalizada = normalizarBusca(parsed.data.cidade);
+    if (!municipios.some((municipio) => normalizarBusca(municipio) === cidadeNormalizada)) {
+      return { error: "Selecione um município válido para o estado escolhido." };
+    }
   }
 
   const agora = new Date();

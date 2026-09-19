@@ -44,6 +44,7 @@ export async function getCampanhaPagina(id: string): Promise<CampanhaPagina | nu
 function parseCampanhaPaginaForm(formData: FormData) {
   const etapasRaw = formData.get("etapas");
   const cardsRaw = formData.get("cards_destaque");
+  const tipografiaRaw = formData.get("tipografia");
 
   return campanhaPaginaFormSchema.safeParse({
     titulo: formData.get("titulo"),
@@ -66,6 +67,7 @@ function parseCampanhaPaginaForm(formData: FormData) {
     coletar_email: formData.get("coletar_email") === "true",
     coletar_cidade: formData.get("coletar_cidade") === "true",
     cards_destaque: cardsRaw ? JSON.parse(String(cardsRaw)) : [],
+    tipografia: tipografiaRaw ? JSON.parse(String(tipografiaRaw)) : undefined,
     etapas: etapasRaw ? JSON.parse(String(etapasRaw)) : [],
     mostrar_lgpd: formData.get("mostrar_lgpd") === "true",
     texto_lgpd: formData.get("texto_lgpd") || undefined,
@@ -109,6 +111,7 @@ export async function criarCampanhaPagina(formData: FormData): Promise<{ error?:
       coletar_email: parsed.data.coletar_email,
       coletar_cidade: parsed.data.coletar_cidade,
       cards_destaque: parsed.data.cards_destaque,
+      tipografia: parsed.data.tipografia,
       etapas: parsed.data.etapas,
       mostrar_lgpd: parsed.data.mostrar_lgpd,
       texto_lgpd: parsed.data.texto_lgpd ?? null,
@@ -166,6 +169,7 @@ export async function atualizarCampanhaPagina(id: string, formData: FormData): P
       coletar_email: parsed.data.coletar_email,
       coletar_cidade: parsed.data.coletar_cidade,
       cards_destaque: parsed.data.cards_destaque,
+      tipografia: parsed.data.tipografia,
       etapas: parsed.data.etapas,
       mostrar_lgpd: parsed.data.mostrar_lgpd,
       texto_lgpd: parsed.data.texto_lgpd ?? null,
@@ -221,6 +225,7 @@ export async function duplicarCampanhaPagina(id: string): Promise<{ error?: stri
       coletar_email: original.coletar_email,
       coletar_cidade: original.coletar_cidade,
       cards_destaque: original.cards_destaque,
+      tipografia: original.tipografia ?? {},
       etapas: original.etapas,
       mostrar_lgpd: original.mostrar_lgpd,
       texto_lgpd: original.texto_lgpd,

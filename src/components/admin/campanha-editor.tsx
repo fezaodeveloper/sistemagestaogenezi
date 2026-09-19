@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Upload, X } from "lucide-react";
+import { Plus, RotateCcw, Upload, X } from "lucide-react";
 import { atualizarCampanhaPagina, criarCampanhaPagina } from "@/app/admin/comercial/paginas-campanha/actions";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -19,8 +19,14 @@ import {
   CONFIRMACAO_TEXTO_LGPD,
   CONFIRMACAO_TEXTO_RESUMO_PADRAO,
   CONFIRMACAO_TITULO_PADRAO,
+  FONTES_CAMPANHA,
+  FONTE_CAMPANHA_LABELS,
+  PESOS_TITULO,
+  PESO_TITULO_LABELS,
   QUESTAO_TIPOS,
   QUESTAO_TIPO_LABELS,
+  TIPOGRAFIA_LIMITES,
+  resolverTipografia,
   tipoQuestaoEfetivo,
   type CampanhaPagina,
   type CardDestaque,
@@ -28,8 +34,12 @@ import {
   type CampanhaTema,
   type Etapa,
   type Questao,
+  type FonteCampanha,
+  type PesoTitulo,
   type QuestaoTipo,
+  type Tipografia,
 } from "@/lib/campanha-paginas/schema";
+import { CampanhaPublicaView } from "@/components/campanha/campanha-publica-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -373,6 +383,10 @@ export function CampanhaEditor({
 
   const [etapas, setEtapas] = useState<Etapa[]>(() => normalizarEtapas(pagina?.etapas));
   const [cardsDestaque, setCardsDestaque] = useState<CardDestaque[]>(pagina?.cards_destaque ?? []);
+  // resolverTipografia completa/limita o jsonb do banco (páginas antigas têm {}).
+  const [tipografia, setTipografia] = useState<Tipografia>(() => resolverTipografia(pagina?.tipografia));
+  // Incrementa pra remontar o preview do zero (volta à primeira etapa, campos vazios).
+  const [previewKey, setPreviewKey] = useState(0);
 
   const [mostrarLgpd, setMostrarLgpd] = useState(pagina?.mostrar_lgpd ?? true);
   const [textoLgpd, setTextoLgpd] = useState(pagina?.texto_lgpd ?? "");
@@ -529,6 +543,7 @@ export function CampanhaEditor({
     formData.set("coletar_email", String(coletarEmail));
     formData.set("coletar_cidade", String(coletarCidade));
     formData.set("cards_destaque", JSON.stringify(cardsDestaque));
+    formData.set("tipografia", JSON.stringify(tipografia));
     formData.set("etapas", JSON.stringify(etapas));
     formData.set("mostrar_lgpd", String(mostrarLgpd));
     formData.set("texto_lgpd", textoLgpd);
@@ -556,6 +571,80 @@ export function CampanhaEditor({
     });
   }
 
+  // Objeto CampanhaPagina montado com o que está no editor (mesmo antes de
+  // salvar): alimenta o MESMO componente da página pública, então o preview é
+  // fiel por construção e reage a qualquer campo editado.
+  const paginaPreview = useMemo<CampanhaPagina>(() => {
+    const contadorData = contadorDataFim ? new Date(contadorDataFim) : null;
+    const agora = new Date().toISOString();
+    return {
+      id: pagina?.id ?? "preview",
+      slug: slug || "preview",
+      titulo: titulo || "Título da campanha",
+      subtitulo: subtitulo || null,
+      descricao: descricao || null,
+      curso_id: cursoId || null,
+      cor_primaria: corPrimaria,
+      cor_fundo: corFundo,
+      cor_fonte: corFonte,
+      logo_url: logoUrl || null,
+      imagem_topo_url: imagemTopoUrl || null,
+      tema,
+      status,
+      data_inicio: null,
+      data_fim: null,
+      vagas_limite: null,
+      mostrar_contador: mostrarContador,
+      contador_data_fim: contadorData && !Number.isNaN(contadorData.getTime()) ? contadorData.toISOString() : null,
+      coletar_email: coletarEmail,
+      coletar_cidade: coletarCidade,
+      cards_destaque: cardsDestaque.filter((card) => card.valor.trim() && card.label.trim()),
+      tipografia,
+      etapas,
+      mostrar_lgpd: mostrarLgpd,
+      texto_lgpd: textoLgpd || null,
+      mostrar_declaracao: mostrarDeclaracao,
+      texto_declaracao: textoDeclaracao || null,
+      titulo_sucesso: tituloSucesso,
+      mensagem_sucesso: mensagemSucesso || null,
+      notificar_telegram: notificarTelegram,
+      created_by: pagina?.created_by ?? "",
+      created_at: pagina?.created_at ?? agora,
+      updated_at: pagina?.updated_at ?? agora,
+    };
+  }, [
+    pagina?.id,
+    pagina?.created_by,
+    pagina?.created_at,
+    pagina?.updated_at,
+    slug,
+    titulo,
+    subtitulo,
+    descricao,
+    cursoId,
+    corPrimaria,
+    corFundo,
+    corFonte,
+    logoUrl,
+    imagemTopoUrl,
+    tema,
+    status,
+    mostrarContador,
+    contadorDataFim,
+    coletarEmail,
+    coletarCidade,
+    cardsDestaque,
+    tipografia,
+    etapas,
+    mostrarLgpd,
+    textoLgpd,
+    mostrarDeclaracao,
+    textoDeclaracao,
+    tituloSucesso,
+    mensagemSucesso,
+    notificarTelegram,
+  ]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-background sticky top-0 z-10 -mx-6 flex items-center justify-between gap-4 border-b px-6 py-3">
@@ -581,9 +670,8 @@ export function CampanhaEditor({
         </p>
       )}
 
-      <form id="campanha-editor-form" action={handleSubmit}>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <form id="campanha-editor-form" action={handleSubmit} className="flex flex-col gap-4">
             <Tabs defaultValue="configuracoes">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="configuracoes">Configurações</TabsTrigger>
@@ -792,7 +880,23 @@ export function CampanhaEditor({
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <Label>Logo</Label>
+                      <Label>Imagem de topo (banner)</Label>
+                      <input ref={imagemTopoInputRef} type="file" accept={CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS.join(",")} onChange={(e) => handleUploadImagem(e, setImagemTopoUrl, setEnviandoImagemTopo)} className="hidden" />
+                      <div className="flex items-center gap-3">
+                        {imagemTopoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+                          <img src={imagemTopoUrl} alt="Imagem de topo" className="h-14 w-28 rounded-md border object-cover" />
+                        ) : (
+                          <div className="text-muted-foreground flex h-14 w-28 items-center justify-center rounded-md border-2 border-dashed text-xs">Sem imagem</div>
+                        )}
+                        <Button type="button" variant="outline" size="sm" disabled={enviandoImagemTopo} onClick={() => imagemTopoInputRef.current?.click()}>
+                          <Upload className="size-3.5" />
+                          {enviandoImagemTopo ? "Enviando..." : imagemTopoUrl ? "Trocar" : "Enviar"}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label>Logo (exibido abaixo do banner)</Label>
                       <input ref={logoInputRef} type="file" accept={CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS.join(",")} onChange={(e) => handleUploadImagem(e, setLogoUrl, setEnviandoLogo)} className="hidden" />
                       <div className="flex items-center gap-3">
                         {logoUrl ? (
@@ -808,21 +912,79 @@ export function CampanhaEditor({
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-2">
-                      <Label>Imagem de topo</Label>
-                      <input ref={imagemTopoInputRef} type="file" accept={CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS.join(",")} onChange={(e) => handleUploadImagem(e, setImagemTopoUrl, setEnviandoImagemTopo)} className="hidden" />
-                      <div className="flex items-center gap-3">
-                        {imagemTopoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
-                          <img src={imagemTopoUrl} alt="Imagem de topo" className="h-14 w-28 rounded-md border object-cover" />
-                        ) : (
-                          <div className="text-muted-foreground flex h-14 w-28 items-center justify-center rounded-md border-2 border-dashed text-xs">Sem imagem</div>
-                        )}
-                        <Button type="button" variant="outline" size="sm" disabled={enviandoImagemTopo} onClick={() => imagemTopoInputRef.current?.click()}>
-                          <Upload className="size-3.5" />
-                          {enviandoImagemTopo ? "Enviando..." : imagemTopoUrl ? "Trocar" : "Enviar"}
-                        </Button>
+                    <div className="flex flex-col gap-3 border-t pt-4">
+                      <div>
+                        <Label>Tipografia e espaçamento</Label>
+                        <p className="text-muted-foreground mt-1 text-xs">Aplicados na página pública e no preview ao lado.</p>
                       </div>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="tipografia_fonte">Família da fonte</Label>
+                          <Select
+                            items={FONTE_CAMPANHA_LABELS}
+                            value={tipografia.fonte}
+                            onValueChange={(v) => v && setTipografia((prev) => ({ ...prev, fonte: v as FonteCampanha }))}
+                          >
+                            <SelectTrigger id="tipografia_fonte" className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {FONTES_CAMPANHA.map((fonte) => (
+                                <SelectItem key={fonte} value={fonte}>
+                                  {FONTE_CAMPANHA_LABELS[fonte]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="tipografia_peso">Peso do título</Label>
+                          <Select
+                            items={PESO_TITULO_LABELS}
+                            value={tipografia.peso_titulo}
+                            onValueChange={(v) => v && setTipografia((prev) => ({ ...prev, peso_titulo: v as PesoTitulo }))}
+                          >
+                            <SelectTrigger id="tipografia_peso" className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PESOS_TITULO.map((peso) => (
+                                <SelectItem key={peso} value={peso}>
+                                  {PESO_TITULO_LABELS[peso]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      {(
+                        [
+                          { campo: "tamanho_titulo", rotulo: "Tamanho do título" },
+                          { campo: "tamanho_texto", rotulo: "Tamanho do texto" },
+                          { campo: "espacamento", rotulo: "Espaçamento entre seções" },
+                        ] as const
+                      ).map(({ campo, rotulo }) => (
+                        <div key={campo} className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor={`tipografia_${campo}`}>{rotulo}</Label>
+                            <span className="text-muted-foreground text-sm tabular-nums">{tipografia[campo]}px</span>
+                          </div>
+                          <input
+                            id={`tipografia_${campo}`}
+                            type="range"
+                            min={TIPOGRAFIA_LIMITES[campo].min}
+                            max={TIPOGRAFIA_LIMITES[campo].max}
+                            step={1}
+                            value={tipografia[campo]}
+                            onChange={(event) => setTipografia((prev) => ({ ...prev, [campo]: Number(event.target.value) }))}
+                            className="accent-primary w-full"
+                          />
+                          <div className="text-muted-foreground flex justify-between text-xs">
+                            <span>{TIPOGRAFIA_LIMITES[campo].min}px</span>
+                            <span>{TIPOGRAFIA_LIMITES[campo].max}px</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -918,57 +1080,32 @@ export function CampanhaEditor({
                 </Card>
               </TabsContent>
             </Tabs>
-          </div>
+          </form>
 
+          {/* Preview COMPLETO em tempo real: o mesmo componente da página pública,
+              alimentado pelo estado do editor. Fica FORA do <form> — Enter num
+              campo do preview não pode disparar o "Salvar" do editor. */}
           <div className="lg:sticky lg:top-20 lg:self-start">
-            <p className="text-muted-foreground mb-2 text-xs font-medium uppercase">Preview (simplificado)</p>
-            <div className="overflow-hidden rounded-lg border" style={{ backgroundColor: corFundo }}>
-              <div className="flex flex-col items-center gap-3 p-6 text-center">
-                {logoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- preview usa a imagem já enviada
-                  <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
-                )}
-                <h2 className="text-xl font-bold" style={{ color: tema === "escuro" ? "#fff" : "#0f172a" }}>
-                  {titulo || "Título da campanha"}
-                </h2>
-                {subtitulo && (
-                  <p className="text-sm" style={{ color: tema === "escuro" ? "#cbd5e1" : "#475569" }}>
-                    {subtitulo}
-                  </p>
-                )}
-
-                <div className="mt-4 w-full rounded-md p-4 text-left" style={{ backgroundColor: tema === "escuro" ? "#1e293b" : "#f1f5f9" }}>
-                  {etapas.length > 0 ? (
-                    <>
-                      <p className="text-xs font-medium" style={{ color: corPrimaria }}>
-                        Etapa 1 de {etapas.length + 2}
-                      </p>
-                      <p className="mt-1 font-medium" style={{ color: tema === "escuro" ? "#fff" : "#0f172a" }}>
-                        {etapas[0].titulo}
-                      </p>
-                      <div className="mt-2 flex flex-col gap-1.5">
-                        {etapas[0].questoes.slice(0, 3).map((q) => (
-                          <p key={q.id} className="text-sm" style={{ color: tema === "escuro" ? "#cbd5e1" : "#475569" }}>
-                            {q.pergunta || "(pergunta sem texto)"}
-                          </p>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm" style={{ color: tema === "escuro" ? "#cbd5e1" : "#475569" }}>
-                      Nome, WhatsApp, idade{coletarEmail ? ", email" : ""}, estado, cidade
-                    </p>
-                  )}
-                </div>
-
-                <button type="button" disabled className="mt-2 w-full rounded-md py-2 text-sm font-medium text-white" style={{ backgroundColor: corPrimaria }}>
-                  Continuar
-                </button>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-muted-foreground text-xs font-medium uppercase">Preview em tempo real</p>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewKey((k) => k + 1)}>
+                <RotateCcw className="size-3.5" />
+                Reiniciar
+              </Button>
+            </div>
+            <div
+              className="max-h-[calc(100svh-9rem)] overflow-y-auto rounded-lg border p-4"
+              style={{ backgroundColor: corFundo, color: tema === "escuro" ? "#f8fafc" : "#0f172a" }}
+            >
+              <div className="mx-auto w-full max-w-lg py-2">
+                <CampanhaPublicaView key={previewKey} pagina={paginaPreview} preview />
               </div>
             </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Navegue por todas as etapas — no preview nada é validado nem enviado.
+            </p>
           </div>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }

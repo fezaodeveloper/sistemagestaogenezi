@@ -114,6 +114,77 @@ export const cardDestaqueSchema = z.object({
 export type CardDestaque = z.infer<typeof cardDestaqueSchema>;
 export const CARDS_DESTAQUE_MAXIMO = 3;
 
+// ===== Tipografia e espaçamento (aba Visual do editor) =====
+// "sistema" = mantém a fonte do app (padrão; páginas antigas não mudam de visual).
+export const FONTES_CAMPANHA = ["sistema", "inter", "roboto", "poppins", "montserrat", "open_sans"] as const;
+export type FonteCampanha = (typeof FONTES_CAMPANHA)[number];
+export const FONTE_CAMPANHA_LABELS: Record<FonteCampanha, string> = {
+  sistema: "Padrão do sistema",
+  inter: "Inter",
+  roboto: "Roboto",
+  poppins: "Poppins",
+  montserrat: "Montserrat",
+  open_sans: "Open Sans",
+};
+
+export const PESOS_TITULO = ["normal", "semibold", "bold", "extrabold"] as const;
+export type PesoTitulo = (typeof PESOS_TITULO)[number];
+export const PESO_TITULO_LABELS: Record<PesoTitulo, string> = {
+  normal: "Normal",
+  semibold: "Semibold",
+  bold: "Bold",
+  extrabold: "Extrabold",
+};
+export const PESO_TITULO_CSS: Record<PesoTitulo, number> = { normal: 400, semibold: 600, bold: 700, extrabold: 800 };
+
+// Limites em px (mesmos usados pelos controles do editor).
+export const TIPOGRAFIA_LIMITES = {
+  tamanho_titulo: { min: 24, max: 72 },
+  tamanho_texto: { min: 12, max: 24 },
+  espacamento: { min: 8, max: 48 },
+} as const;
+
+export const tipografiaSchema = z.object({
+  fonte: z.enum(FONTES_CAMPANHA),
+  tamanho_titulo: z.number().int().min(TIPOGRAFIA_LIMITES.tamanho_titulo.min).max(TIPOGRAFIA_LIMITES.tamanho_titulo.max),
+  tamanho_texto: z.number().int().min(TIPOGRAFIA_LIMITES.tamanho_texto.min).max(TIPOGRAFIA_LIMITES.tamanho_texto.max),
+  espacamento: z.number().int().min(TIPOGRAFIA_LIMITES.espacamento.min).max(TIPOGRAFIA_LIMITES.espacamento.max),
+  peso_titulo: z.enum(PESOS_TITULO),
+});
+export type Tipografia = z.infer<typeof tipografiaSchema>;
+
+// Valores que reproduzem o visual que as páginas já tinham antes deste recurso
+// (texto base 16px — o text-sm/text-xs da página são relativos a ele —, título
+// em negrito, 24px entre seções).
+export const TIPOGRAFIA_PADRAO: Tipografia = {
+  fonte: "sistema",
+  tamanho_titulo: 30,
+  tamanho_texto: 16,
+  espacamento: 24,
+  peso_titulo: "bold",
+};
+
+function limitar(valor: unknown, min: number, max: number, padrao: number): number {
+  const n = typeof valor === "number" ? valor : Number(valor);
+  if (!Number.isFinite(n)) return padrao;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+// Lê o jsonb do banco (pode ser {}, parcial ou até lixo) e devolve sempre uma
+// Tipografia completa e dentro dos limites — a página pública nunca quebra por
+// causa de um valor fora do esperado.
+export function resolverTipografia(bruto: unknown): Tipografia {
+  const o = bruto !== null && typeof bruto === "object" ? (bruto as Record<string, unknown>) : {};
+  const L = TIPOGRAFIA_LIMITES;
+  return {
+    fonte: (FONTES_CAMPANHA as readonly unknown[]).includes(o.fonte) ? (o.fonte as FonteCampanha) : TIPOGRAFIA_PADRAO.fonte,
+    tamanho_titulo: limitar(o.tamanho_titulo, L.tamanho_titulo.min, L.tamanho_titulo.max, TIPOGRAFIA_PADRAO.tamanho_titulo),
+    tamanho_texto: limitar(o.tamanho_texto, L.tamanho_texto.min, L.tamanho_texto.max, TIPOGRAFIA_PADRAO.tamanho_texto),
+    espacamento: limitar(o.espacamento, L.espacamento.min, L.espacamento.max, TIPOGRAFIA_PADRAO.espacamento),
+    peso_titulo: (PESOS_TITULO as readonly unknown[]).includes(o.peso_titulo) ? (o.peso_titulo as PesoTitulo) : TIPOGRAFIA_PADRAO.peso_titulo,
+  };
+}
+
 export const campanhaPaginaFormSchema = z
   .object({
     titulo: z
@@ -146,6 +217,7 @@ export const campanhaPaginaFormSchema = z
     contador_data_fim: z.string().trim().optional(),
     coletar_email: z.boolean(),
     coletar_cidade: z.boolean(),
+    tipografia: tipografiaSchema.default(TIPOGRAFIA_PADRAO),
     cards_destaque: z.array(cardDestaqueSchema).max(CARDS_DESTAQUE_MAXIMO, { error: "No máximo 3 cards de destaque." }).default([]),
     etapas: z.array(etapaSchema).max(20).default([]),
     mostrar_lgpd: z.boolean(),
@@ -197,6 +269,8 @@ export type CampanhaPagina = {
   coletar_email: boolean;
   coletar_cidade: boolean;
   cards_destaque: CardDestaque[];
+  // jsonb: pode ser {} (páginas antigas) — sempre passar por resolverTipografia().
+  tipografia: Partial<Tipografia> | null;
   etapas: Etapa[];
   mostrar_lgpd: boolean;
   texto_lgpd: string | null;

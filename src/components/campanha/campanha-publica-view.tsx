@@ -1,19 +1,23 @@
 "use client";
 
-import { useEffect, useState, useTransition, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, useTransition, type CSSProperties } from "react";
 import { enviarRespostaCampanha } from "@/app/campanha/[slug]/actions";
 import {
   CONFIRMACAO_TEXTO_DECLARACAO_PADRAO,
   CONFIRMACAO_TEXTO_LGPD,
   CONFIRMACAO_TEXTO_RESUMO_PADRAO,
   CONFIRMACAO_TITULO_PADRAO,
+  PESO_TITULO_CSS,
   UFS_BRASIL,
+  resolverTipografia,
   tipoQuestaoEfetivo,
   type CampanhaPagina,
   type Etapa,
   type Questao,
   type RespostaValor,
+  type UfBrasil,
 } from "@/lib/campanha-paginas/schema";
+import { FONTE_CSS } from "@/lib/campanha-paginas/fontes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,9 +111,11 @@ function SelectNativo({
   corPrimaria,
   corFundo,
   corFonte,
+  disabled = false,
   onChange,
 }: {
   id?: string;
+  disabled?: boolean;
   valor: string;
   opcoes: { valor: string; texto: string }[];
   placeholder: string;
@@ -123,7 +129,8 @@ function SelectNativo({
       id={id}
       value={valor}
       onChange={(event) => onChange(event.target.value)}
-      className="h-9 w-full rounded-md px-2.5 text-sm outline-none"
+      disabled={disabled}
+      className="h-9 w-full rounded-md px-2.5 text-[0.875em] outline-none disabled:cursor-not-allowed disabled:opacity-50"
       style={{ color: corFonte, backgroundColor: corFundo, border: `2px solid ${corPrimaria}` }}
     >
       <option value="" style={{ color: corFonte, backgroundColor: corFundo }}>
@@ -178,10 +185,10 @@ function QuestaoCampo({
                 backgroundColor: selecionada ? corPrimaria : hexParaRgba(corFundo, 0.3),
                 color: corTexto,
               }}
-              className="flex items-center gap-3 rounded-md p-3 text-left text-sm transition-colors"
+              className="flex items-center gap-3 rounded-md p-3 text-left text-[0.875em] transition-colors"
             >
               <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold"
+                className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-[0.75em] font-semibold"
                 style={{ color: selecionada ? corFundo : corPrimaria, borderColor: selecionada ? corFundo : corPrimaria }}
               >
                 {opcao.letra}
@@ -221,10 +228,10 @@ function QuestaoCampo({
                 backgroundColor: marcada ? corPrimaria : hexParaRgba(corFundo, 0.3),
                 color: corTexto,
               }}
-              className="flex items-center gap-3 rounded-md p-3 text-left text-sm transition-colors"
+              className="flex items-center gap-3 rounded-md p-3 text-left text-[0.875em] transition-colors"
             >
               <span
-                className="flex size-5 shrink-0 items-center justify-center rounded border-2 text-xs font-bold"
+                className="flex size-5 shrink-0 items-center justify-center rounded border-2 text-[0.75em] font-bold"
                 style={{ color: marcada ? corFundo : corPrimaria, borderColor: marcada ? corFundo : corPrimaria }}
               >
                 {marcada ? "✓" : ""}
@@ -242,7 +249,7 @@ function QuestaoCampo({
   // Checkbox único (um "Sim") — o tipo "checkbox" antigo.
   if (tipo === "checkbox_unico") {
     return (
-      <label className="flex items-center gap-2 text-sm" style={{ color: corFonte }}>
+      <label className="flex items-center gap-2 text-[0.875em]" style={{ color: corFonte }}>
         <input type="checkbox" checked={valor === true} onChange={(event) => onResponder(event.target.checked)} />
         Sim
       </label>
@@ -268,20 +275,44 @@ function QuestaoCampo({
       rows={3}
       value={typeof valor === "string" ? valor : ""}
       onChange={(event) => onResponder(event.target.value)}
+      className="text-[1em] md:text-[1em]"
       style={{ color: corFonte }}
     />
   );
 }
 
-export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: CampanhaPagina; encerrada?: boolean }) {
+// `preview`: usado pelo editor do admin pra mostrar a página COMPLETA em tempo
+// real — é o mesmo componente da página pública (fidelidade total), mas sem
+// efeitos colaterais: não lê/grava rascunho no localStorage, não exige campos
+// preenchidos pra navegar entre as etapas e o envio final só mostra a tela de
+// sucesso, sem chamar a Server Action.
+export function CampanhaPublicaView({
+  pagina,
+  encerrada = false,
+  preview = false,
+}: {
+  pagina: CampanhaPagina;
+  encerrada?: boolean;
+  preview?: boolean;
+}) {
   const escuro = pagina.tema === "escuro";
+  const tipografia = useMemo(() => resolverTipografia(pagina.tipografia), [pagina.tipografia]);
+  // Fonte/tamanho de texto/espaçamento entre seções vêm da aba Visual do editor
+  // e são aplicados por style inline no container raiz; os textos internos usam
+  // unidade `em` (text-[0.875em] etc.) pra escalar junto com o tamanho base.
+  // "sistema" não define font-family (herda a fonte do app).
+  const estiloTipografia: CSSProperties = {
+    ...(tipografia.fonte !== "sistema" ? { fontFamily: FONTE_CSS[tipografia.fonte] } : {}),
+    fontSize: tipografia.tamanho_texto,
+  };
+  const escalaTexto = "text-[1em] md:text-[1em]";
   const corCard = escuro ? "#1e293b" : "#f1f5f9";
   // QuestaoCampo recebe cor_fundo/cor_fonte/cor_primaria como props diretas
   // (não via variável CSS) — mais fácil de depurar e sem depender de
   // herança pela árvore do DOM. --cor-primaria continua como variável CSS
   // só para os dois usos que ficam dentro deste próprio componente (check
   // de sucesso e dígitos do contador), sem necessidade de prop.
-  const style = { "--cor-primaria": pagina.cor_primaria } as CSSProperties;
+  const style = { "--cor-primaria": pagina.cor_primaria, ...estiloTipografia } as CSSProperties;
 
   // Etapa de confirmação (opcional, sempre a última): substitui a tela final
   // padrão de termos/envio. As demais ("perguntas") viram as telas 1..N.
@@ -291,7 +322,9 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
   // Telas: 0 = dados básicos, 1..N = etapas de perguntas, N+1 = confirmação/envio.
   const totalTelas = 1 + etapasPergunta.length + 1;
-  const [tela, setTela] = useState(0);
+  const [telaBruta, setTela] = useState(0);
+  // No preview as etapas mudam enquanto o admin edita — mantém a tela dentro do intervalo.
+  const tela = Math.min(telaBruta, totalTelas - 1);
 
   const [nome, setNome] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -299,6 +332,9 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
   const [email, setEmail] = useState("");
   const [estado, setEstado] = useState("");
   const [cidade, setCidade] = useState("");
+  // Lista de municípios do estado escolhido. A lista estática (~90 KB) só é
+  // baixada quando o visitante escolhe (ou o rascunho restaura) um estado.
+  const [municipiosCarregados, setMunicipiosCarregados] = useState<{ uf: string; lista: readonly string[] } | null>(null);
   const [respostas, setRespostas] = useState<Record<string, RespostaValor>>({});
   const [aceiteLgpd, setAceiteLgpd] = useState(false);
   const [aceiteDeclaracao, setAceiteDeclaracao] = useState(false);
@@ -317,6 +353,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false);
 
   useEffect(() => {
+    if (preview) return;
     queueMicrotask(() => {
       const rascunho = lerRascunho(chaveRascunho);
       if (rascunho) {
@@ -330,17 +367,38 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
       }
       setRascunhoCarregado(true);
     });
-  }, [chaveRascunho]);
+  }, [chaveRascunho, preview]);
 
   useEffect(() => {
-    if (!rascunhoCarregado || sucesso) return;
+    if (preview || !rascunhoCarregado || sucesso) return;
     const rascunho: Rascunho = { nome, whatsapp, idade, email, estado, cidade, respostas };
     try {
       localStorage.setItem(chaveRascunho, JSON.stringify(rascunho));
     } catch {
       // localStorage indisponível (modo privado, cota cheia) — rascunho é só conveniência.
     }
-  }, [rascunhoCarregado, sucesso, chaveRascunho, nome, whatsapp, idade, email, estado, cidade, respostas]);
+  }, [preview, rascunhoCarregado, sucesso, chaveRascunho, nome, whatsapp, idade, email, estado, cidade, respostas]);
+
+  useEffect(() => {
+    if (!(UFS_BRASIL as readonly string[]).includes(estado)) return;
+    let cancelado = false;
+    import("@/lib/ibge/municipios").then(({ MUNICIPIOS_POR_UF }) => {
+      // Ignora resposta atrasada se o estado mudou enquanto o módulo carregava.
+      if (!cancelado) setMunicipiosCarregados({ uf: estado, lista: MUNICIPIOS_POR_UF[estado as UfBrasil] });
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [estado]);
+
+  const municipios = municipiosCarregados?.uf === estado ? municipiosCarregados.lista : [];
+  // Cidade só vale se pertence ao estado (rascunho antigo tinha texto livre).
+  const cidadeValida = municipios.includes(cidade);
+
+  function escolherEstado(uf: string) {
+    setEstado(uf);
+    setCidade("");
+  }
 
   useEffect(() => {
     if (!pagina.mostrar_contador || !pagina.contador_data_fim) return;
@@ -360,29 +418,32 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
   function avancar() {
     setError(null);
-    setTela((t) => Math.min(t + 1, totalTelas - 1));
+    setTela(Math.min(tela + 1, totalTelas - 1));
   }
 
   function voltar() {
     setError(null);
-    setTela((t) => Math.max(t - 1, 0));
+    setTela(Math.max(tela - 1, 0));
   }
 
   function podeAvancarDadosBasicos(): boolean {
+    if (preview) return true;
     return (
       nome.trim().length > 0 &&
       whatsapp.trim().length > 0 &&
       idade.trim().length > 0 &&
       (!pagina.coletar_email || email.trim().length > 0) &&
-      (!pagina.coletar_cidade || (estado.length > 0 && cidade.trim().length > 0))
+      (!pagina.coletar_cidade || (estado.length > 0 && cidadeValida))
     );
   }
 
   function podeAvancarEtapa(etapa: Etapa): boolean {
+    if (preview) return true;
     return etapa.questoes.every((q) => respostaPreenchida(q, respostas[q.id]));
   }
 
   function podeEnviar(): boolean {
+    if (preview) return true;
     // Com etapa de confirmação os DOIS aceites são obrigatórios (independente
     // dos toggles da aba Termos, que valem só pra tela final padrão).
     if (confirmacao) return aceiteLgpd && aceiteDeclaracao;
@@ -391,6 +452,10 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
   function handleEnviar() {
     setError(null);
+    if (preview) {
+      setSucesso(true);
+      return;
+    }
     const formData = new FormData();
     formData.set("nome", nome);
     formData.set("whatsapp", whatsapp);
@@ -419,7 +484,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
   if (sucesso) {
     return (
-      <div style={style} className="flex flex-col items-center gap-3 py-16 text-center">
+      <div style={{ ...style, gap: tipografia.espacamento / 2 }} className="flex flex-col items-center py-16 text-center">
         <span className="flex size-16 items-center justify-center rounded-full text-3xl" style={{ backgroundColor: "var(--cor-primaria)" }}>
           ✓
         </span>
@@ -427,6 +492,19 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
           {pagina.titulo_sucesso}
         </h2>
         {pagina.mensagem_sucesso && <p style={{ color: pagina.cor_fonte }}>{pagina.mensagem_sucesso}</p>}
+        {preview && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSucesso(false);
+              setTela(0);
+            }}
+          >
+            Voltar ao início (preview)
+          </Button>
+        )}
       </div>
     );
   }
@@ -435,29 +513,37 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
   const naEtapaFinal = tela === totalTelas - 1;
 
   return (
-    <div style={style} className="flex flex-col gap-6">
+    <div style={{ ...style, gap: tipografia.espacamento }} className="flex flex-col">
       {encerrada && (
         <div role="alert" className="flex flex-col items-center gap-1 rounded-lg bg-red-600 px-4 py-3 text-center text-white">
           <p className="text-lg font-bold">Inscrições encerradas!</p>
-          <p className="text-sm opacity-90">Essa campanha não está mais recebendo inscrições.</p>
+          <p className="text-[0.875em] opacity-90">Essa campanha não está mais recebendo inscrições.</p>
         </div>
       )}
 
       <div className="flex flex-col items-center gap-3 text-center">
-        {pagina.logo_url && (
-          // eslint-disable-next-line @next/next/no-img-element -- logo vem do Storage do próprio projeto
-          <img src={pagina.logo_url} alt={pagina.titulo} className="h-12 object-contain" />
-        )}
         {pagina.imagem_topo_url && (
           // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
           <img src={pagina.imagem_topo_url} alt="" className="w-full rounded-lg object-cover" />
         )}
-        <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: pagina.cor_fonte }}>
+        {/* Logo ABAIXO do banner/imagem principal. */}
+        {pagina.logo_url && (
+          // eslint-disable-next-line @next/next/no-img-element -- logo vem do Storage do próprio projeto
+          <img src={pagina.logo_url} alt={pagina.titulo} className="h-12 object-contain" />
+        )}
+        <h1
+          style={{
+            color: pagina.cor_fonte,
+            fontSize: tipografia.tamanho_titulo,
+            fontWeight: PESO_TITULO_CSS[tipografia.peso_titulo],
+            lineHeight: 1.15,
+          }}
+        >
           {pagina.titulo}
         </h1>
         {pagina.subtitulo && <p style={{ color: pagina.cor_fonte }}>{pagina.subtitulo}</p>}
         {pagina.descricao && (
-          <p className="text-sm" style={{ color: pagina.cor_fonte }}>
+          <p className="text-[0.875em]" style={{ color: pagina.cor_fonte }}>
             {pagina.descricao}
           </p>
         )}
@@ -477,7 +563,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
               <span className="text-xl font-extrabold sm:text-2xl" style={{ color: pagina.cor_primaria }}>
                 {card.valor}
               </span>
-              <span className="text-[10px] font-semibold tracking-wide uppercase sm:text-xs" style={{ color: pagina.cor_fonte }}>
+              <span className="text-[10px] font-semibold tracking-wide uppercase sm:text-[0.75em]" style={{ color: pagina.cor_fonte }}>
                 {card.label}
               </span>
             </div>
@@ -487,7 +573,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
       {contagem && !encerrada && (
         <div className="flex flex-col items-center gap-1">
-          <p className="text-xs" style={{ color: pagina.cor_fonte }}>
+          <p className="text-[0.75em]" style={{ color: pagina.cor_fonte }}>
             Inscrições encerram em
           </p>
           <div className="flex gap-3 text-center">
@@ -516,19 +602,20 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
           {tela === 0 && (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="nome" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em]" htmlFor="nome" style={{ color: pagina.cor_fonte }}>
                   Nome completo
                 </Label>
                 <Input
                   id="nome"
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
+                  className={escalaTexto}
                   style={{ color: pagina.cor_fonte }}
                   required
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="whatsapp" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em]" htmlFor="whatsapp" style={{ color: pagina.cor_fonte }}>
                   WhatsApp
                 </Label>
                 <Input
@@ -537,12 +624,13 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                   placeholder="(11) 99999-9999"
                   value={whatsapp}
                   onChange={(event) => setWhatsapp(event.target.value)}
+                  className={escalaTexto}
                   style={{ color: pagina.cor_fonte }}
                   required
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="idade" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em]" htmlFor="idade" style={{ color: pagina.cor_fonte }}>
                   Idade
                 </Label>
                 <Input
@@ -551,13 +639,14 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                   min="1"
                   value={idade}
                   onChange={(event) => setIdade(event.target.value)}
+                  className={escalaTexto}
                   style={{ color: pagina.cor_fonte }}
                   required
                 />
               </div>
               {pagina.coletar_email && (
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="email" style={{ color: pagina.cor_fonte }}>
+                  <Label className="text-[1em]" htmlFor="email" style={{ color: pagina.cor_fonte }}>
                     Email
                   </Label>
                   <Input
@@ -565,13 +654,14 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
+                    className={escalaTexto}
                     style={{ color: pagina.cor_fonte }}
                     required
                   />
                 </div>
               )}
               <div className="flex flex-col gap-2">
-                <Label htmlFor="estado" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em]" htmlFor="estado" style={{ color: pagina.cor_fonte }}>
                   Estado
                 </Label>
                 <SelectNativo
@@ -582,22 +672,26 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                   corPrimaria={pagina.cor_primaria}
                   corFundo={pagina.cor_fundo}
                   corFonte={pagina.cor_fonte}
-                  onChange={setEstado}
+                  onChange={escolherEstado}
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
-                  Cidade
+                <Label className="text-[1em]" htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
+                  Município
                 </Label>
-                <Input
+                <SelectNativo
                   id="cidade"
-                  value={cidade}
-                  onChange={(event) => setCidade(event.target.value)}
-                  style={{ color: pagina.cor_fonte }}
-                  required={pagina.coletar_cidade}
+                  valor={cidadeValida ? cidade : ""}
+                  opcoes={municipios.map((municipio) => ({ valor: municipio, texto: municipio }))}
+                  placeholder={estado ? "Selecione o município" : "Selecione o estado primeiro"}
+                  corPrimaria={pagina.cor_primaria}
+                  corFundo={pagina.cor_fundo}
+                  corFonte={pagina.cor_fonte}
+                  disabled={!estado}
+                  onChange={setCidade}
                 />
               </div>
-              <Button type="button" disabled={!podeAvancarDadosBasicos()} style={{ backgroundColor: pagina.cor_primaria }} onClick={avancar}>
+              <Button type="button" className={escalaTexto} disabled={!podeAvancarDadosBasicos()} style={{ backgroundColor: pagina.cor_primaria }} onClick={avancar}>
                 Continuar para a Etapa 2
               </Button>
             </div>
@@ -610,7 +704,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                   {etapaAtual.titulo}
                 </p>
                 {etapaAtual.descricao && (
-                  <p className="text-sm" style={{ color: pagina.cor_fonte }}>
+                  <p className="text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                     {etapaAtual.descricao}
                   </p>
                 )}
@@ -618,7 +712,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
               {etapaAtual.questoes.map((questao) => (
                 <div key={questao.id} className="flex flex-col gap-2">
-                  <Label style={{ color: pagina.cor_fonte }}>{questao.pergunta}</Label>
+                  <Label className="text-[1em]" style={{ color: pagina.cor_fonte }}>{questao.pergunta}</Label>
                   <QuestaoCampo
                     questao={questao}
                     valor={respostas[questao.id]}
@@ -645,7 +739,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                 </Button>
                 <Button
                   type="button"
-                  className="flex-1"
+                  className={`flex-1 ${escalaTexto}`}
                   disabled={!podeAvancarEtapa(etapaAtual)}
                   style={{ backgroundColor: pagina.cor_primaria }}
                   onClick={avancar}
@@ -663,12 +757,12 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                   <p className="font-medium" style={{ color: pagina.cor_fonte }}>
                     {confirmacao.titulo || CONFIRMACAO_TITULO_PADRAO}
                   </p>
-                  <p className="text-sm" style={{ color: pagina.cor_fonte }}>
+                  <p className="text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                     {confirmacao.texto_resumo || CONFIRMACAO_TEXTO_RESUMO_PADRAO}
                   </p>
                 </div>
               )}
-              <div className="flex flex-col gap-1 text-sm" style={{ color: pagina.cor_fonte }}>
+              <div className="flex flex-col gap-1 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                 <p>👤 {nome}</p>
                 <p>📱 {whatsapp}</p>
               </div>
@@ -677,7 +771,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                 <>
                   {/* Os dois aceites são obrigatórios e nunca entram no rascunho
                       (localStorage) — consentimento tem que ser dado de novo. */}
-                  <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                  <label className="flex items-start gap-2 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                     <input
                       type="checkbox"
                       checked={aceiteDeclaracao}
@@ -686,7 +780,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                     />
                     {confirmacao.texto_declaracao || CONFIRMACAO_TEXTO_DECLARACAO_PADRAO}
                   </label>
-                  <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                  <label className="flex items-start gap-2 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                     <input
                       type="checkbox"
                       checked={aceiteLgpd}
@@ -699,13 +793,13 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
               ) : (
                 <>
                   {pagina.mostrar_lgpd && (
-                    <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                    <label className="flex items-start gap-2 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                       <input type="checkbox" checked={aceiteLgpd} onChange={(event) => setAceiteLgpd(event.target.checked)} className="mt-0.5" />
                       {pagina.texto_lgpd || "Autorizo o tratamento dos meus dados pessoais conforme a LGPD."}
                     </label>
                   )}
                   {pagina.mostrar_declaracao && (
-                    <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                    <label className="flex items-start gap-2 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                       <input type="checkbox" checked={aceiteDeclaracao} onChange={(event) => setAceiteDeclaracao(event.target.checked)} className="mt-0.5" />
                       {pagina.texto_declaracao || "Declaro ter interesse real nesta oportunidade."}
                     </label>
@@ -714,7 +808,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
               )}
 
               {error && (
-                <p role="alert" className="text-sm text-red-400">
+                <p role="alert" className="text-[0.875em] text-red-400">
                   {error}
                 </p>
               )}
@@ -723,7 +817,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
                 <Button type="button" variant="outline" onClick={voltar} disabled={isPending}>
                   Voltar
                 </Button>
-                <Button type="button" className="flex-1" disabled={!podeEnviar() || isPending} style={{ backgroundColor: pagina.cor_primaria }} onClick={handleEnviar}>
+                <Button type="button" className={`flex-1 ${escalaTexto}`} disabled={!podeEnviar() || isPending} style={{ backgroundColor: pagina.cor_primaria }} onClick={handleEnviar}>
                   {isPending ? "Enviando..." : "Enviar minha inscrição"}
                 </Button>
               </div>
@@ -732,7 +826,7 @@ export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: Cam
 
           {/* Rodapé de todas as telas: "Etapa X de Y" + barra proporcional (cor_primaria). */}
           <div className="flex flex-col gap-1.5 pt-2">
-            <p className="text-xs font-medium" style={{ color: pagina.cor_fonte }}>
+            <p className="text-[0.75em] font-medium" style={{ color: pagina.cor_fonte }}>
               Etapa {tela + 1} de {totalTelas}
             </p>
             <div
