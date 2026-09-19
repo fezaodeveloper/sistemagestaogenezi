@@ -5,6 +5,30 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { termoIlike } from "@/lib/busca";
 import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
+import { escapeHtml, formatarDataTelegram, formatarReaisTelegram, sendTelegram } from "@/lib/telegram";
+
+// Avisa no Telegram que uma cobrança foi gerada no Asaas. Best-effort: nunca
+// lança nem altera o resultado de gerarCobranca (a cobrança já existe no Asaas
+// e foi gravada na parcela quando isto é chamado).
+async function notificarCobrancaGerada(dados: {
+  aluno: string;
+  valor: string;
+  vencimento: string;
+  link: string | null | undefined;
+}): Promise<void> {
+  try {
+    const linhas = [
+      "💰 <b>Nova cobrança gerada no Asaas:</b>",
+      `👤 Aluno: ${escapeHtml(dados.aluno)}`,
+      `💵 Valor: ${escapeHtml(dados.valor)}`,
+      `📅 Vencimento: ${escapeHtml(dados.vencimento)}`,
+    ];
+    if (dados.link) linhas.push(`🔗 Link: ${escapeHtml(dados.link)}`);
+    await sendTelegram(linhas.join("\n"));
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+}
 import { onlyDigits } from "@/lib/alunos/schema";
 import {
   criarClienteAsaas,
@@ -378,6 +402,16 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
         ),
       );
 
+      // Parcelamento: uma única mensagem resumindo as N cobranças geradas
+      // (link = o da 1ª parcela).
+      const primeiraParcela = [...parcelasAsaas].sort((a, b) => a.installmentNumber - b.installmentNumber)[0];
+      await notificarCobrancaGerada({
+        aluno: nomeAluno,
+        valor: `${formatarReaisTelegram(parcela.matriculas.valor_final)} (${numParcelas}x de ${formatarReaisTelegram(Number(parcela.matriculas.valor_final) / numParcelas)})`,
+        vencimento: `${formatarDataTelegram(parcela.matriculas.data_primeira_mensalidade)} (1ª parcela)`,
+        link: primeiraParcela?.invoiceUrl,
+      });
+
       revalidatePath("/admin/financeiro");
       return { success: true };
     }
@@ -402,6 +436,13 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
       .eq("id", parcelaId);
 
     if (error) return { error: "Cobrança criada no Asaas, mas não foi possível salvar na parcela." };
+
+    await notificarCobrancaGerada({
+      aluno: nomeAluno,
+      valor: formatarReaisTelegram(parcela.valor),
+      vencimento: formatarDataTelegram(parcela.data_vencimento),
+      link: cobranca.invoiceUrl,
+    });
 
     revalidatePath("/admin/financeiro");
     return { success: true };

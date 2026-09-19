@@ -2,6 +2,8 @@ import "server-only";
 
 import { enviarAlertaTelegram } from "@/lib/telegram/client";
 import { enviarPushAdmin } from "@/lib/push/enviar";
+import { dataComDiaSemana } from "@/lib/datas/util";
+import { escapeHtml, sendTelegram } from "@/lib/telegram";
 
 const LINK_FINANCEIRO = "https://sistemagestaogenezi.vercel.app/admin/financeiro";
 const LINK_LEADS = "https://sistemagestaogenezi.vercel.app/admin/leads";
@@ -394,7 +396,8 @@ export async function notificarAgendamentoCriado(payload: Record<string, unknown
     [
       `👤 ${texto(payload.nome)}`,
       `📱 WhatsApp: ${texto(payload.whatsapp)}`,
-      `📅 ${formatarData(payload.data_agendada)} às ${texto(payload.horario)}`,
+      // Dia da semana por extenso antes da data: "Quarta-feira, 25/09/2026".
+      `📅 ${dataComDiaSemana(payload.data_agendada)} às ${texto(payload.horario)}`,
       `📋 Página: ${texto(payload.titulo_pagina)}`,
     ],
     "📅",
@@ -407,6 +410,27 @@ export async function notificarLembretesAgendamentosResumo(payload: Record<strin
     [`📅 ${texto(payload.quantidade)} agendamento(s) para amanhã`],
     "📅",
   );
+}
+
+// ===== Aviso de presença (cron aviso-presenca) =====
+
+const LINK_TURMAS = "https://sistemagestaogenezi.vercel.app/admin/turmas";
+
+// Uma hora depois do início da aula, avisa que a presença ainda precisa ser
+// marcada. Lança se o Telegram recusar a mensagem — o motor registra o evento
+// como falho no log de automações (senão a falha ficaria invisível).
+export async function notificarAvisoPresenca(payload: Record<string, unknown>): Promise<boolean> {
+  const mensagem = [
+    "⚠️ <b>Marcar presença:</b>",
+    `📚 Turma: ${escapeHtml(texto(payload.turma_nome))}`,
+    `🕐 Aula iniciou às: ${escapeHtml(texto(payload.horario_inicio))}`,
+    `👥 Alunos: ${escapeHtml(payload.alunos_ativos ?? "—")}`,
+    `🔗 Acesse: ${LINK_TURMAS}/${escapeHtml(texto(payload.turma_id))}`,
+  ].join("\n");
+
+  const enviada = await sendTelegram(mensagem);
+  if (!enviada) throw new Error("O Telegram não aceitou a mensagem de aviso de presença.");
+  return true;
 }
 
 // ===== Construtor de páginas de campanha (roadmap, item 1) =====
