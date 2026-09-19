@@ -13,6 +13,41 @@ export async function getAcessosRemotos(): Promise<AcessoRemoto[]> {
   return (data as AcessoRemoto[] | null) ?? [];
 }
 
+// ===== Balão flutuante de acesso remoto (usado durante as aulas) =====
+
+// Só o necessário pra listar/buscar — a senha NUNCA vai nesta lista.
+export type AcessoRemotoResumo = { id: string; nome_pc: string; login: string };
+
+// PCs ativos (id, nome, login), pro balão filtrar em tempo real no navegador.
+export async function listarAcessosRemotosParaBalao(): Promise<AcessoRemotoResumo[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("acesso_remoto")
+    .select("id, nome_pc, login")
+    .eq("ativo", true)
+    .order("nome_pc")
+    .limit(500);
+  return (data as AcessoRemotoResumo[] | null) ?? [];
+}
+
+// A senha só é buscada quando o admin escolhe um PC no balão — nunca vai em
+// massa pra todas as páginas do painel.
+export async function getSenhaAcessoRemoto(id: string): Promise<{ senha: string } | { error: string }> {
+  await requireRole("admin");
+
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return { error: "PC inválido." };
+  }
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("acesso_remoto").select("senha").eq("id", id).eq("ativo", true).maybeSingle();
+
+  if (!data) return { error: "PC não encontrado." };
+  return { senha: data.senha as string };
+}
+
 export type AcessoRemotoActionResult = { success: true } | { error: string };
 
 function parseAcessoRemotoForm(formData: FormData) {

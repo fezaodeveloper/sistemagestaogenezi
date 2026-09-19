@@ -7,6 +7,7 @@ import { getPendencias } from "@/app/admin/pendencias/actions";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { SinoNotificacoes } from "@/components/admin/sino-notificacoes";
 import { BuscaGlobal } from "@/components/admin/busca-global";
+import { BalaoAcessoRemoto } from "@/components/admin/balao-acesso-remoto";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -53,6 +54,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           <div className="flex-1 p-6">{children}</div>
         </SidebarInset>
       </SidebarProvider>
+      {/* Balão flutuante de acesso remoto (fixo, só no painel admin). */}
+      <BalaoAcessoRemoto />
     </div>
   );
 }
