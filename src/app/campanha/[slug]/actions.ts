@@ -8,6 +8,7 @@ import {
   campanhaRespostaPublicaSchema,
   RESPOSTA_CHAVE_DECLARACAO,
   RESPOSTA_CHAVE_LGPD,
+  type RespostaValor,
 } from "@/lib/campanha-paginas/schema";
 
 export type EnviarRespostaResultado = { success: true } | { error: string };
@@ -46,10 +47,19 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     return { error: "Página de campanha não encontrada." };
   }
 
-  if (pagina.mostrar_lgpd && !aceiteLgpd) {
+  // getCampanhaPaginaPublica também devolve páginas "encerrada" (pra exibir o
+  // banner) — o envio precisa recusar explicitamente.
+  if (pagina.status === "encerrada") {
+    return { error: "As inscrições para esta campanha já encerraram." };
+  }
+
+  // Com etapa de confirmação, os dois aceites são obrigatórios (ignora os
+  // toggles da aba Termos, que valem só pra tela final padrão).
+  const exigeAmbosAceites = pagina.etapas.some((etapa) => etapa.tipo === "confirmacao");
+  if ((exigeAmbosAceites || pagina.mostrar_lgpd) && !aceiteLgpd) {
     return { error: "É preciso concordar com o tratamento dos seus dados (LGPD)." };
   }
-  if (pagina.mostrar_declaracao && !aceiteDeclaracao) {
+  if ((exigeAmbosAceites || pagina.mostrar_declaracao) && !aceiteDeclaracao) {
     return { error: "É preciso confirmar a declaração de interesse." };
   }
 
@@ -72,7 +82,7 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     }
   }
 
-  const respostasCompletas: Record<string, string | boolean> = {
+  const respostasCompletas: Record<string, RespostaValor> = {
     ...parsed.data.respostas,
     [RESPOSTA_CHAVE_LGPD]: aceiteLgpd,
     [RESPOSTA_CHAVE_DECLARACAO]: aceiteDeclaracao,

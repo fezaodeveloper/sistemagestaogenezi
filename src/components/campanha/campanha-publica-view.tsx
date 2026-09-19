@@ -2,7 +2,18 @@
 
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { enviarRespostaCampanha } from "@/app/campanha/[slug]/actions";
-import { UFS_BRASIL, type CampanhaPagina, type Etapa, type Questao } from "@/lib/campanha-paginas/schema";
+import {
+  CONFIRMACAO_TEXTO_DECLARACAO_PADRAO,
+  CONFIRMACAO_TEXTO_LGPD,
+  CONFIRMACAO_TEXTO_RESUMO_PADRAO,
+  CONFIRMACAO_TITULO_PADRAO,
+  UFS_BRASIL,
+  tipoQuestaoEfetivo,
+  type CampanhaPagina,
+  type Etapa,
+  type Questao,
+  type RespostaValor,
+} from "@/lib/campanha-paginas/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,9 +33,12 @@ function calcularContagem(dataFimISO: string): Contagem {
   };
 }
 
-function respostaPreenchida(questao: Questao, valor: string | boolean | undefined): boolean {
+function respostaPreenchida(questao: Questao, valor: RespostaValor | undefined): boolean {
   if (!questao.obrigatoria) return true;
-  if (questao.tipo === "checkbox") return valor === true;
+  const tipo = tipoQuestaoEfetivo(questao);
+  if (tipo === "checkbox_unico") return valor === true;
+  // Grupo de checkboxes: obrigatória = pelo menos uma opção marcada.
+  if (tipo === "checkbox") return Array.isArray(valor) && valor.length > 0;
   return typeof valor === "string" && valor.trim().length > 0;
 }
 
@@ -47,7 +61,7 @@ type Rascunho = {
   email: string;
   estado: string;
   cidade: string;
-  respostas: Record<string, string | boolean>;
+  respostas: Record<string, RespostaValor>;
 };
 
 // Lê o rascunho do localStorage validando o formato campo a campo — o valor
@@ -61,10 +75,11 @@ function lerRascunho(chave: string): Partial<Rascunho> | null {
     if (typeof dados !== "object" || dados === null) return null;
     const d = dados as Record<string, unknown>;
     const texto = (v: unknown) => (typeof v === "string" ? v : undefined);
-    const respostas: Record<string, string | boolean> = {};
+    const respostas: Record<string, RespostaValor> = {};
     if (typeof d.respostas === "object" && d.respostas !== null) {
       for (const [k, v] of Object.entries(d.respostas)) {
         if (typeof v === "string" || typeof v === "boolean") respostas[k] = v;
+        else if (Array.isArray(v) && v.every((item) => typeof item === "string")) respostas[k] = v as string[];
       }
     }
     return {
@@ -132,13 +147,15 @@ function QuestaoCampo({
   onResponder,
 }: {
   questao: Questao;
-  valor: string | boolean | undefined;
+  valor: RespostaValor | undefined;
   corPrimaria: string;
   corFundo: string;
   corFonte: string;
-  onResponder: (valor: string | boolean) => void;
+  onResponder: (valor: RespostaValor) => void;
 }) {
-  if (questao.tipo === "multipla_escolha") {
+  const tipo = tipoQuestaoEfetivo(questao);
+
+  if (tipo === "multipla_escolha") {
     return (
       <div className="flex flex-col gap-2">
         {(questao.opcoes ?? []).map((opcao) => {
@@ -177,7 +194,53 @@ function QuestaoCampo({
     );
   }
 
-  if (questao.tipo === "checkbox") {
+  // Grupo de checkboxes: várias opções marcáveis; o valor é o array das
+  // letras marcadas (na ordem das opções). Mesmo visual dos cards A/B/C/D.
+  if (tipo === "checkbox") {
+    const opcoes = questao.opcoes ?? [];
+    const marcadas = Array.isArray(valor) ? valor : [];
+    return (
+      <div className="flex flex-col gap-2">
+        {opcoes.map((opcao) => {
+          const marcada = marcadas.includes(opcao.letra);
+          const corTexto = marcada ? corFundo : corFonte;
+          return (
+            <button
+              key={opcao.letra}
+              type="button"
+              role="checkbox"
+              aria-checked={marcada}
+              onClick={() => {
+                const proximas = marcada ? marcadas.filter((l) => l !== opcao.letra) : [...marcadas, opcao.letra];
+                onResponder(opcoes.filter((o) => proximas.includes(o.letra)).map((o) => o.letra));
+              }}
+              style={{
+                borderWidth: 2,
+                borderStyle: "solid",
+                borderColor: corPrimaria,
+                backgroundColor: marcada ? corPrimaria : hexParaRgba(corFundo, 0.3),
+                color: corTexto,
+              }}
+              className="flex items-center gap-3 rounded-md p-3 text-left text-sm transition-colors"
+            >
+              <span
+                className="flex size-5 shrink-0 items-center justify-center rounded border-2 text-xs font-bold"
+                style={{ color: marcada ? corFundo : corPrimaria, borderColor: marcada ? corFundo : corPrimaria }}
+              >
+                {marcada ? "✓" : ""}
+              </span>
+              <span style={{ color: corTexto }}>
+                {opcao.letra}. {opcao.texto}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Checkbox único (um "Sim") — o tipo "checkbox" antigo.
+  if (tipo === "checkbox_unico") {
     return (
       <label className="flex items-center gap-2 text-sm" style={{ color: corFonte }}>
         <input type="checkbox" checked={valor === true} onChange={(event) => onResponder(event.target.checked)} />
@@ -186,7 +249,7 @@ function QuestaoCampo({
     );
   }
 
-  if (questao.tipo === "select") {
+  if (tipo === "select") {
     return (
       <SelectNativo
         valor={typeof valor === "string" ? valor : ""}
@@ -210,7 +273,7 @@ function QuestaoCampo({
   );
 }
 
-export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
+export function CampanhaPublicaView({ pagina, encerrada = false }: { pagina: CampanhaPagina; encerrada?: boolean }) {
   const escuro = pagina.tema === "escuro";
   const corCard = escuro ? "#1e293b" : "#f1f5f9";
   // QuestaoCampo recebe cor_fundo/cor_fonte/cor_primaria como props diretas
@@ -220,8 +283,14 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   // de sucesso e dígitos do contador), sem necessidade de prop.
   const style = { "--cor-primaria": pagina.cor_primaria } as CSSProperties;
 
-  // Telas: 0 = dados básicos, 1..N = etapas configuradas, N+1 = termos/envio.
-  const totalTelas = 1 + pagina.etapas.length + 1;
+  // Etapa de confirmação (opcional, sempre a última): substitui a tela final
+  // padrão de termos/envio. As demais ("perguntas") viram as telas 1..N.
+  const confirmacao = pagina.etapas.find((etapa) => etapa.tipo === "confirmacao") ?? null;
+  const etapasPergunta = pagina.etapas.filter((etapa) => etapa.tipo !== "confirmacao");
+  const cardsDestaque = pagina.cards_destaque ?? [];
+
+  // Telas: 0 = dados básicos, 1..N = etapas de perguntas, N+1 = confirmação/envio.
+  const totalTelas = 1 + etapasPergunta.length + 1;
   const [tela, setTela] = useState(0);
 
   const [nome, setNome] = useState("");
@@ -230,7 +299,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   const [email, setEmail] = useState("");
   const [estado, setEstado] = useState("");
   const [cidade, setCidade] = useState("");
-  const [respostas, setRespostas] = useState<Record<string, string | boolean>>({});
+  const [respostas, setRespostas] = useState<Record<string, RespostaValor>>({});
   const [aceiteLgpd, setAceiteLgpd] = useState(false);
   const [aceiteDeclaracao, setAceiteDeclaracao] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,7 +354,7 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
     return () => clearInterval(intervalo);
   }, [pagina.mostrar_contador, pagina.contador_data_fim]);
 
-  function responderQuestao(questaoId: string, valor: string | boolean) {
+  function responderQuestao(questaoId: string, valor: RespostaValor) {
     setRespostas((prev) => ({ ...prev, [questaoId]: valor }));
   }
 
@@ -314,6 +383,9 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
   }
 
   function podeEnviar(): boolean {
+    // Com etapa de confirmação os DOIS aceites são obrigatórios (independente
+    // dos toggles da aba Termos, que valem só pra tela final padrão).
+    if (confirmacao) return aceiteLgpd && aceiteDeclaracao;
     return (!pagina.mostrar_lgpd || aceiteLgpd) && (!pagina.mostrar_declaracao || aceiteDeclaracao);
   }
 
@@ -359,11 +431,18 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
     );
   }
 
-  const etapaAtual = tela >= 1 && tela <= pagina.etapas.length ? pagina.etapas[tela - 1] : null;
+  const etapaAtual = tela >= 1 && tela <= etapasPergunta.length ? etapasPergunta[tela - 1] : null;
   const naEtapaFinal = tela === totalTelas - 1;
 
   return (
     <div style={style} className="flex flex-col gap-6">
+      {encerrada && (
+        <div role="alert" className="flex flex-col items-center gap-1 rounded-lg bg-red-600 px-4 py-3 text-center text-white">
+          <p className="text-lg font-bold">Inscrições encerradas!</p>
+          <p className="text-sm opacity-90">Essa campanha não está mais recebendo inscrições.</p>
+        </div>
+      )}
+
       <div className="flex flex-col items-center gap-3 text-center">
         {pagina.logo_url && (
           // eslint-disable-next-line @next/next/no-img-element -- logo vem do Storage do próprio projeto
@@ -384,7 +463,29 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
         )}
       </div>
 
-      {contagem && (
+      {cardsDestaque.length > 0 && (
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cardsDestaque.length}, minmax(0, 1fr))` }}>
+          {cardsDestaque.map((card, indice) => (
+            <div
+              key={`${card.valor}-${indice}`}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-3 text-center"
+              style={{
+                backgroundColor: hexParaRgba(pagina.cor_primaria, 0.12),
+                border: `1px solid ${hexParaRgba(pagina.cor_primaria, 0.4)}`,
+              }}
+            >
+              <span className="text-xl font-extrabold sm:text-2xl" style={{ color: pagina.cor_primaria }}>
+                {card.valor}
+              </span>
+              <span className="text-[10px] font-semibold tracking-wide uppercase sm:text-xs" style={{ color: pagina.cor_fonte }}>
+                {card.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {contagem && !encerrada && (
         <div className="flex flex-col items-center gap-1">
           <p className="text-xs" style={{ color: pagina.cor_fonte }}>
             Inscrições encerram em
@@ -409,12 +510,9 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
         </div>
       )}
 
+      {!encerrada && (
       <Card style={{ backgroundColor: corCard, borderColor: "transparent" }}>
         <CardContent className="flex flex-col gap-4">
-          <p className="text-xs font-medium" style={{ color: pagina.cor_fonte }}>
-            Etapa {tela + 1} de {totalTelas}
-          </p>
-
           {tela === 0 && (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
@@ -560,22 +658,59 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
 
           {naEtapaFinal && (
             <div className="flex flex-col gap-4">
+              {confirmacao && (
+                <div className="flex flex-col gap-1">
+                  <p className="font-medium" style={{ color: pagina.cor_fonte }}>
+                    {confirmacao.titulo || CONFIRMACAO_TITULO_PADRAO}
+                  </p>
+                  <p className="text-sm" style={{ color: pagina.cor_fonte }}>
+                    {confirmacao.texto_resumo || CONFIRMACAO_TEXTO_RESUMO_PADRAO}
+                  </p>
+                </div>
+              )}
               <div className="flex flex-col gap-1 text-sm" style={{ color: pagina.cor_fonte }}>
                 <p>👤 {nome}</p>
                 <p>📱 {whatsapp}</p>
               </div>
 
-              {pagina.mostrar_lgpd && (
-                <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
-                  <input type="checkbox" checked={aceiteLgpd} onChange={(event) => setAceiteLgpd(event.target.checked)} className="mt-0.5" />
-                  {pagina.texto_lgpd || "Autorizo o tratamento dos meus dados pessoais conforme a LGPD."}
-                </label>
-              )}
-              {pagina.mostrar_declaracao && (
-                <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
-                  <input type="checkbox" checked={aceiteDeclaracao} onChange={(event) => setAceiteDeclaracao(event.target.checked)} className="mt-0.5" />
-                  {pagina.texto_declaracao || "Declaro ter interesse real nesta oportunidade."}
-                </label>
+              {confirmacao ? (
+                <>
+                  {/* Os dois aceites são obrigatórios e nunca entram no rascunho
+                      (localStorage) — consentimento tem que ser dado de novo. */}
+                  <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                    <input
+                      type="checkbox"
+                      checked={aceiteDeclaracao}
+                      onChange={(event) => setAceiteDeclaracao(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    {confirmacao.texto_declaracao || CONFIRMACAO_TEXTO_DECLARACAO_PADRAO}
+                  </label>
+                  <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                    <input
+                      type="checkbox"
+                      checked={aceiteLgpd}
+                      onChange={(event) => setAceiteLgpd(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    {CONFIRMACAO_TEXTO_LGPD}
+                  </label>
+                </>
+              ) : (
+                <>
+                  {pagina.mostrar_lgpd && (
+                    <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                      <input type="checkbox" checked={aceiteLgpd} onChange={(event) => setAceiteLgpd(event.target.checked)} className="mt-0.5" />
+                      {pagina.texto_lgpd || "Autorizo o tratamento dos meus dados pessoais conforme a LGPD."}
+                    </label>
+                  )}
+                  {pagina.mostrar_declaracao && (
+                    <label className="flex items-start gap-2 text-sm" style={{ color: pagina.cor_fonte }}>
+                      <input type="checkbox" checked={aceiteDeclaracao} onChange={(event) => setAceiteDeclaracao(event.target.checked)} className="mt-0.5" />
+                      {pagina.texto_declaracao || "Declaro ter interesse real nesta oportunidade."}
+                    </label>
+                  )}
+                </>
               )}
 
               {error && (
@@ -594,8 +729,30 @@ export function CampanhaPublicaView({ pagina }: { pagina: CampanhaPagina }) {
               </div>
             </div>
           )}
+
+          {/* Rodapé de todas as telas: "Etapa X de Y" + barra proporcional (cor_primaria). */}
+          <div className="flex flex-col gap-1.5 pt-2">
+            <p className="text-xs font-medium" style={{ color: pagina.cor_fonte }}>
+              Etapa {tela + 1} de {totalTelas}
+            </p>
+            <div
+              role="progressbar"
+              aria-label={`Etapa ${tela + 1} de ${totalTelas}`}
+              aria-valuemin={1}
+              aria-valuemax={totalTelas}
+              aria-valuenow={tela + 1}
+              className="h-2 w-full overflow-hidden rounded-full"
+              style={{ backgroundColor: hexParaRgba(pagina.cor_fonte, 0.2) }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{ width: `${((tela + 1) / totalTelas) * 100}%`, backgroundColor: pagina.cor_primaria }}
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

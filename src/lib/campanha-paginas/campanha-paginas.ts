@@ -54,6 +54,12 @@ export async function getCampanhaPagina(supabase: SupabaseServerClient, id: stri
 // `.eq("status", "ativa")` abaixo já garante que só página ativa é
 // retornada, então bypassar a RLS não abre nada que a policy não abriria de
 // qualquer forma.
+//
+// Devolve páginas "ativa" E "encerrada": a encerrada continua visível (com o
+// banner "Inscrições encerradas!" e o formulário bloqueado) em vez de virar
+// 404 — quem tem o link de uma campanha que acabou vê o aviso, não uma página
+// de erro. "inativa" continua sendo 404. Quem envia resposta precisa checar
+// status === "encerrada" (ver enviarRespostaCampanha).
 export async function getCampanhaPaginaPublica(
   admin: SupabaseAdminClient,
   slug: string,
@@ -62,7 +68,7 @@ export async function getCampanhaPaginaPublica(
     .from("campanha_paginas")
     .select("*")
     .eq("slug", slug)
-    .eq("status", "ativa")
+    .in("status", ["ativa", "encerrada"])
     .maybeSingle();
   return data as CampanhaPagina | null;
 }

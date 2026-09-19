@@ -43,6 +43,7 @@ export async function getCampanhaPagina(id: string): Promise<CampanhaPagina | nu
 
 function parseCampanhaPaginaForm(formData: FormData) {
   const etapasRaw = formData.get("etapas");
+  const cardsRaw = formData.get("cards_destaque");
 
   return campanhaPaginaFormSchema.safeParse({
     titulo: formData.get("titulo"),
@@ -64,6 +65,7 @@ function parseCampanhaPaginaForm(formData: FormData) {
     contador_data_fim: formData.get("contador_data_fim") || undefined,
     coletar_email: formData.get("coletar_email") === "true",
     coletar_cidade: formData.get("coletar_cidade") === "true",
+    cards_destaque: cardsRaw ? JSON.parse(String(cardsRaw)) : [],
     etapas: etapasRaw ? JSON.parse(String(etapasRaw)) : [],
     mostrar_lgpd: formData.get("mostrar_lgpd") === "true",
     texto_lgpd: formData.get("texto_lgpd") || undefined,
@@ -106,6 +108,7 @@ export async function criarCampanhaPagina(formData: FormData): Promise<{ error?:
       contador_data_fim: parsed.data.contador_data_fim ?? null,
       coletar_email: parsed.data.coletar_email,
       coletar_cidade: parsed.data.coletar_cidade,
+      cards_destaque: parsed.data.cards_destaque,
       etapas: parsed.data.etapas,
       mostrar_lgpd: parsed.data.mostrar_lgpd,
       texto_lgpd: parsed.data.texto_lgpd ?? null,
@@ -162,6 +165,7 @@ export async function atualizarCampanhaPagina(id: string, formData: FormData): P
       contador_data_fim: parsed.data.contador_data_fim ?? null,
       coletar_email: parsed.data.coletar_email,
       coletar_cidade: parsed.data.coletar_cidade,
+      cards_destaque: parsed.data.cards_destaque,
       etapas: parsed.data.etapas,
       mostrar_lgpd: parsed.data.mostrar_lgpd,
       texto_lgpd: parsed.data.texto_lgpd ?? null,
@@ -216,6 +220,7 @@ export async function duplicarCampanhaPagina(id: string): Promise<{ error?: stri
       contador_data_fim: original.contador_data_fim,
       coletar_email: original.coletar_email,
       coletar_cidade: original.coletar_cidade,
+      cards_destaque: original.cards_destaque,
       etapas: original.etapas,
       mostrar_lgpd: original.mostrar_lgpd,
       texto_lgpd: original.texto_lgpd,

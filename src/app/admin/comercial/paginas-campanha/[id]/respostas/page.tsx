@@ -34,8 +34,8 @@ export default async function CampanhaRespostasPage({
       <CampanhaRespostasView
         paginaId={id}
         etapas={pagina.etapas}
-        mostrarLgpd={pagina.mostrar_lgpd}
-        mostrarDeclaracao={pagina.mostrar_declaracao}
+        mostrarLgpd={pagina.mostrar_lgpd || pagina.etapas.some((etapa) => etapa.tipo === "confirmacao")}
+        mostrarDeclaracao={pagina.mostrar_declaracao || pagina.etapas.some((etapa) => etapa.tipo === "confirmacao")}
         respostas={resultado.itens}
         totalRegistros={resultado.total}
         paginaAtual={paginaAtual}

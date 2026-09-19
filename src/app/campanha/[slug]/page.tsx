@@ -21,7 +21,7 @@ export default async function CampanhaPage({ params }: { params: Promise<{ slug:
   const pagina = await getCampanhaPaginaPublica(admin, slug);
   if (!pagina) notFound();
 
-  const encerrada = pagina.status === "encerrada" || (pagina.data_fim && new Date() > new Date(pagina.data_fim));
+  const encerrada = pagina.status === "encerrada" || !!(pagina.data_fim && new Date() > new Date(pagina.data_fim));
 
   const totalRespostas = pagina.vagas_limite ? await contarRespostasAdmin(admin, pagina.id) : 0;
   const vagasEsgotadas = !!pagina.vagas_limite && totalRespostas >= pagina.vagas_limite;
@@ -34,11 +34,11 @@ export default async function CampanhaPage({ params }: { params: Promise<{ slug:
       style={{ backgroundColor: pagina.cor_fundo, color: escuro ? "#f8fafc" : "#0f172a" }}
     >
       <div className="flex w-full max-w-lg flex-col gap-6 py-6">
+        {/* Encerrada: a própria view mostra o banner vermelho "Inscrições
+            encerradas!" no topo e bloqueia o formulário (o cabeçalho, com título e
+            cards, continua visível). */}
         {encerrada ? (
-          <div className="flex flex-col items-center gap-2 py-20 text-center">
-            <p className="text-xl font-semibold">Inscrições encerradas</p>
-            <p className="text-sm opacity-70">Essa campanha não está mais recebendo inscrições.</p>
-          </div>
+          <CampanhaPublicaView pagina={pagina} encerrada />
         ) : vagasEsgotadas ? (
           <div className="flex flex-col items-center gap-2 py-20 text-center">
             <p className="text-xl font-semibold">Vagas esgotadas</p>

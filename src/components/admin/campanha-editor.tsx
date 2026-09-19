@@ -14,9 +14,16 @@ import {
   CAMPANHA_PAGINA_STATUSES,
   CAMPANHA_PAGINA_STATUS_LABELS,
   CAMPANHA_TEMAS,
+  CARDS_DESTAQUE_MAXIMO,
+  CONFIRMACAO_TEXTO_DECLARACAO_PADRAO,
+  CONFIRMACAO_TEXTO_LGPD,
+  CONFIRMACAO_TEXTO_RESUMO_PADRAO,
+  CONFIRMACAO_TITULO_PADRAO,
   QUESTAO_TIPOS,
   QUESTAO_TIPO_LABELS,
+  tipoQuestaoEfetivo,
   type CampanhaPagina,
+  type CardDestaque,
   type CampanhaPaginaStatus,
   type CampanhaTema,
   type Etapa,
@@ -46,6 +53,17 @@ function slugify(texto: string): string {
 
 function novaQuestao(): Questao {
   return { id: `q${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`, tipo: "texto", pergunta: "", obrigatoria: true, opcoes: [] };
+}
+
+// Etapas vindas do banco podem não ter `tipo` (cadastradas antes da etapa de
+// confirmação) e questões "checkbox" sem opções são o checkbox único antigo —
+// normaliza pra o editor trabalhar sempre com o modelo novo.
+function normalizarEtapas(etapas: Etapa[] | undefined): Etapa[] {
+  return (etapas ?? []).map((etapa) => ({
+    ...etapa,
+    tipo: etapa.tipo ?? "perguntas",
+    questoes: (etapa.questoes ?? []).map((questao) => ({ ...questao, tipo: tipoQuestaoEfetivo(questao) })),
+  }));
 }
 
 // A, B, ... Z, AA, AB, ... — sem limite de opções (letra ganha mais um
@@ -148,7 +166,7 @@ function QuestaoEditor({
         </div>
       </div>
 
-      {(questao.tipo === "multipla_escolha" || questao.tipo === "select") && (
+      {(questao.tipo === "multipla_escolha" || questao.tipo === "select" || questao.tipo === "checkbox") && (
         <div className="flex flex-col gap-1.5 pl-2">
           {opcoes.map((opcao, index) => (
             <div key={index} className="flex items-center gap-2">
@@ -201,6 +219,60 @@ function EtapaEditor({
     const copia = [...etapa.questoes];
     [copia[index], copia[novoIndex]] = [copia[novoIndex], copia[index]];
     onChange({ questoes: copia });
+  }
+
+  // Etapa de confirmação (final): sem perguntas — só o texto de resumo e o
+  // texto da declaração de interesse. O texto da LGPD é fixo, e os dois
+  // checkboxes são sempre obrigatórios na página pública.
+  if (etapa.tipo === "confirmacao") {
+    return (
+      <Card className="border-primary/40">
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span className="bg-primary/10 text-primary rounded px-2 py-0.5 text-xs font-medium">
+              Etapa de confirmação (final)
+            </span>
+            <Button type="button" variant="ghost" size="icon-sm" className="text-destructive ml-auto" onClick={onRemover} aria-label="Remover etapa de confirmação">
+              <X className="size-3.5" />
+            </Button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Título</Label>
+            <Input
+              value={etapa.titulo}
+              onChange={(event) => onChange({ titulo: event.target.value })}
+              placeholder={CONFIRMACAO_TITULO_PADRAO}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Texto resumo</Label>
+            <Textarea
+              value={etapa.texto_resumo ?? ""}
+              onChange={(event) => onChange({ texto_resumo: event.target.value })}
+              placeholder={CONFIRMACAO_TEXTO_RESUMO_PADRAO}
+              rows={2}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Declaração de interesse (texto do checkbox)</Label>
+            <Textarea
+              value={etapa.texto_declaracao ?? ""}
+              onChange={(event) => onChange({ texto_declaracao: event.target.value })}
+              placeholder={CONFIRMACAO_TEXTO_DECLARACAO_PADRAO}
+              rows={2}
+            />
+          </div>
+          <div className="bg-muted/50 text-muted-foreground rounded-md p-2.5 text-xs">
+            <p className="text-foreground mb-1 font-medium">Autorização LGPD (texto fixo)</p>
+            <p>{CONFIRMACAO_TEXTO_LGPD}</p>
+            <p className="mt-1.5">
+              Os dois checkboxes são obrigatórios: o botão de envio só é liberado com ambos marcados. Esta etapa
+              substitui a tela final padrão e fica sempre por último.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -299,7 +371,8 @@ export function CampanhaEditor({
   const logoInputRef = useRef<HTMLInputElement>(null);
   const imagemTopoInputRef = useRef<HTMLInputElement>(null);
 
-  const [etapas, setEtapas] = useState<Etapa[]>(pagina?.etapas ?? []);
+  const [etapas, setEtapas] = useState<Etapa[]>(() => normalizarEtapas(pagina?.etapas));
+  const [cardsDestaque, setCardsDestaque] = useState<CardDestaque[]>(pagina?.cards_destaque ?? []);
 
   const [mostrarLgpd, setMostrarLgpd] = useState(pagina?.mostrar_lgpd ?? true);
   const [textoLgpd, setTextoLgpd] = useState(pagina?.texto_lgpd ?? "");
@@ -313,6 +386,7 @@ export function CampanhaEditor({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const temConfirmacao = etapas.some((etapa) => etapa.tipo === "confirmacao");
   const cursoItems = Object.fromEntries([["", "Nenhum"], ...cursos.map((c) => [c.id, c.nome])]);
 
   function handleTituloChange(valor: string) {
@@ -362,8 +436,34 @@ export function CampanhaEditor({
     }
   }
 
+  // Etapa de perguntas nova entra ANTES da confirmação, que é sempre a última.
   function adicionarEtapa() {
-    setEtapas((prev) => [...prev, { titulo: "Nova etapa", descricao: "", questoes: [] }]);
+    setEtapas((prev) => {
+      const nova: Etapa = { tipo: "perguntas", titulo: "Nova etapa", descricao: "", questoes: [] };
+      const indiceConfirmacao = prev.findIndex((etapa) => etapa.tipo === "confirmacao");
+      if (indiceConfirmacao === -1) return [...prev, nova];
+      return [...prev.slice(0, indiceConfirmacao), nova, ...prev.slice(indiceConfirmacao)];
+    });
+  }
+
+  function adicionarEtapaConfirmacao() {
+    setEtapas((prev) => {
+      if (prev.some((etapa) => etapa.tipo === "confirmacao")) return prev;
+      return [
+        ...prev,
+        {
+          tipo: "confirmacao",
+          titulo: CONFIRMACAO_TITULO_PADRAO,
+          texto_resumo: CONFIRMACAO_TEXTO_RESUMO_PADRAO,
+          texto_declaracao: CONFIRMACAO_TEXTO_DECLARACAO_PADRAO,
+          questoes: [],
+        },
+      ];
+    });
+  }
+
+  function atualizarCard(index: number, dados: Partial<CardDestaque>) {
+    setCardsDestaque((prev) => prev.map((card, i) => (i === index ? { ...card, ...dados } : card)));
   }
 
   function atualizarEtapa(index: number, dados: Partial<Etapa>) {
@@ -377,6 +477,8 @@ export function CampanhaEditor({
   function moverEtapa(index: number, direcao: -1 | 1) {
     const novoIndex = index + direcao;
     if (novoIndex < 0 || novoIndex >= etapas.length) return;
+    // A etapa de confirmação não sai do fim, e nenhuma outra passa dela.
+    if (etapas[index].tipo === "confirmacao" || etapas[novoIndex].tipo === "confirmacao") return;
     setEtapas((prev) => {
       const copia = [...prev];
       [copia[index], copia[novoIndex]] = [copia[novoIndex], copia[index]];
@@ -386,6 +488,18 @@ export function CampanhaEditor({
 
   function handleSubmit(formData: FormData) {
     setError(null);
+
+    // "checkbox" sem nenhuma opção seria lido pela página pública como o
+    // checkbox único antigo — exige pelo menos uma opção pra não virar isso sem querer.
+    const checkboxSemOpcoes = etapas
+      .flatMap((etapa) => etapa.questoes)
+      .find((questao) => questao.tipo === "checkbox" && !(questao.opcoes && questao.opcoes.length > 0));
+    if (checkboxSemOpcoes) {
+      setError(
+        `A pergunta "${checkboxSemOpcoes.pergunta || "(sem texto)"}" é um checkbox com várias opções e precisa de pelo menos uma opção. Para um "Sim" único use "Checkbox único".`,
+      );
+      return;
+    }
     // O editor é organizado em abas (Tabs do Base UI) e cada TabsContent
     // desmonta de verdade (return null) quando não é a aba ativa —
     // keepMounted é false por padrão (ver node_modules/@base-ui/react/tabs/panel/TabsPanel.js).
@@ -414,6 +528,7 @@ export function CampanhaEditor({
     formData.set("contador_data_fim", contadorDataFim);
     formData.set("coletar_email", String(coletarEmail));
     formData.set("coletar_cidade", String(coletarCidade));
+    formData.set("cards_destaque", JSON.stringify(cardsDestaque));
     formData.set("etapas", JSON.stringify(etapas));
     formData.set("mostrar_lgpd", String(mostrarLgpd));
     formData.set("texto_lgpd", textoLgpd);
@@ -632,6 +747,51 @@ export function CampanhaEditor({
                     </div>
 
                     <div className="flex flex-col gap-2">
+                      <Label>Cards de destaque (até {CARDS_DESTAQUE_MAXIMO})</Label>
+                      <p className="text-muted-foreground text-xs">
+                        Aparecem abaixo do título, antes das etapas. Ex.: valor &quot;50%&quot; e rótulo &quot;DESCONTO&quot;.
+                      </p>
+                      {cardsDestaque.map((card, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            value={card.valor}
+                            maxLength={20}
+                            placeholder="Valor (50%)"
+                            className="w-28"
+                            onChange={(event) => atualizarCard(index, { valor: event.target.value })}
+                          />
+                          <Input
+                            value={card.label}
+                            maxLength={40}
+                            placeholder="Rótulo (DESCONTO)"
+                            className="flex-1"
+                            onChange={(event) => atualizarCard(index, { label: event.target.value })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setCardsDestaque((prev) => prev.filter((_, i) => i !== index))}
+                            aria-label="Remover card"
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                      {cardsDestaque.length < CARDS_DESTAQUE_MAXIMO && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-fit"
+                          onClick={() => setCardsDestaque((prev) => [...prev, { valor: "", label: "" }])}
+                        >
+                          <Plus className="size-3.5" />
+                          Adicionar card
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
                       <Label>Logo</Label>
                       <input ref={logoInputRef} type="file" accept={CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS.join(",")} onChange={(e) => handleUploadImagem(e, setLogoUrl, setEnviandoLogo)} className="hidden" />
                       <div className="flex items-center gap-3">
@@ -676,20 +836,39 @@ export function CampanhaEditor({
                       etapa={etapa}
                       onChange={(dados) => atualizarEtapa(index, dados)}
                       onRemover={() => removerEtapa(index)}
-                      onMoverCima={index > 0 ? () => moverEtapa(index, -1) : undefined}
-                      onMoverBaixo={index < etapas.length - 1 ? () => moverEtapa(index, 1) : undefined}
+                      onMoverCima={index > 0 && etapa.tipo !== "confirmacao" ? () => moverEtapa(index, -1) : undefined}
+                      onMoverBaixo={
+                        index < etapas.length - 1 && etapa.tipo !== "confirmacao" && etapas[index + 1].tipo !== "confirmacao"
+                          ? () => moverEtapa(index, 1)
+                          : undefined
+                      }
                     />
                   ))}
-                  <Button type="button" variant="outline" className="w-fit" onClick={adicionarEtapa}>
-                    <Plus />
-                    Adicionar etapa
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" className="w-fit" onClick={adicionarEtapa}>
+                      <Plus />
+                      Adicionar etapa
+                    </Button>
+                    {!temConfirmacao && (
+                      <Button type="button" variant="outline" className="w-fit" onClick={adicionarEtapaConfirmacao}>
+                        <Plus />
+                        Adicionar etapa de confirmação
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="termos">
                 <Card>
                   <CardContent className="flex flex-col gap-4">
+                    {temConfirmacao && (
+                      <p className="bg-muted/50 text-muted-foreground rounded-md p-2.5 text-xs">
+                        Esta campanha tem uma <strong>etapa de confirmação</strong>: ela substitui a tela final padrão e
+                        exige sempre os dois aceites (declaração de interesse e LGPD). As opções abaixo só valem quando
+                        não há etapa de confirmação.
+                      </p>
+                    )}
                     <div className="flex items-center justify-between gap-4">
                       <Label className="font-normal">Mostrar autorização LGPD</Label>
                       <Switch checked={mostrarLgpd} onCheckedChange={setMostrarLgpd} />

@@ -6,6 +6,7 @@ import { Download, Eye } from "lucide-react";
 import {
   RESPOSTA_CHAVE_DECLARACAO,
   RESPOSTA_CHAVE_LGPD,
+  formatarRespostaCampanha,
   type CampanhaResposta,
   type Etapa,
 } from "@/lib/campanha-paginas/schema";
@@ -59,7 +60,7 @@ function RespostaCompletaDialog({
               {Array.from(perguntaPorId.entries()).map(([id, pergunta]) => (
                 <div key={id}>
                   <p className="text-muted-foreground text-xs">{pergunta}</p>
-                  <p>{String(resposta.respostas?.[id] ?? "—")}</p>
+                  <p>{formatarRespostaCampanha(resposta.respostas?.[id])}</p>
                 </div>
               ))}
             </div>

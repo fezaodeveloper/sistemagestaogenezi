@@ -3,7 +3,12 @@ import * as XLSX from "xlsx";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getCampanhaPagina } from "@/lib/campanha-paginas/campanha-paginas";
-import { RESPOSTA_CHAVE_DECLARACAO, RESPOSTA_CHAVE_LGPD, type CampanhaResposta } from "@/lib/campanha-paginas/schema";
+import {
+  RESPOSTA_CHAVE_DECLARACAO,
+  RESPOSTA_CHAVE_LGPD,
+  formatarRespostaCampanha,
+  type CampanhaResposta,
+} from "@/lib/campanha-paginas/schema";
 
 // Mesmo padrão de export server-side (SheetJS) do backup geral do sistema —
 // ver src/app/admin/configuracoes/backup/route.ts.
@@ -32,6 +37,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
   }
 
+  // A etapa de confirmação registra os dois aceites mesmo com os toggles da
+  // aba Termos desligados.
+  const temConfirmacao = pagina.etapas.some((etapa) => etapa.tipo === "confirmacao");
+
   const linhas = respostas.map((resposta) => {
     const linha: Record<string, unknown> = {
       Nome: resposta.nome,
@@ -44,11 +53,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     };
 
     for (const [questaoId, pergunta] of perguntaPorId) {
-      linha[pergunta] = resposta.respostas?.[questaoId] ?? "";
+      linha[pergunta] = formatarRespostaCampanha(resposta.respostas?.[questaoId]);
     }
 
-    if (pagina.mostrar_lgpd) linha["Aceite LGPD"] = resposta.respostas?.[RESPOSTA_CHAVE_LGPD] ? "Sim" : "Não";
-    if (pagina.mostrar_declaracao) linha["Aceite Declaração"] = resposta.respostas?.[RESPOSTA_CHAVE_DECLARACAO] ? "Sim" : "Não";
+    if (pagina.mostrar_lgpd || temConfirmacao) linha["Aceite LGPD"] = resposta.respostas?.[RESPOSTA_CHAVE_LGPD] ? "Sim" : "Não";
+    if (pagina.mostrar_declaracao || temConfirmacao) linha["Aceite Declaração"] = resposta.respostas?.[RESPOSTA_CHAVE_DECLARACAO] ? "Sim" : "Não";
 
     return linha;
   });
