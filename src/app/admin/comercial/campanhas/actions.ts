@@ -47,6 +47,20 @@ export async function getCampanhas(options?: {
 
 export type CampanhaActionResult = { success: true } | { error: string };
 
+// Mensagem de erro do UPDATE com o motivo técnico (código + texto do Postgres)
+// e log no servidor. Só admin chega aqui, então mostrar o motivo real na tela
+// é seguro — e é o que permite descobrir POR QUE um update falhou (ex.:
+// "42501 permission denied for table campanhas_marketing") em vez de um
+// "não foi possível salvar" genérico.
+function erroDeUpdate(mensagem: string, contexto: string, erro: { code?: string; message?: string } | null): string {
+  if (!erro) {
+    console.error(`[campanhas] ${contexto}: UPDATE não atingiu nenhuma linha (RLS/permissão ou id inexistente)`);
+    return `${mensagem} (nenhuma linha foi atualizada — verifique as permissões da tabela)`;
+  }
+  console.error(`[campanhas] ${contexto}:`, { code: erro.code, message: erro.message });
+  return `${mensagem} (${erro.code ?? "erro"}: ${erro.message ?? "sem detalhe"})`;
+}
+
 function parseCampanhaForm(formData: FormData) {
   let links: unknown = [];
   let tags: unknown = [];
@@ -148,7 +162,7 @@ export async function atualizarCampanha(id: string, formData: FormData): Promise
     .select("id");
 
   if (error || !data?.length) {
-    return { error: "Não foi possível salvar as alterações. Tente novamente." };
+    return { error: erroDeUpdate("Não foi possível salvar as alterações.", `atualizarCampanha ${id}`, error) };
   }
 
   revalidatePath("/admin/comercial/campanhas");
@@ -173,7 +187,13 @@ export async function alternarStatusCampanha(id: string, ativa: boolean): Promis
     .select("id, status");
 
   if (error || !data?.length || data[0].status !== novoStatus) {
-    return { error: "Não foi possível alterar o status da campanha." };
+    return {
+      error: erroDeUpdate(
+        "Não foi possível alterar o status da campanha.",
+        `alternarStatusCampanha ${id} -> ${novoStatus}`,
+        error,
+      ),
+    };
   }
 
   revalidatePath("/admin/comercial/campanhas");

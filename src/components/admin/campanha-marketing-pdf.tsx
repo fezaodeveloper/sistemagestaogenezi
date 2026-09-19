@@ -50,6 +50,8 @@ export function CampanhaMarketingPdf({
   geradoEm: string;
 }) {
   const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
+  const links = campanha.links ?? [];
+  const meta = campanha.meta_alunos ?? null;
 
   return (
     <Document>
@@ -64,7 +66,7 @@ export function CampanhaMarketingPdf({
         <View style={pdfStyles.section}>
           <Text style={pdfStyles.sectionTitle}>Resumo</Text>
           <Linha label="Status" value={CAMPANHA_STATUS_LABELS[campanha.status]} />
-          <Linha label="Meta de alunos" value={campanha.meta_alunos !== null ? String(campanha.meta_alunos) : "—"} />
+          <Linha label="Meta de alunos" value={meta !== null ? String(meta) : "—"} />
         </View>
 
         <View style={pdfStyles.section}>
@@ -85,10 +87,10 @@ export function CampanhaMarketingPdf({
 
         <View style={pdfStyles.section}>
           <Text style={pdfStyles.sectionTitle}>Links</Text>
-          {campanha.links.length === 0 ? (
+          {links.length === 0 ? (
             <Text style={pdfStyles.vazio}>Nenhum link cadastrado.</Text>
           ) : (
-            campanha.links.map((link, indice) => (
+            links.map((link, indice) => (
               <View key={`${link.url}-${indice}`} style={pdfStyles.linkLinha}>
                 <Text style={pdfStyles.linkRotulo}>{link.label}</Text>
                 <Link src={link.url} style={pdfStyles.linkUrl}>

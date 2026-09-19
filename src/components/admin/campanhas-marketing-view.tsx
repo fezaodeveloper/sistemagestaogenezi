@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { useOptimistic, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, ExternalLink, Eye, FileDown, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
@@ -528,9 +528,21 @@ function ExcluirCampanhaButton({ campanha, onExcluida }: { campanha: CampanhaMar
   );
 }
 
-function CampanhaDetalhesDialog({ campanha }: { campanha: CampanhaMarketing }) {
+function CampanhaDetalhesDialog({
+  campanha,
+  open,
+  onOpenChange,
+}: {
+  campanha: CampanhaMarketing;
+  open: boolean;
+  onOpenChange: (aberto: boolean) => void;
+}) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [erroPdf, setErroPdf] = useState<string | null>(null);
+  // Guardas: links pode vir null do banco (coluna nullable) e meta_alunos vem
+  // undefined se a coluna ainda não existir — nenhum dos dois pode quebrar a tela.
+  const links = campanha.links ?? [];
+  const meta = campanha.meta_alunos ?? null;
   const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
   const periodo = periodoCampanha(campanha);
 
@@ -562,15 +574,13 @@ function CampanhaDetalhesDialog({ campanha }: { campanha: CampanhaMarketing }) {
   }
 
   return (
-    <Dialog onOpenChange={(aberto) => aberto && setErroPdf(null)}>
-      <DialogTrigger
-        render={
-          <Button type="button" variant="ghost" size="sm">
-            <Eye />
-            Ver detalhes
-          </Button>
-        }
-      />
+    <Dialog
+      open={open}
+      onOpenChange={(aberto) => {
+        onOpenChange(aberto);
+        if (aberto) setErroPdf(null);
+      }}
+    >
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-2 pr-8">
@@ -594,7 +604,7 @@ function CampanhaDetalhesDialog({ campanha }: { campanha: CampanhaMarketing }) {
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Meta de alunos</p>
-              <p>{campanha.meta_alunos !== null ? campanha.meta_alunos : "—"}</p>
+              <p>{meta !== null ? meta : "—"}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Orçamento tráfego</p>
@@ -624,11 +634,11 @@ function CampanhaDetalhesDialog({ campanha }: { campanha: CampanhaMarketing }) {
 
           <div>
             <p className="text-muted-foreground mb-1 text-xs">Links</p>
-            {campanha.links.length === 0 ? (
+            {links.length === 0 ? (
               <p>—</p>
             ) : (
               <ul className="flex flex-col gap-1">
-                {campanha.links.map((link, indice) => (
+                {links.map((link, indice) => (
                   <li key={`${link.url}-${indice}`}>
                     <a
                       href={link.url}
@@ -686,53 +696,83 @@ function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaMarketing; onMu
   const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
   const periodo = periodoCampanha(campanha);
   const [erro, setErro] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [detalhesAberto, setDetalhesAberto] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const meta = campanha.meta_alunos ?? null;
 
-  // Liga/desliga otimista: o switch e o badge mudam na hora; se a Server
-  // Action falhar (ou o update não atingir nenhuma linha), o React descarta o
-  // estado otimista ao fim da transição e volta pro status real do banco.
-  const [statusVisivel, aplicarStatus] = useOptimistic(
-    campanha.status,
-    (_atual, novo: CampanhaStatus) => novo,
-  );
+  // Estado LOCAL do status: o switch e o badge mudam na hora, e só voltam atrás
+  // se a Server Action falhar. Não usa useOptimistic de propósito — ele descarta
+  // o valor otimista ao fim da transição e, se o refresh das props chegar um
+  // instante depois, o switch "piscava" de volta pro valor antigo (parecia que
+  // o clique não tinha efeito). Aqui o valor confirmado fica até a prop
+  // (campanha.status) refletir o banco.
+  const [statusLocal, setStatusLocal] = useState<CampanhaStatus>(campanha.status);
+  const [statusDaProp, setStatusDaProp] = useState<CampanhaStatus>(campanha.status);
+  if (campanha.status !== statusDaProp) {
+    // Ajuste de estado derivado durante o render: a prop mudou (refresh do
+    // servidor), então o banco é a fonte da verdade de novo.
+    setStatusDaProp(campanha.status);
+    setStatusLocal(campanha.status);
+  }
+  const statusVisivel = statusLocal;
 
   function handleToggle(ativa: boolean) {
+    const anterior = statusLocal;
     setErro(null);
+    setStatusLocal(ativa ? "ativa" : "inativa");
     startTransition(async () => {
-      aplicarStatus(ativa ? "ativa" : "inativa");
-      const resultado = await alternarStatusCampanha(campanha.id, ativa);
-      if ("error" in resultado) {
-        setErro(resultado.error);
-        return;
+      try {
+        const resultado = await alternarStatusCampanha(campanha.id, ativa);
+        if ("error" in resultado) {
+          setStatusLocal(anterior);
+          setErro(resultado.error);
+          return;
+        }
+        onMudou();
+      } catch (falha) {
+        console.error("[campanhas] falha ao alternar status:", falha);
+        setStatusLocal(anterior);
+        setErro("Não foi possível alterar o status da campanha. Tente novamente.");
       }
-      onMudou();
     });
   }
 
   return (
     <Card className="overflow-hidden pt-0">
-      {campanha.foto_url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
-        <img src={campanha.foto_url} alt={campanha.nome} className="h-36 w-full object-cover" />
-      ) : (
-        <div className="bg-muted flex h-36 w-full items-center justify-center text-4xl">📢</div>
-      )}
+      {/* Foto e nome abrem o detalhe da campanha (além do botão "Ver detalhes"). */}
+      <button
+        type="button"
+        onClick={() => setDetalhesAberto(true)}
+        aria-label={`Ver detalhes de ${campanha.nome}`}
+        className="block w-full cursor-pointer"
+      >
+        {campanha.foto_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+          <img src={campanha.foto_url} alt={campanha.nome} className="h-36 w-full object-cover" />
+        ) : (
+          <div className="bg-muted flex h-36 w-full items-center justify-center text-4xl">📢</div>
+        )}
+      </button>
       <CardContent className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-medium">{campanha.nome}</p>
+          <button
+            type="button"
+            onClick={() => setDetalhesAberto(true)}
+            className="cursor-pointer text-left font-medium hover:underline"
+          >
+            {campanha.nome}
+          </button>
           <Badge className={CAMPANHA_STATUS_BADGE_CLASS[statusVisivel]}>
             {CAMPANHA_STATUS_LABELS[statusVisivel]}
           </Badge>
         </div>
         {periodo && <p className="text-muted-foreground text-sm">{periodo}</p>}
-        {campanha.meta_alunos !== null && (
-          <p className="text-muted-foreground text-sm">Meta: {campanha.meta_alunos} aluno(s)</p>
-        )}
+        {meta !== null && <p className="text-muted-foreground text-sm">Meta: {meta} aluno(s)</p>}
         {orcamentoTotal > 0 && (
           <p className="text-muted-foreground text-sm">Orçamento total: {formatMoeda(orcamentoTotal)}</p>
         )}
         <label className="flex items-center gap-2 pt-1 text-sm">
-          <Switch checked={statusVisivel === "ativa"} onCheckedChange={handleToggle} />
+          <Switch checked={statusVisivel === "ativa"} onCheckedChange={handleToggle} disabled={isPending} />
           {statusVisivel === "ativa" ? "Ativa" : "Ativar campanha"}
         </label>
         {erro && (
@@ -741,7 +781,11 @@ function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaMarketing; onMu
           </p>
         )}
         <div className="flex items-center justify-between gap-1 pt-1">
-          <CampanhaDetalhesDialog campanha={campanha} />
+          <Button type="button" variant="ghost" size="sm" onClick={() => setDetalhesAberto(true)}>
+            <Eye />
+            Ver detalhes
+          </Button>
+          <CampanhaDetalhesDialog campanha={campanha} open={detalhesAberto} onOpenChange={setDetalhesAberto} />
           <div className="flex gap-1">
             <CampanhaDialog
               campanha={campanha}
