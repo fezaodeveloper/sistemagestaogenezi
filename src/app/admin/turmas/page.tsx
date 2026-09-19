@@ -8,6 +8,7 @@ import type { TurmaWithCurso } from "@/lib/turmas/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TurmasTable } from "@/components/admin/turmas-table";
+import { TurmasResumo, type TurmaResumoLinha } from "@/components/admin/turmas-resumo";
 
 const TURMAS_ORDER_BY_VALIDOS = ["nome", "recente", "inicio"] as const;
 export type TurmasOrderBy = (typeof TURMAS_ORDER_BY_VALIDOS)[number];
@@ -57,7 +58,16 @@ export default async function TurmasPage({
     query = query.order("nome", { ascending: true });
   }
 
-  const { data, error, count } = await query.range(offset, offset + limite - 1);
+  // Resumo do topo: turmas planejadas e ativas (as encerradas/canceladas não
+  // têm vagas "disponíveis" de verdade), independente de busca e paginação.
+  const [{ data, error, count }, { data: resumoData, error: resumoError }] = await Promise.all([
+    query.range(offset, offset + limite - 1),
+    supabase
+      .from("turmas")
+      .select("horario_aula, vagas_total, vagas_ocupadas")
+      .in("status", ["planejada", "ativa"])
+      .limit(1000),
+  ]);
   const turmas = data as TurmaWithCurso[] | null;
   const totalRegistros = count ?? 0;
   const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
@@ -68,6 +78,8 @@ export default async function TurmasPage({
         <h1 className="text-2xl font-semibold">Turmas</h1>
         <p className="text-muted-foreground text-sm">Turmas vinculadas aos cursos.</p>
       </div>
+
+      {!resumoError && <TurmasResumo turmas={(resumoData ?? []) as TurmaResumoLinha[]} />}
 
       {error ? (
         <Card>

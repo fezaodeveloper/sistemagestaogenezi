@@ -5,6 +5,7 @@ import { AlunoEditForm } from "@/components/admin/aluno-edit-form";
 import { MatriculasSection } from "@/components/admin/matriculas-section";
 import { LiberacoesManuaisSection } from "@/components/admin/liberacoes-manuais-section";
 import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
+import { AcessoPlataformaAluno } from "@/components/admin/acesso-plataforma-aluno";
 import { TrocarSenhaAlunoForm } from "@/components/admin/trocar-senha-aluno-form";
 import { VerificarConquistasButton } from "@/components/admin/verificar-conquistas-button";
 import { LimparFinanceiroAlunoButton } from "@/components/admin/limpar-financeiro-aluno-button";
@@ -175,9 +176,17 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
         liberacoes={liberacoesExistentes}
       />
       <HistoricoAlteracoesSection tabela="alunos" registroId={aluno.id} />
+      <Card>
+        <CardHeader>
+          <CardTitle>Acesso à plataforma</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AcessoPlataformaAluno alunoId={aluno.id} emailAtual={aluno.email} />
+        </CardContent>
+      </Card>
       <Card className="max-w-sm">
         <CardHeader>
-          <CardTitle>Redefinir senha</CardTitle>
+          <CardTitle>Redefinir senha (definir manualmente)</CardTitle>
         </CardHeader>
         <CardContent>
           <TrocarSenhaAlunoForm alunoId={aluno.id} />

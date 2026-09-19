@@ -1,9 +1,11 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { premioFormSchema } from "@/lib/premios/schema";
 import { uploadImagem, validarArquivoDigital, validarImagem } from "@/lib/storage/validar-imagem";
 import { dispararEvento } from "@/lib/automacoes/motor";
@@ -262,6 +264,75 @@ export async function updatePremio(
 
   revalidatePath("/admin/premios");
   redirect("/admin/premios");
+}
+
+// Copia um objeto do Storage pra um path novo. Necessário porque foto/arquivo
+// de entrega são APAGADOS junto com o prêmio (deletePremio e updatePremio):
+// se a cópia apontasse pro mesmo arquivo, excluir um dos dois quebraria o outro.
+async function copiarArquivoStorage(
+  bucket: string,
+  origem: string,
+): Promise<string | null> {
+  const extensao = origem.split(".").pop() || "bin";
+  const destino = `${randomUUID()}.${extensao}`;
+  // Client admin: o bucket público "premios" não tem policy de SELECT em
+  // storage.objects (a foto é servida por URL pública), e copy() precisa ler o
+  // objeto de origem — service_role bypassa essa RLS.
+  const { error } = await createAdminClient().storage.from(bucket).copy(origem, destino);
+  return error ? null : destino;
+}
+
+// Duplica o prêmio com TODOS os campos (inclusive foto e arquivo de entrega,
+// copiados no Storage) e "(cópia)" no nome. O cliente abre a cópia já em edição.
+export async function duplicarPremio(premioId: string): Promise<{ id: string } | { error: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data: premio } = await supabase.from("premios").select("*").eq("id", premioId).maybeSingle();
+  if (!premio) return { error: "Prêmio não encontrado." };
+
+  let fotoPath: string | null = null;
+  if (premio.foto_url) {
+    fotoPath = await copiarArquivoStorage(PREMIOS_BUCKET, premio.foto_url);
+    if (!fotoPath) return { error: "Não foi possível copiar a foto do prêmio. Tente novamente." };
+  }
+
+  let arquivoDigitalPath: string | null = null;
+  if (premio.entrega_arquivo_path) {
+    arquivoDigitalPath = await copiarArquivoStorage(PREMIOS_DIGITAIS_BUCKET, premio.entrega_arquivo_path);
+    if (!arquivoDigitalPath) {
+      if (fotoPath) await supabase.storage.from(PREMIOS_BUCKET).remove([fotoPath]);
+      return { error: "Não foi possível copiar o arquivo de entrega do prêmio. Tente novamente." };
+    }
+  }
+
+  const { data: novo, error } = await supabase
+    .from("premios")
+    .insert({
+      // 200 é o limite do nome no formulário; deixa espaço pro sufixo.
+      nome: `${String(premio.nome).slice(0, 192)} (cópia)`,
+      descricao: premio.descricao,
+      foto_url: fotoPath,
+      custo_creditos: premio.custo_creditos,
+      estoque: premio.estoque,
+      estoque_minimo: premio.estoque_minimo,
+      ativo: premio.ativo,
+      tipo: premio.tipo,
+      entrega_email_conteudo: premio.entrega_email_conteudo,
+      entrega_arquivo_path: arquivoDigitalPath,
+      entrega_whatsapp_mensagem: premio.entrega_whatsapp_mensagem,
+    })
+    .select("id")
+    .single();
+
+  if (error || !novo) {
+    if (fotoPath) await supabase.storage.from(PREMIOS_BUCKET).remove([fotoPath]);
+    if (arquivoDigitalPath) await supabase.storage.from(PREMIOS_DIGITAIS_BUCKET).remove([arquivoDigitalPath]);
+    return { error: "Não foi possível duplicar o prêmio." };
+  }
+
+  revalidatePath("/admin/premios");
+  return { id: novo.id };
 }
 
 export async function deletePremio(

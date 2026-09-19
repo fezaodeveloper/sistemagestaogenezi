@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeletePremioButton } from "@/components/admin/delete-premio-button";
+import { DuplicarPremioButton } from "@/components/admin/duplicar-premio-button";
 
 // "21/08/2026 às 14:32" — mesmo formato usado em outras telas do admin
 // (ver matriculas-table.tsx).
@@ -106,6 +107,7 @@ export default async function PremiosPage() {
                     >
                       Editar
                     </Button>
+                    <DuplicarPremioButton id={premio.id} nome={premio.nome} />
                     <DeletePremioButton
                       id={premio.id}
                       nome={premio.nome}

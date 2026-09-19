@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { AlertTriangle, Plus, UserCheck, UserX } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
@@ -7,6 +7,7 @@ import { normalizarBusca, parseBusca, somenteDigitos } from "@/lib/busca";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlunosTable, type AlunoListItem } from "@/components/admin/alunos-table";
+import { ResumoCard } from "@/components/admin/resumo-card";
 
 const ALUNOS_ORDER_BY_VALIDOS = ["nome", "recente", "risco"] as const;
 export type AlunosOrderBy = (typeof ALUNOS_ORDER_BY_VALIDOS)[number];
@@ -50,10 +51,33 @@ export default async function AlunosPage({
     alunosQuery = alunosQuery.range(offset, offset + limite - 1);
   }
 
-  const [{ data, error, count }, { data: indicesData }] = await Promise.all([
+  // Cards de resumo do topo: contagens globais (não seguem a busca/paginação).
+  // "Em risco" = índice de evasão ALTO (>= 70, mesma régua do badge da tabela)
+  // de alunos ativos — o índice vive em indices_evasao (não há coluna "risco"
+  // em alunos), com uma linha por matrícula, então conta alunos distintos.
+  const [{ data, error, count }, { data: indicesData }, ativosRes, inativosRes, totalRes, riscoRes] = await Promise.all([
     alunosQuery,
     supabase.from("indices_evasao").select("aluno_id, indice"),
+    supabase.from("alunos").select("id", { count: "exact", head: true }).eq("status_aluno", "ativo"),
+    supabase.from("alunos").select("id", { count: "exact", head: true }).eq("status_aluno", "inativo"),
+    supabase.from("alunos").select("id", { count: "exact", head: true }),
+    supabase
+      .from("indices_evasao")
+      .select("aluno_id, alunos!inner(status_aluno)")
+      .gte("indice", 70)
+      .eq("alunos.status_aluno", "ativo")
+      .limit(1000),
   ]);
+  const totalAtivos = ativosRes.error ? null : (ativosRes.count ?? 0);
+  const totalInativos = inativosRes.error ? null : (inativosRes.count ?? 0);
+  const totalAlunosGeral = totalRes.error ? null : (totalRes.count ?? 0);
+  const alunosEmRisco = riscoRes.error
+    ? null
+    : new Set((riscoRes.data ?? []).map((linha) => linha.aluno_id as string)).size;
+  const percentualRisco =
+    alunosEmRisco !== null && totalAtivos !== null && totalAtivos > 0
+      ? Math.round((alunosEmRisco / totalAtivos) * 100)
+      : null;
 
   // Um aluno pode ter mais de uma matrícula (logo mais de uma linha em
   // indices_evasao) — a tabela mostra o pior caso (maior índice) entre
@@ -115,6 +139,35 @@ export default async function AlunosPage({
       {criado === "1" && (
         <p className="text-muted-foreground text-sm">Aluno cadastrado com sucesso.</p>
       )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ResumoCard
+          label="Alunos ativos"
+          valor={totalAtivos ?? "—"}
+          sublabel={totalAlunosGeral !== null ? `de ${totalAlunosGeral} cadastrados` : undefined}
+          icon={UserCheck}
+          cor="green"
+        />
+        <ResumoCard label="Alunos inativos" valor={totalInativos ?? "—"} icon={UserX} cor="slate" />
+        <ResumoCard
+          label="Em risco de evasão"
+          valor={
+            alunosEmRisco === null ? (
+              "—"
+            ) : (
+              <>
+                {alunosEmRisco}
+                {percentualRisco !== null && (
+                  <span className="text-muted-foreground ml-2 text-base font-medium">{percentualRisco}%</span>
+                )}
+              </>
+            )
+          }
+          sublabel="risco alto (≥ 70) entre os ativos"
+          icon={AlertTriangle}
+          cor="red"
+        />
+      </div>
 
       {error ? (
         <Card>

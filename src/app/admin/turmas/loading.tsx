@@ -12,6 +12,13 @@ export default function TurmasLoading() {
         <Skeleton className="h-8 w-32" />
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-[88px] w-full rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-32 w-full rounded-xl" />
+
       <Card className="gap-0 overflow-hidden py-0">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex items-center gap-4 border-b p-4 last:border-b-0">

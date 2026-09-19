@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomInt } from "node:crypto";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -474,6 +476,122 @@ export async function trocarSenhaAluno(
   } catch {
     // Best-effort — ver comentário acima.
   }
+
+  return { success: true };
+}
+
+// ===== Acesso à plataforma: trocar e-mail e gerar nova senha =====
+
+// Sem caracteres ambíguos (0/O, 1/l/I) — a senha é lida pelo admin e ditada/
+// enviada ao aluno.
+const SENHA_LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
+const SENHA_DIGITOS = "23456789";
+
+// 8 caracteres (letras + números), com pelo menos uma letra e um dígito.
+// randomInt usa o CSPRNG do Node (não Math.random).
+function gerarSenhaAleatoria(): string {
+  const alfabeto = SENHA_LETRAS + SENHA_DIGITOS;
+  for (;;) {
+    let senha = "";
+    for (let i = 0; i < 8; i++) senha += alfabeto[randomInt(alfabeto.length)];
+    if (/[A-Za-z]/.test(senha) && /[0-9]/.test(senha)) return senha;
+  }
+}
+
+// Troca o e-mail de login SEM e-mail de confirmação (client admin +
+// email_confirm) — é o admin que garante o endereço. Mantém alunos.email em
+// sincronia com auth.users.
+export async function trocarEmailAluno(
+  alunoId: string,
+  novoEmail: string,
+): Promise<{ success: true; email: string } | { error: string }> {
+  const usuario = await requireRole("admin");
+
+  const parsed = z.email({ error: "Informe um e-mail válido." }).safeParse(novoEmail.trim().toLowerCase());
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "E-mail inválido." };
+  const email = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: aluno } = await admin.from("alunos").select("email").eq("id", alunoId).maybeSingle();
+  if (!aluno) return { error: "Aluno não encontrado." };
+  if (aluno.email.toLowerCase() === email) return { error: "Esse já é o e-mail atual do aluno." };
+
+  const { error: authError } = await admin.auth.admin.updateUserById(alunoId, { email, email_confirm: true });
+  if (authError) {
+    return {
+      error:
+        authError.code === "email_exists"
+          ? "Já existe uma conta com esse e-mail."
+          : "Não foi possível alterar o e-mail. Tente novamente.",
+    };
+  }
+
+  const { error: alunoError } = await admin.from("alunos").update({ email }).eq("id", alunoId);
+  if (alunoError) {
+    // Desfaz a troca no Auth pra não deixar login e cadastro divergentes.
+    await admin.auth.admin.updateUserById(alunoId, { email: aluno.email, email_confirm: true });
+    return { error: "Não foi possível alterar o e-mail. Tente novamente." };
+  }
+
+  await registrarAlteracao({
+    tabela: "alunos",
+    registroId: alunoId,
+    campo: "email",
+    valorAnterior: aluno.email,
+    valorNovo: email,
+    alteradoPor: usuario.id,
+  });
+
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return { success: true, email };
+}
+
+// Gera uma senha aleatória, aplica no Auth e DEVOLVE em texto pra o admin
+// copiar — é a única vez que ela existe em claro (não é gravada em lugar nenhum).
+export async function gerarNovaSenhaAluno(alunoId: string): Promise<{ success: true; senha: string } | { error: string }> {
+  await requireRole("admin");
+
+  const senha = gerarSenhaAleatoria();
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(alunoId, { password: senha });
+  if (error) return { error: "Não foi possível gerar a nova senha. Tente novamente." };
+
+  try {
+    const { data: aluno } = await admin.from("alunos").select("full_name").eq("id", alunoId).maybeSingle();
+    await dispararEvento(
+      "senha.trocada.admin",
+      { nome_aluno: aluno?.full_name ?? "—" },
+      `senha-trocada-admin-${alunoId}-${Date.now()}`,
+    );
+  } catch {
+    // Best-effort — a senha já foi trocada.
+  }
+
+  return { success: true, senha };
+}
+
+// Stub — a integração com a Evolution API (WhatsApp) virá depois; por ora só
+// monta a mensagem e registra no log do servidor.
+export async function enviarSenhaAlunoWhatsApp(
+  alunoId: string,
+  senha: string,
+): Promise<{ success: true } | { error: string }> {
+  await requireRole("admin");
+
+  const admin = createAdminClient();
+  const { data: aluno } = await admin.from("alunos").select("full_name, telefone, email").eq("id", alunoId).maybeSingle();
+  if (!aluno) return { error: "Aluno não encontrado." };
+
+  const mensagem = [
+    `Olá, ${aluno.full_name}!`,
+    "",
+    "Seus dados de acesso à plataforma GÊNEZI:",
+    `E-mail: ${aluno.email}`,
+    `Senha: ${senha}`,
+    "",
+    "Por segurança, altere a senha no seu primeiro acesso.",
+  ].join("\n");
+  console.log(`[whatsapp:stub] Enviaria para ${aluno.telefone}:\n${mensagem}`);
 
   return { success: true };
 }

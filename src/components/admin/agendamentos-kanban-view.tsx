@@ -3,9 +3,9 @@
 // "use client": drag-and-drop (eventos nativos do navegador), atualização
 // otimista de status e dialogs de confirmação.
 
-import { useOptimistic, useState, useTransition, type DragEvent } from "react";
+import { useEffect, useOptimistic, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { LayoutGrid, List, Trash2 } from "lucide-react";
 import {
   atualizarStatusAgendamento,
   excluirAgendamento,
@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +53,114 @@ const COLUNA_ITEMS: Record<string, string> = Object.fromEntries(COLUNAS.map((c) 
 function formatDateBR(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+// Preferência de visualização (Card/Lista): fica só neste navegador.
+type Visualizacao = "card" | "lista";
+const CHAVE_VISUALIZACAO = "agendamentos_visualizacao";
+
+function lerVisualizacao(): Visualizacao | null {
+  try {
+    const salva = localStorage.getItem(CHAVE_VISUALIZACAO);
+    return salva === "card" || salva === "lista" ? salva : null;
+  } catch {
+    return null; // localStorage indisponível (modo privado etc.) — cai no padrão.
+  }
+}
+
+function LinhaAgendamento({
+  agendamento,
+  camposExtrasConfigurados,
+  arrastando,
+  onMover,
+  onExcluir,
+  onReagendado,
+  onDragStart,
+  onDragEnd,
+}: {
+  agendamento: Agendamento;
+  camposExtrasConfigurados: CampoExtra[];
+  arrastando: boolean;
+  onMover: (status: StatusColuna) => void;
+  onExcluir: () => void;
+  onReagendado: () => void;
+  onDragStart: (event: DragEvent<HTMLTableRowElement>) => void;
+  onDragEnd: () => void;
+}) {
+  const camposExtras = camposExtrasConfigurados
+    .map((campo) => agendamento.campos_extras?.[campo.nome])
+    .filter(Boolean)
+    .join(" · ");
+  const tituloStatus = COLUNA_ITEMS[agendamento.status] ?? agendamento.status;
+
+  return (
+    <TableRow
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`cursor-grab active:cursor-grabbing ${arrastando ? "opacity-40" : ""}`}
+    >
+      <TableCell className="max-w-64 align-top">
+        <p className="font-medium">{agendamento.nome}</p>
+        {camposExtras && <p className="text-muted-foreground text-xs">{camposExtras}</p>}
+        {agendamento.mensagem && (
+          <p className="text-muted-foreground line-clamp-2 text-xs whitespace-normal" title={agendamento.mensagem}>
+            💬 {agendamento.mensagem}
+          </p>
+        )}
+      </TableCell>
+      <TableCell className="align-top">
+        <a
+          href={`https://wa.me/55${agendamento.whatsapp.replace(/\D/g, "")}`}
+          target="_blank"
+          rel="noreferrer"
+          className="hover:underline"
+        >
+          {agendamento.whatsapp}
+        </a>
+      </TableCell>
+      <TableCell className="align-top whitespace-nowrap">{formatDateBR(agendamento.data_agendada)}</TableCell>
+      <TableCell className="align-top">{agendamento.horario}</TableCell>
+      <TableCell className="align-top">
+        <Badge className={AGENDAMENTO_STATUS_BADGE_CLASS[agendamento.status]}>{tituloStatus}</Badge>
+      </TableCell>
+      <TableCell className="align-top">
+        <div className="flex items-center justify-end gap-2">
+          {agendamento.status === "faltou" && (
+            <AgendamentoReagendarDialog agendamento={agendamento} onReagendado={onReagendado} />
+          )}
+          {/* Alternativa ao arrastar (que não funciona em celular/tablet). */}
+          <Select
+            items={COLUNA_ITEMS}
+            value={agendamento.status}
+            onValueChange={(valor) => valor && onMover(valor as StatusColuna)}
+          >
+            <SelectTrigger className="h-8 w-32 text-xs" aria-label="Mover para">
+              <SelectValue placeholder="Mover para..." />
+            </SelectTrigger>
+            <SelectContent>
+              {COLUNAS.map((coluna) => (
+                <SelectItem key={coluna.status} value={coluna.status}>
+                  {coluna.titulo}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-destructive shrink-0"
+            onClick={onExcluir}
+            aria-label="Excluir agendamento"
+            title="Excluir agendamento"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 }
 
 function CardAgendamento({
@@ -177,6 +286,26 @@ export function AgendamentosKanbanView({
   const [colunaSobre, setColunaSobre] = useState<StatusColuna | null>(null);
   const [excluindo, setExcluindo] = useState<Agendamento | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [visualizacao, setVisualizacao] = useState<Visualizacao>("card");
+
+  // localStorage só existe no client: restaura a preferência em efeito (nunca
+  // no render inicial, senão o HTML do server diverge do client e dá hydration
+  // mismatch). O queueMicrotask evita setState síncrono no corpo do efeito.
+  useEffect(() => {
+    queueMicrotask(() => {
+      const salva = lerVisualizacao();
+      if (salva) setVisualizacao(salva);
+    });
+  }, []);
+
+  function escolherVisualizacao(nova: Visualizacao) {
+    setVisualizacao(nova);
+    try {
+      localStorage.setItem(CHAVE_VISUALIZACAO, nova);
+    } catch {
+      // Sem localStorage a preferência só vale até recarregar.
+    }
+  }
 
   // Atualização otimista: o card muda de coluna na hora, sem esperar a Server
   // Action. Se ela falhar, o React descarta o estado otimista sozinho ao fim
@@ -263,6 +392,28 @@ export function AgendamentosKanbanView({
           <span className="text-muted-foreground text-xs">Data</span>
           <Input type="date" value={data} onChange={(event) => handleDataChange(event.target.value)} className="w-40" />
         </div>
+        <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5" role="group" aria-label="Modo de visualização">
+          <Button
+            type="button"
+            size="sm"
+            variant={visualizacao === "card" ? "secondary" : "ghost"}
+            aria-pressed={visualizacao === "card"}
+            onClick={() => escolherVisualizacao("card")}
+          >
+            <LayoutGrid />
+            Card
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={visualizacao === "lista" ? "secondary" : "ghost"}
+            aria-pressed={visualizacao === "lista"}
+            onClick={() => escolherVisualizacao("lista")}
+          >
+            <List />
+            Lista
+          </Button>
+        </div>
       </div>
 
       {erro && (
@@ -279,6 +430,72 @@ export function AgendamentosKanbanView({
               : "Nenhum agendamento ainda para esta página."}
           </p>
         </Card>
+      ) : visualizacao === "lista" ? (
+        <div className="flex flex-col gap-3">
+          {/* Zonas de soltura: arrastar uma linha até um status o move (mesmo
+              efeito das colunas do Kanban). */}
+          <div className="grid grid-cols-3 gap-2">
+            {COLUNAS.map((coluna) => (
+              <div
+                key={coluna.status}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setColunaSobre(coluna.status);
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setColunaSobre(null);
+                }}
+                onDrop={(event) => handleDrop(event, coluna.status)}
+                className={`flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm transition-colors ${
+                  colunaSobre === coluna.status ? "bg-muted ring-primary/40 ring-2" : ""
+                } ${AGENDAMENTO_STATUS_BADGE_CLASS[coluna.status]}`}
+              >
+                <span className="font-semibold">{coluna.titulo}</span>
+                <Badge variant="outline" className="bg-background/60">
+                  {visiveis.filter((a) => a.status === coluna.status).length}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <p className="text-muted-foreground text-xs">Arraste uma linha até um status acima para movê-la.</p>
+          <Card className="overflow-hidden py-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>WhatsApp</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Horário</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visiveis.map((agendamento) => (
+                  <LinhaAgendamento
+                    key={agendamento.id}
+                    agendamento={agendamento}
+                    camposExtrasConfigurados={camposExtrasConfigurados}
+                    arrastando={arrastandoId === agendamento.id}
+                    onMover={(status) => mover(agendamento, status)}
+                    onExcluir={() => setExcluindo(agendamento)}
+                    onReagendado={() => router.refresh()}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData("text/plain", agendamento.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      setArrastandoId(agendamento.id);
+                    }}
+                    onDragEnd={() => {
+                      setArrastandoId(null);
+                      setColunaSobre(null);
+                    }}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {COLUNAS.map((coluna) => {
