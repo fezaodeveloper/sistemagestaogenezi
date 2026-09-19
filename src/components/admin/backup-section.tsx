@@ -28,9 +28,11 @@ function BackupDownloadSection() {
   const [baixandoJson, setBaixandoJson] = useState(false);
   const [baixandoExcel, setBaixandoExcel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   async function handleDownload(formato: "json" | "excel") {
     setError(null);
+    setAviso(null);
     const setBaixando = formato === "json" ? setBaixandoJson : setBaixandoExcel;
     setBaixando(true);
     try {
@@ -38,6 +40,13 @@ function BackupDownloadSection() {
       if (!response.ok) {
         setError("Não foi possível gerar o backup. Tente novamente.");
         return;
+      }
+      // A rota informa quantas tabelas falharam/foram cortadas.
+      const avisos = Number(response.headers.get("X-Backup-Avisos") ?? "0");
+      if (avisos > 0) {
+        setAviso(
+          `Atenção: o backup foi gerado, mas ${avisos} tabela(s) tiveram problema. Veja ${formato === "json" ? 'o campo "avisos"' : 'a aba "avisos"'} dentro do arquivo.`,
+        );
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -61,8 +70,9 @@ function BackupDownloadSection() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-muted-foreground text-sm">
-          Exporta alunos, matrículas, turmas, cursos, parcelas, presenças e leads num único
-          arquivo, no formato escolhido.
+          Exporta alunos, matrículas, turmas, cursos, parcelas, presenças, gastos, leads do CRM
+          (e as colunas do Kanban), agendamentos e suas páginas, campanhas de marketing, páginas
+          de campanha e respostas de campanha num único arquivo, no formato escolhido.
         </p>
         <div className="flex flex-wrap gap-3">
           <Button
@@ -89,6 +99,11 @@ function BackupDownloadSection() {
             {error}
           </p>
         )}
+        {aviso && (
+          <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">
+            {aviso}
+          </p>
+        )}
         <p className="text-muted-foreground text-xs">
           ⚠️ O backup inclui dados sensíveis. Armazene com segurança.
         </p>
@@ -101,6 +116,7 @@ export function BackupSection() {
   const [ultimoBackup, setUltimoBackup] = useState<string | null>(null);
   const [hidratado, setHidratado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Leitura de localStorage só depois de montado — mesmo motivo do padrão
@@ -120,6 +136,7 @@ export function BackupSection() {
 
   function handleGerarBackup() {
     setError(null);
+    setAviso(null);
     startTransition(async () => {
       const resultado = await gerarBackup();
       if ("error" in resultado) {
@@ -127,6 +144,11 @@ export function BackupSection() {
         return;
       }
 
+      if (resultado.data.avisos.length > 0) {
+        setAviso(
+          `Atenção: o backup foi gerado, mas ${resultado.data.avisos.length} tabela(s) tiveram problema. Veja o campo "avisos" dentro do arquivo.`,
+        );
+      }
       const conteudo = JSON.stringify(resultado.data, null, 2);
       const blob = new Blob([conteudo], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -153,7 +175,7 @@ export function BackupSection() {
       <Card className="max-w-xl">
         <CardContent className="flex flex-col gap-4 py-4">
           <p className="text-muted-foreground text-sm">
-            O backup exporta os dados principais do sistema em formato JSON. Recomendamos fazer
+            O backup exporta os dados principais do sistema (acadêmico, financeiro, CRM, agendamentos e campanhas) em formato JSON. Recomendamos fazer
             backup semanalmente e armazenar em local seguro.
           </p>
 
@@ -172,6 +194,11 @@ export function BackupSection() {
           {error && (
             <p role="alert" className="text-destructive text-sm">
               {error}
+            </p>
+          )}
+          {aviso && (
+            <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">
+              {aviso}
             </p>
           )}
 

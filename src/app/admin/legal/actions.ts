@@ -20,16 +20,20 @@ export async function salvarTermoLegal(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // .select("chave") pra saber quantas linhas o UPDATE atingiu: um update
+  // bloqueado por RLS/grant não devolve erro, só afeta 0 linhas — sem isto o
+  // editor mostraria "Salvo" sem ter salvado nada.
+  const { data, error } = await supabase
     .from("termos_legais")
     .update({
       conteudo,
       atualizado_em: new Date().toISOString(),
       atualizado_por: user.id,
     })
-    .eq("chave", chave);
+    .eq("chave", chave)
+    .select("chave");
 
-  if (error) {
+  if (error || !data?.length) {
     return { error: "Não foi possível salvar. Tente novamente." };
   }
 

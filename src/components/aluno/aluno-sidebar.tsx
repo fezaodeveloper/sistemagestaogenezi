@@ -174,21 +174,11 @@ export function AlunoSidebar({
       </SidebarContent>
       <SidebarFooter>
         <UserMenu user={user} />
-        <nav className="flex flex-wrap justify-center gap-x-1.5 gap-y-0.5 px-2 pb-1 text-[11px] text-muted-foreground/70">
-          <Link href="/aluno/legal/privacidade" className="hover:text-muted-foreground hover:underline">
-            Privacidade
-          </Link>
-          <span aria-hidden>·</span>
-          <Link href="/aluno/legal/termos" className="hover:text-muted-foreground hover:underline">
-            Termos
-          </Link>
-          <span aria-hidden>·</span>
-          <Link href="/aluno/legal/lgpd" className="hover:text-muted-foreground hover:underline">
-            LGPD
-          </Link>
-          <span aria-hidden>·</span>
-          <Link href="/aluno/legal/imagem" className="hover:text-muted-foreground hover:underline">
-            Uso de Imagem
+        {/* Um único ponto de entrada; o índice /aluno/legal lista os 4 documentos
+            (privacidade, termos, LGPD e uso de imagem). */}
+        <nav className="flex justify-center px-2 pb-1 text-[11px] text-muted-foreground/70">
+          <Link href="/aluno/legal" className="hover:text-muted-foreground hover:underline">
+            Termos e Privacidade
           </Link>
         </nav>
         <PushSubscribeAluno vapidPublicKey={vapidPublicKey} />

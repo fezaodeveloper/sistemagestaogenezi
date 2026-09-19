@@ -76,6 +76,27 @@ function somarValores(rows: { valor: number }[] | null): number {
   return (rows ?? []).reduce((total, row) => total + Number(row.valor), 0);
 }
 
+// Soma `valor` de uma consulta de parcelas paginando de 1000 em 1000: o
+// PostgREST devolve no máximo 1000 linhas por requisição, e sem paginar o KPI
+// ficaria silenciosamente truncado num mês com mais parcelas que isso.
+// `montar` recebe o intervalo e deve devolver a consulta JÁ ordenada por id
+// (ordem estável pra paginação por range).
+async function somarParcelas(
+  montar: (de: number, ate: number) => PromiseLike<{ data: { valor: number }[] | null }>,
+): Promise<{ total: number; quantidade: number }> {
+  const TAMANHO_PAGINA = 1000;
+  let total = 0;
+  let quantidade = 0;
+  for (let de = 0; ; de += TAMANHO_PAGINA) {
+    const { data } = await montar(de, de + TAMANHO_PAGINA - 1);
+    const linhas = data ?? [];
+    total += somarValores(linhas);
+    quantidade += linhas.length;
+    if (linhas.length < TAMANHO_PAGINA) break;
+  }
+  return { total, quantidade };
+}
+
 export async function getFinanceiroDados(
   ano: number,
   mes: number,
@@ -105,12 +126,7 @@ export async function getFinanceiroDados(
     idsAlunosBusca = (perfis ?? []).map((perfil) => perfil.id as string);
   }
 
-  const [
-    { data: parcelasData, count: totalParcelas },
-    { data: receberData },
-    { data: recebidoData },
-    { data: atrasadoData },
-  ] = await Promise.all([
+  const [{ data: parcelasData, count: totalParcelas }, receber, recebido, atrasado] = await Promise.all([
     (() => {
       let consultaParcelas = supabase
         .from("parcelas")
@@ -129,28 +145,52 @@ export async function getFinanceiroDados(
       }
       return consultaParcelas.order("data_vencimento").range(offset, offset + limit - 1);
     })(),
-    // KPIs sempre olham o mês/período inteiro, nunca só a página atual —
-    // por isso essas 3 queries abaixo continuam sem .range().
-    supabase
-      .from("parcelas")
-      .select("valor")
-      .in("status", ["pendente", "atrasado"])
-      .lte("data_vencimento", fim),
-    supabase
-      .from("parcelas")
-      .select("valor")
-      .eq("status", "pago")
-      .gte("data_pagamento", inicio)
-      .lte("data_pagamento", fim),
-    supabase.from("parcelas").select("valor").eq("status", "atrasado"),
+    // KPIs olham o mês/período SELECIONADO inteiro (nunca só a página atual) e
+    // SOMENTE ele — todos com limite inferior E superior:
+    //  - A receber: parcelas ainda em aberto (pendente/atrasado) que VENCEM no
+    //    período. (Antes só tinha `data_vencimento <= fim`, sem limite
+    //    inferior: somava o em aberto de TODOS os meses anteriores.)
+    //  - Recebido: pagas com data_pagamento no período.
+    //  - Em atraso: parcelas "atrasado" que vencem no período. (Antes não tinha
+    //    filtro de data nenhum: o mesmo total histórico em qualquer mês.)
+    somarParcelas((de, ate) =>
+      supabase
+        .from("parcelas")
+        .select("valor")
+        .in("status", ["pendente", "atrasado"])
+        .gte("data_vencimento", inicio)
+        .lte("data_vencimento", fim)
+        .order("id")
+        .range(de, ate),
+    ),
+    somarParcelas((de, ate) =>
+      supabase
+        .from("parcelas")
+        .select("valor")
+        .eq("status", "pago")
+        .gte("data_pagamento", inicio)
+        .lte("data_pagamento", fim)
+        .order("id")
+        .range(de, ate),
+    ),
+    somarParcelas((de, ate) =>
+      supabase
+        .from("parcelas")
+        .select("valor")
+        .eq("status", "atrasado")
+        .gte("data_vencimento", inicio)
+        .lte("data_vencimento", fim)
+        .order("id")
+        .range(de, ate),
+    ),
   ]);
 
   return {
     kpis: {
-      totalReceber: somarValores(receberData),
-      totalRecebido: somarValores(recebidoData),
-      totalAtrasado: somarValores(atrasadoData),
-      countAtrasado: (atrasadoData ?? []).length,
+      totalReceber: receber.total,
+      totalRecebido: recebido.total,
+      totalAtrasado: atrasado.total,
+      countAtrasado: atrasado.quantidade,
     },
     parcelas: (parcelasData as ParcelaComRelacoes[] | null) ?? [],
     totalParcelas: totalParcelas ?? 0,

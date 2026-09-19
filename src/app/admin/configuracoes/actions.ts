@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { exportarTabelas, TABELAS_BACKUP } from "@/lib/backup/exportar";
 import { escolaFormSchema } from "@/lib/configuracoes/schema";
 import { CERTIFICADO_STATUS_LABELS } from "@/lib/certificados/certificados";
 import { PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
@@ -237,14 +238,14 @@ export async function salvarNotificacoes(
   return { salvo: true };
 }
 
-export type BackupDados = {
+// Backup em JSON (botão "Gerar backup agora"). Chaves planas por tabela (como
+// sempre foram) + geradoEm + avisos. A lista de tabelas vem de
+// src/lib/backup/exportar.ts, a mesma do download JSON/Excel da rota
+// /admin/configuracoes/backup — os dois não divergem mais.
+export type BackupDados = Record<string, unknown> & {
   geradoEm: string;
-  alunos: unknown[];
-  matriculas: unknown[];
-  turmas: unknown[];
-  cursos: unknown[];
-  parcelas: unknown[];
-  gastos: unknown[];
+  // Tabelas que falharam ou foram cortadas; vazio = backup completo.
+  avisos: string[];
 };
 
 export type GerarBackupResult = { success: true; data: BackupDados } | { error: string };
@@ -257,42 +258,18 @@ export async function gerarBackup(): Promise<GerarBackupResult> {
   await requireRole("admin");
 
   const supabase = await createClient();
+  const { dados, avisos } = await exportarTabelas(supabase, TABELAS_BACKUP);
 
-  const [
-    { data: alunos, error: erroAlunos },
-    { data: matriculas, error: erroMatriculas },
-    { data: turmas, error: erroTurmas },
-    { data: cursos, error: erroCursos },
-    { data: parcelas, error: erroParcelas },
-    { data: gastos, error: erroGastos },
-  ] = await Promise.all([
-    supabase.from("alunos").select("id, full_name, email, cpf, telefone, status_aluno, created_at"),
-    supabase
-      .from("matriculas")
-      .select("id, aluno_id, turma_id, status, valor_final, num_parcelas, forma_pagamento, data_matricula"),
-    supabase.from("turmas").select("id, nome, curso_id, status, data_inicio, data_fim"),
-    supabase.from("cursos").select("id, nome, tipo, status, valor"),
-    supabase
-      .from("parcelas")
-      .select("id, matricula_id, aluno_id, numero_parcela, valor, data_vencimento, data_pagamento, status"),
-    supabase.from("gastos").select("id, descricao, categoria, valor, data_gasto"),
-  ]);
-
-  if (erroAlunos || erroMatriculas || erroTurmas || erroCursos || erroParcelas || erroGastos) {
+  // Só recusa se NADA foi exportado; falha parcial vai como aviso dentro do
+  // arquivo (e na tela) em vez de derrubar o backup inteiro.
+  const totalLinhas = Object.values(dados).reduce((soma, linhas) => soma + linhas.length, 0);
+  if (avisos.length >= TABELAS_BACKUP.length && totalLinhas === 0) {
     return { error: "Não foi possível gerar o backup. Tente novamente." };
   }
 
   return {
     success: true,
-    data: {
-      geradoEm: new Date().toISOString(),
-      alunos: alunos ?? [],
-      matriculas: matriculas ?? [],
-      turmas: turmas ?? [],
-      cursos: cursos ?? [],
-      parcelas: parcelas ?? [],
-      gastos: gastos ?? [],
-    },
+    data: { geradoEm: new Date().toISOString(), avisos, ...dados },
   };
 }
 

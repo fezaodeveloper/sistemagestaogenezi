@@ -1049,7 +1049,7 @@ export function FinanceiroView({
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <KpiCard
-            label="A receber"
+            label="A receber no mês"
             valor={kpisVisiveis ? formatValor(dados.kpis.totalReceber) : VALOR_OCULTO}
             cor="amber"
           />
@@ -1059,7 +1059,7 @@ export function FinanceiroView({
             cor="green"
           />
           <KpiCard
-            label="Em atraso"
+            label="Em atraso no mês"
             valor={kpisVisiveis ? formatValor(dados.kpis.totalAtrasado) : VALOR_OCULTO}
             cor="red"
             sublabel={`${dados.kpis.countAtrasado} parcela(s)`}

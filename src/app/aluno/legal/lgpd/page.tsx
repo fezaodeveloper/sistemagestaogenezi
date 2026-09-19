@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { getTermoLegal } from "@/lib/termos-legais/get-termo";
 import { TermoLegalContent } from "@/components/aluno/termo-legal-content";
+import { VoltarParaLegal } from "@/components/aluno/voltar-para-legal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LgpdSolicitacaoForm } from "@/components/aluno/lgpd-solicitacao-form";
 
@@ -10,6 +11,7 @@ export default async function LgpdPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <VoltarParaLegal />
       <div>
         <h1 className="text-2xl font-semibold">LGPD — Seus direitos</h1>
         <p className="text-muted-foreground text-sm">

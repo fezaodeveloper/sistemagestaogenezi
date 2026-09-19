@@ -2,31 +2,26 @@ import { NextResponse, type NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { exportarTabelas, TABELAS_BACKUP, type TabelaBackup } from "@/lib/backup/exportar";
 
-// TAREFA pedia a tabela "frequencias" — não existe no schema, o nome real é
-// "presencas" (ver supabase/migrations/20260806100000_create_presencas.sql).
-// Exportada com esse nome real. Colunas de cada tabela também ajustadas pro
-// schema de verdade: alunos.nome não existe (é "full_name"); leads não tem
-// "email" nem "whatsapp" (só "telefone"); cursos.valor (não
-// "valor_mensalidade").
-const TABELAS = {
-  alunos: { colunas: "id, full_name, email, telefone, cpf, created_at" },
-  matriculas: { colunas: "id, aluno_id, turma_id, status, created_at" },
-  turmas: { colunas: "id, nome, curso_id, data_inicio, data_fim" },
-  cursos: { colunas: "id, nome, tipo, valor" },
-  parcelas: { colunas: "id, matricula_id, valor, status, data_vencimento, data_pagamento" },
-  presencas: { colunas: "id, matricula_id, aula_id, status, created_at" },
-  leads: { colunas: "id, nome, telefone, status, created_at" },
-} as const;
+// A TAREFA original pedia a tabela "frequencias" — não existe no schema, o
+// nome real é "presencas" (ver supabase/migrations/20260806100000_create_presencas.sql).
+// A lista de tabelas (e a leitura paginada, com aviso de falha) vive em
+// src/lib/backup/exportar.ts, compartilhada com o botão "Gerar backup agora".
 
-type NomeTabela = keyof typeof TABELAS;
-const NOMES_TABELAS = Object.keys(TABELAS) as NomeTabela[];
+function parseTabelas(valor: string | null): readonly TabelaBackup[] {
+  if (!valor) return TABELAS_BACKUP;
+  const pedidas = valor.split(",").map((t) => t.trim());
+  const validas = TABELAS_BACKUP.filter((t) => pedidas.includes(t));
+  return validas.length > 0 ? validas : TABELAS_BACKUP;
+}
 
-function parseTabelas(valor: string | null): NomeTabela[] {
-  if (!valor) return NOMES_TABELAS;
-  const pedidas = valor.split(",").map((t) => t.trim()) as NomeTabela[];
-  const validas = pedidas.filter((t) => NOMES_TABELAS.includes(t));
-  return validas.length > 0 ? validas : NOMES_TABELAS;
+// Excel só aceita valor simples por célula: jsonb (etapas de campanha,
+// respostas, campos extras...) vira texto JSON. O limite de uma célula é 32767
+// caracteres — corta um pouco antes.
+function paraCelulaExcel(valor: unknown): unknown {
+  if (valor !== null && typeof valor === "object") return JSON.stringify(valor).slice(0, 32000);
+  return valor;
 }
 
 export async function GET(request: NextRequest) {
@@ -37,30 +32,38 @@ export async function GET(request: NextRequest) {
   const tabelas = parseTabelas(searchParams.get("tabelas"));
 
   const supabase = await createClient();
-  const resultados = await Promise.all(
-    tabelas.map((tabela) => supabase.from(tabela).select(TABELAS[tabela].colunas)),
-  );
-
-  const dados: Record<string, unknown[]> = {};
-  tabelas.forEach((tabela, index) => {
-    dados[tabela] = resultados[index].data ?? [];
-  });
+  const { dados, avisos } = await exportarTabelas(supabase, tabelas);
+  const contagem = Object.fromEntries(tabelas.map((t) => [t, dados[t]?.length ?? 0]));
 
   const hoje = new Date().toISOString().slice(0, 10);
+  // A tela lê este cabeçalho pra avisar que o backup saiu incompleto.
+  const cabecalhoAvisos = { "X-Backup-Avisos": String(avisos.length) };
 
   if (formato === "json") {
-    const conteudo = { ...dados, gerado_em: new Date().toISOString() };
+    const conteudo = {
+      gerado_em: new Date().toISOString(),
+      contagem,
+      ...(avisos.length > 0 ? { avisos } : {}),
+      ...dados,
+    };
     return new NextResponse(JSON.stringify(conteudo, null, 2), {
       headers: {
         "Content-Type": "application/json",
         "Content-Disposition": `attachment; filename="backup-genezi-${hoje}.json"`,
+        ...cabecalhoAvisos,
       },
     });
   }
 
   const workbook = XLSX.utils.book_new();
   for (const tabela of tabelas) {
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(dados[tabela]), tabela);
+    const linhas = (dados[tabela] ?? []).map((linha) =>
+      Object.fromEntries(Object.entries(linha).map(([coluna, valor]) => [coluna, paraCelulaExcel(valor)])),
+    );
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(linhas), tabela);
+  }
+  if (avisos.length > 0) {
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(avisos.map((aviso) => ({ aviso }))), "avisos");
   }
   const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
@@ -68,6 +71,7 @@ export async function GET(request: NextRequest) {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="backup-genezi-${hoje}.xlsx"`,
+      ...cabecalhoAvisos,
     },
   });
 }
