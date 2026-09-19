@@ -8,7 +8,6 @@ import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
-import { PushSubscribeAluno } from "@/components/aluno/push-subscribe";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -69,7 +68,6 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   return (
     <div className="dark bg-background text-foreground min-h-svh">
       <ConquistasProvider alunoId={user.id} />
-      <PushSubscribeAluno vapidPublicKey={pushConfig?.push_vapid_public_key ?? null} />
       <SidebarProvider>
         <AlunoSidebar
           user={user}
@@ -79,6 +77,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           contratosPendentes={contratosPendentes ?? 0}
           recursos={recursos}
           conectaHabilitado={conectaHabilitado}
+          vapidPublicKey={pushConfig?.push_vapid_public_key ?? null}
         />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">

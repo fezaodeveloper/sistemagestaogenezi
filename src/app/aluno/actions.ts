@@ -1,7 +1,9 @@
 "use server";
 
 import { requireRole } from "@/lib/auth/dal";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LoginBanner } from "@/lib/login-banners/schema";
 
@@ -62,9 +64,22 @@ export async function getBannersPortal(): Promise<LoginBanner[]> {
 
 // ===== Push notifications do próprio aluno (roadmap, item 7 — PWA) =====
 //
-// ignoreDuplicates (não upsert de verdade) de propósito: push_subscriptions
-// só tem grant de select/insert/delete pra authenticated (sem update) — ver
-// o mesmo comentário em salvarPushSubscription (admin, configuracoes/actions.ts).
+const pushSubscriptionSchema = z.object({
+  endpoint: z.url().max(2000),
+  p256dh: z.string().min(1).max(500),
+  auth_key: z.string().min(1).max(200),
+});
+
+// APARELHO COMPARTILHADO: o endpoint identifica o navegador/aparelho, não a
+// pessoa. Se dois alunos (ou o admin) usam o mesmo aparelho, quem entrou por
+// último deve ser quem recebe — então isto é um upsert de verdade por
+// endpoint, que troca o aluno_id da linha existente pelo do aluno logado
+// (e atualiza as chaves). Isso exige UPDATE, que `authenticated` não tem na
+// tabela push_subscriptions (só select/insert/delete) e que a RLS do aluno
+// (aluno_id = auth.uid()) também impediria sobre a linha de outra pessoa —
+// por isso roda com o client admin (service_role), DEPOIS de requireRole
+// ("aluno") e usando sempre o id do usuário autenticado (nunca um id vindo do
+// cliente).
 export async function salvarPushSubscriptionAluno(subscription: {
   endpoint: string;
   p256dh: string;
@@ -72,14 +87,33 @@ export async function salvarPushSubscriptionAluno(subscription: {
 }): Promise<{ error?: string }> {
   const user = await requireRole("aluno");
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  // Log de diagnóstico (push com 0 dispositivos): o endpoint é truncado — é
+  // uma URL longa com token do serviço de push, e o host + prefixo já bastam
+  // pra saber de qual navegador veio.
+  console.log("[push] salvarPushSubscriptionAluno recebido:", {
+    aluno_id: user.id,
+    endpoint: `${String(subscription?.endpoint ?? "").slice(0, 80)}…`,
+    endpoint_length: String(subscription?.endpoint ?? "").length,
+    p256dh_length: String(subscription?.p256dh ?? "").length,
+    auth_key_length: String(subscription?.auth_key ?? "").length,
+  });
+
+  const parsed = pushSubscriptionSchema.safeParse(subscription);
+  if (!parsed.success) {
+    console.error("[push] subscription inválida:", parsed.error.issues[0]?.message);
+    return { error: "Dados da inscrição push inválidos." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("push_subscriptions")
-    .upsert({ ...subscription, aluno_id: user.id }, { onConflict: "endpoint", ignoreDuplicates: true });
+    .upsert({ ...parsed.data, aluno_id: user.id }, { onConflict: "endpoint" });
 
   if (error) {
+    console.error("[push] erro ao salvar subscription:", { aluno_id: user.id, code: error.code, message: error.message });
     return { error: "Não foi possível ativar as notificações push." };
   }
 
+  console.log("[push] subscription salva:", { aluno_id: user.id });
   return {};
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Bell, Send } from "lucide-react";
+import { Bell, Send, Trash2 } from "lucide-react";
 import { enviarNotificacaoPush } from "@/app/admin/notificacoes/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const URL_PERSONALIZADO = "personalizado";
 
@@ -63,6 +73,7 @@ export function NotificacoesAdminView({ totalDispositivos }: { totalDispositivos
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [historico, setHistorico] = useState<HistoricoItem[]>([]);
+  const [excluindo, setExcluindo] = useState<HistoricoItem | null>(null);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -72,6 +83,19 @@ export function NotificacoesAdminView({ totalDispositivos }: { totalDispositivos
     // no client, precisa rodar depois do mount.
     queueMicrotask(() => setHistorico(lerHistorico()));
   }, []);
+
+  // Só remove do histórico local (localStorage deste navegador): uma
+  // notificação que já chegou no aparelho do aluno não pode ser retirada.
+  function confirmarExclusao() {
+    if (!excluindo) return;
+    const idExcluido = excluindo.id;
+    setExcluindo(null);
+    setHistorico((prev) => {
+      const novo = prev.filter((item) => item.id !== idExcluido);
+      salvarHistorico(novo);
+      return novo;
+    });
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -128,6 +152,11 @@ export function NotificacoesAdminView({ totalDispositivos }: { totalDispositivos
       <Card className="max-w-xl">
         <CardContent>
           <form ref={formRef} action={handleSubmit} className="flex flex-col gap-4">
+            <p className="bg-muted text-muted-foreground rounded-md px-3 py-2 text-sm">
+              <span className="text-foreground font-medium">Destinatários:</span> todos os alunos com notificações
+              ativas
+            </p>
+
             <div className="flex flex-col gap-2">
               <Label htmlFor="titulo">Título da notificação</Label>
               <Input
@@ -210,7 +239,20 @@ export function NotificacoesAdminView({ totalDispositivos }: { totalDispositivos
                 <div key={item.id} className="border-b pb-2 text-sm last:border-0 last:pb-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium">{item.titulo}</p>
-                    <Badge variant="outline">{item.quantidade} dispositivo(s)</Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge variant="outline">{item.quantidade} dispositivo(s)</Badge>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive"
+                        aria-label="Excluir do histórico"
+                        title="Excluir do histórico"
+                        onClick={() => setExcluindo(item)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   <p className="text-muted-foreground">{item.corpo}</p>
                   <p className="text-muted-foreground text-xs">
@@ -222,6 +264,24 @@ export function NotificacoesAdminView({ totalDispositivos }: { totalDispositivos
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={excluindo !== null} onOpenChange={(aberto) => !aberto && setExcluindo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir do histórico</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remover &quot;{excluindo?.titulo}&quot; do histórico deste navegador? A notificação já enviada continua
+              nos aparelhos dos alunos — só o registro aqui é apagado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmarExclusao}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

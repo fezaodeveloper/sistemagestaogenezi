@@ -65,7 +65,10 @@ export function PushNotificacoesForm({ vapidPublicKeyInicial }: { vapidPublicKey
         return;
       }
       try {
-        const registration = await navigator.serviceWorker.register("/sw.js");
+        await navigator.serviceWorker.register("/sw.js");
+        // Espera o worker ficar ativo — no primeiro uso register() resolve com
+        // ele ainda instalando e subscribe() falharia.
+        const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
@@ -86,7 +89,8 @@ export function PushNotificacoesForm({ vapidPublicKeyInicial }: { vapidPublicKey
           return;
         }
         setAtivado(true);
-      } catch {
+      } catch (falha) {
+        console.error("[push] falha ao ativar notificações do admin:", falha);
         setError("Não foi possível ativar as notificações neste navegador.");
       }
     });

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { escolaFormSchema } from "@/lib/configuracoes/schema";
 import { CERTIFICADO_STATUS_LABELS } from "@/lib/certificados/certificados";
 import { PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
@@ -763,11 +764,13 @@ export async function gerarChavesVapid(): Promise<{ error?: string; publicKey?: 
   }
 }
 
-// ignoreDuplicates (não upsert de verdade) de propósito: push_subscriptions
-// só tem grant de select/insert/delete pra authenticated (sem update) — um
-// "on conflict do update" exigiria grant de update, que essa tabela não tem.
-// Uma subscription que já existe (mesmo endpoint) não precisa ser
-// atualizada, só ignorada.
+// Aparelho compartilhado (mesma regra de salvarPushSubscriptionAluno em
+// src/app/aluno/actions.ts): o endpoint identifica o aparelho, e quem ativou
+// por último é quem recebe — então isto é um upsert de verdade por endpoint
+// que devolve a linha pro admin (aluno_id null), mesmo que o aparelho tenha
+// sido de um aluno antes. Precisa de UPDATE, que `authenticated` não tem em
+// push_subscriptions (só select/insert/delete) — daí o client admin, depois do
+// requireRole("admin").
 export async function salvarPushSubscription(subscription: {
   endpoint: string;
   p256dh: string;
@@ -775,12 +778,13 @@ export async function salvarPushSubscription(subscription: {
 }): Promise<{ error?: string }> {
   await requireRole("admin");
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("push_subscriptions")
-    .upsert(subscription, { onConflict: "endpoint", ignoreDuplicates: true });
+    .upsert({ ...subscription, aluno_id: null }, { onConflict: "endpoint" });
 
   if (error) {
+    console.error("[push] erro ao salvar subscription do admin:", { code: error.code, message: error.message });
     return { error: "Não foi possível ativar as notificações push. Tente novamente." };
   }
 

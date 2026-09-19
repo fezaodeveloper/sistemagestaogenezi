@@ -3,6 +3,7 @@ import { Banknote, Briefcase, Coins, FileBadge, FileText, GraduationCap, Message
 import type { CurrentUser } from "@/lib/auth/dal";
 import type { RecursosHabilitados } from "@/lib/configuracoes/recursos";
 import { UserMenu } from "@/components/auth/user-menu";
+import { PushSubscribeAluno } from "@/components/aluno/push-subscribe";
 import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 import { getContagemNaoLidasAlunoAction } from "@/lib/chat/badge-actions";
@@ -28,6 +29,7 @@ export function AlunoSidebar({
   contratosPendentes,
   recursos,
   conectaHabilitado,
+  vapidPublicKey,
 }: {
   user: CurrentUser;
   conversaId: string | null;
@@ -36,6 +38,7 @@ export function AlunoSidebar({
   contratosPendentes: number;
   recursos: RecursosHabilitados;
   conectaHabilitado: boolean;
+  vapidPublicKey: string | null;
 }) {
   return (
     <Sidebar>
@@ -188,6 +191,7 @@ export function AlunoSidebar({
             Uso de Imagem
           </Link>
         </nav>
+        <PushSubscribeAluno vapidPublicKey={vapidPublicKey} />
         <PwaInstallButton />
       </SidebarFooter>
     </Sidebar>
