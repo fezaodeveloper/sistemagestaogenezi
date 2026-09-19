@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { termoIlike } from "@/lib/busca";
+import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
 import { onlyDigits } from "@/lib/alunos/schema";
 import {
   criarClienteAsaas,
@@ -129,6 +130,56 @@ export async function getFinanceiroDados(
     },
     parcelas: (parcelasData as ParcelaComRelacoes[] | null) ?? [],
     totalParcelas: totalParcelas ?? 0,
+  };
+}
+
+export type LimparFinanceiroAlunoResult =
+  | { success: true; parcelasExcluidas: number; pagamentosExcluidos: number; cobrancasAsaasNaoCanceladas: number }
+  | { error: string };
+
+// Apaga TODAS as parcelas e TODOS os pagamentos avulsos do aluno, mantendo a
+// matrícula intacta. Os dois deletes rodam numa função do banco
+// (limpar_financeiro_aluno, migration 20260919100000): pagamentos avulsos
+// primeiro, parcelas depois, na mesma transação — se uma etapa falhar, nada é
+// apagado. Não há FK entre as duas tabelas (ambas se ligam ao aluno).
+export async function limparFinanceiroAluno(alunoId: string): Promise<LimparFinanceiroAlunoResult> {
+  await requireRole("admin");
+
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alunoId)) {
+    return { error: "Aluno inválido." };
+  }
+
+  const supabase = await createClient();
+
+  // Guarda os dados das cobranças ANTES de apagar, pra cancelar no Asaas depois.
+  const { data: parcelasData } = await supabase
+    .from("parcelas")
+    .select("status, asaas_payment_id")
+    .eq("aluno_id", alunoId);
+  const parcelas = (parcelasData as { status: string; asaas_payment_id: string | null }[] | null) ?? [];
+
+  const { data, error } = await supabase.rpc("limpar_financeiro_aluno", { p_aluno_id: alunoId });
+
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") {
+      return { error: "A migration 20260919100000 ainda não foi aplicada no banco (função limpar_financeiro_aluno ausente)." };
+    }
+    if (error.code === "42501") {
+      return { error: "Sem permissão para limpar o financeiro." };
+    }
+    return { error: "Não foi possível limpar o financeiro do aluno. Nada foi excluído." };
+  }
+
+  const linha = (data as { parcelas_excluidas: number; pagamentos_excluidos: number }[] | null)?.[0];
+  const cobrancasAsaasNaoCanceladas = await cancelarCobrancasAsaasPendentes(parcelas);
+
+  revalidatePath("/admin/financeiro");
+  revalidatePath(`/admin/alunos/${alunoId}/editar`);
+  return {
+    success: true,
+    parcelasExcluidas: linha?.parcelas_excluidas ?? 0,
+    pagamentosExcluidos: linha?.pagamentos_excluidos ?? 0,
+    cobrancasAsaasNaoCanceladas,
   };
 }
 

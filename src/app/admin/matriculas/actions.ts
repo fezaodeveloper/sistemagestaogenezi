@@ -6,10 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import {
   MATRICULA_STATUSES,
   matriculaDetalhesFormSchema,
+  matriculaEdicaoSchema,
   matriculaWizardSchema,
   type Matricula,
+  type MatriculaEdicaoInput,
   type MatriculaWizardInput,
 } from "@/lib/matriculas/schema";
+import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
 import { notificarMatriculaWhatsApp } from "@/lib/matriculas/notificacoes";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
@@ -431,6 +434,183 @@ export async function updateMatriculaDetalhes(
 
   revalidatePath("/admin/matriculas");
   return { success: true };
+}
+
+// ===== Edição completa da matrícula =====
+
+export type AtualizarMatriculaCompletaResult = { success: true } | { error: string };
+
+// Traduz o erro da função atualizar_vinculos_matricula (ver migration
+// 20260919100000). As mensagens levantadas pela própria função (histórico
+// acadêmico, turma/aluno não encontrado) já vêm em português e são seguras.
+function mensagemErroVinculos(erro: { code?: string; message?: string }): string {
+  if (erro.code === "23505") return "O aluno já tem uma matrícula nessa turma.";
+  if (erro.code === "42501") return "Sem permissão para alterar o aluno/turma da matrícula.";
+  if (erro.code === "PGRST202" || erro.code === "42883") {
+    return "A migration 20260919100000 ainda não foi aplicada no banco (função atualizar_vinculos_matricula ausente).";
+  }
+  return erro.message ?? "Não foi possível alterar o aluno/turma da matrícula.";
+}
+
+export async function atualizarMatriculaCompleta(
+  id: string,
+  input: MatriculaEdicaoInput,
+): Promise<AtualizarMatriculaCompletaResult> {
+  const user = await requireRole("admin");
+
+  const parsed = matriculaEdicaoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
+
+  const supabase = await createClient();
+
+  const { data: antes } = await supabase
+    .from("matriculas")
+    .select("aluno_id, turma_id, status, valor_final")
+    .eq("id", id)
+    .maybeSingle();
+  if (!antes) {
+    return { error: "Matrícula não encontrada." };
+  }
+
+  // 1) Aluno / turma — só a função do banco pode trocar (atômica, com trava de
+  // histórico acadêmico e propagação do aluno pras parcelas/contrato).
+  if (antes.aluno_id !== data.aluno_id || antes.turma_id !== data.turma_id) {
+    if (antes.turma_id !== data.turma_id && data.status === "ativa") {
+      const { data: turma } = await supabase
+        .from("turmas")
+        .select("capacidade_maxima, vagas_ocupadas")
+        .eq("id", data.turma_id)
+        .single();
+      if (!turma) {
+        return { error: "Não foi possível verificar as vagas da turma." };
+      }
+      if (turma.vagas_ocupadas >= turma.capacidade_maxima) {
+        return { error: "Essa turma não tem mais vagas disponíveis." };
+      }
+    }
+
+    const { error: vinculosError } = await supabase.rpc("atualizar_vinculos_matricula", {
+      p_matricula_id: id,
+      p_aluno_id: data.aluno_id,
+      p_turma_id: data.turma_id,
+    });
+    if (vinculosError) {
+      return { error: mensagemErroVinculos(vinculosError) };
+    }
+  }
+
+  // 2) Demais campos. "Sem desconto" não carrega formato/valor de desconto.
+  const semDesconto = data.desconto_tipo === "sem_bolsa";
+  const { data: atualizadas, error } = await supabase
+    .from("matriculas")
+    .update({
+      status: data.status,
+      data_inicio: data.data_inicio,
+      previsao_conclusao: data.previsao_conclusao,
+      valor_original: data.valor_original,
+      desconto_tipo: data.desconto_tipo,
+      desconto_formato: semDesconto ? null : data.desconto_formato,
+      desconto_valor: semDesconto ? 0 : (data.desconto_valor ?? 0),
+      valor_final: data.valor_final,
+      num_parcelas: data.num_parcelas,
+      valor_parcela: data.valor_parcela,
+      forma_pagamento: data.forma_pagamento,
+      data_primeira_mensalidade: data.data_primeira_mensalidade,
+      farda_entregue: data.farda_entregue,
+      apostila_entregue: data.apostila_entregue,
+      kit_entregue: data.kit_entregue,
+      observacoes: data.observacoes ?? null,
+    })
+    .eq("id", id)
+    .select("id");
+
+  if (error || !atualizadas?.length) {
+    return { error: "Não foi possível salvar as alterações. Tente novamente." };
+  }
+
+  // Histórico dos campos que mais importam (só grava o que mudou).
+  const alteracoes: [string, string | null, string | null][] = [
+    ["status", antes.status, data.status],
+    ["aluno_id", antes.aluno_id, data.aluno_id],
+    ["turma_id", antes.turma_id, data.turma_id],
+    ["valor_final", antes.valor_final === null ? null : String(antes.valor_final), data.valor_final === null ? null : String(data.valor_final)],
+  ];
+  for (const [campo, valorAnterior, valorNovo] of alteracoes) {
+    await registrarAlteracao({
+      tabela: "matriculas",
+      registroId: id,
+      campo,
+      valorAnterior,
+      valorNovo,
+      alteradoPor: user.id,
+    });
+  }
+
+  revalidatePath("/admin/matriculas");
+  revalidatePath(`/admin/matriculas/${id}`);
+  revalidatePath("/admin/financeiro");
+  return { success: true };
+}
+
+// ===== Exclusão da matrícula + financeiro =====
+
+export type ExcluirMatriculaResult =
+  | { success: true; parcelasExcluidas: number; cobrancasAsaasNaoCanceladas: number }
+  | { error: string };
+
+// Exclui a matrícula e TODAS as parcelas dela. parcelas.matricula_id é
+// ON DELETE CASCADE, então um único DELETE em matriculas leva as parcelas (e
+// presenças, contrato, certificado etc.) na MESMA transação — atômico: ou
+// apaga tudo ou não apaga nada. É por isso que NÃO se apagam as parcelas antes
+// numa chamada separada (se o delete da matrícula falhasse depois, o
+// financeiro já teria sido perdido com a matrícula ainda de pé). Só se alguma
+// FK sem cascade barrar (23503) é que as parcelas são apagadas explicitamente
+// e o delete é tentado de novo.
+//
+// Não existe tabela de "pagamentos" ligada às parcelas: o pagamento é o próprio
+// status/data da parcela. Os pagamentos_avulsos (ex.: a taxa de matrícula
+// registrada na criação) ligam-se só ao aluno, não à matrícula, e por isso NÃO
+// são apagados aqui — ver "Limpar financeiro" na tela do aluno.
+export async function excluirMatricula(id: string): Promise<ExcluirMatriculaResult> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+
+  const { data: matricula } = await supabase.from("matriculas").select("id").eq("id", id).maybeSingle();
+  if (!matricula) {
+    return { error: "Matrícula não encontrada." };
+  }
+
+  const { data: parcelasData } = await supabase
+    .from("parcelas")
+    .select("id, status, asaas_payment_id")
+    .eq("matricula_id", id);
+  const parcelas = (parcelasData as { id: string; status: string; asaas_payment_id: string | null }[] | null) ?? [];
+
+  let { data: excluidas, error } = await supabase.from("matriculas").delete().eq("id", id).select("id");
+
+  if (error?.code === "23503") {
+    // FK sem cascade impedindo: apaga as parcelas na ordem certa e tenta de novo.
+    const { error: parcelasError } = await supabase.from("parcelas").delete().eq("matricula_id", id);
+    if (parcelasError) {
+      return { error: "Não foi possível excluir as parcelas da matrícula. Nada foi excluído da matrícula." };
+    }
+    ({ data: excluidas, error } = await supabase.from("matriculas").delete().eq("id", id).select("id"));
+  }
+
+  if (error || !excluidas?.length) {
+    return { error: "Não foi possível excluir a matrícula. Tente novamente." };
+  }
+
+  // Só depois do delete confirmado: cancela no Asaas as cobranças ainda em aberto.
+  const cobrancasAsaasNaoCanceladas = await cancelarCobrancasAsaasPendentes(parcelas);
+
+  revalidatePath("/admin/matriculas");
+  revalidatePath("/admin/financeiro");
+  return { success: true, parcelasExcluidas: parcelas.length, cobrancasAsaasNaoCanceladas };
 }
 
 // ===== Edição em lote (MELHORIA 8) =====

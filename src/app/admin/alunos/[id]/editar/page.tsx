@@ -7,6 +7,7 @@ import { LiberacoesManuaisSection } from "@/components/admin/liberacoes-manuais-
 import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
 import { TrocarSenhaAlunoForm } from "@/components/admin/trocar-senha-aluno-form";
 import { VerificarConquistasButton } from "@/components/admin/verificar-conquistas-button";
+import { LimparFinanceiroAlunoButton } from "@/components/admin/limpar-financeiro-aluno-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AlunoWithRelations, Responsavel } from "@/lib/alunos/schema";
 import type { MatriculaWithTurma } from "@/lib/matriculas/schema";
@@ -111,6 +112,12 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
     aulas: (m.aulas ?? []).sort((a, b) => a.numero - b.numero),
   }));
 
+  // Contagens do financeiro do aluno (pro card "Financeiro" e o aviso do confirm).
+  const [{ count: totalParcelas }, { count: totalPagamentos }] = await Promise.all([
+    supabase.from("parcelas").select("id", { count: "exact", head: true }).eq("aluno_id", id),
+    supabase.from("pagamentos_avulsos").select("id", { count: "exact", head: true }).eq("aluno_id", id),
+  ]);
+
   const cursoNomeById = new Map(cursoOptions.map((c) => [c.id, c.nome]));
   const liberacoesExistentes = ((liberacoesData ?? []) as unknown as LiberacaoRow[])
     .filter((l) => l.aulas?.modulos)
@@ -185,6 +192,19 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
             Força a verificação de badges e a entrega de recompensas pendentes para este aluno.
           </p>
           <VerificarConquistasButton alunoId={aluno.id} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Financeiro</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <LimparFinanceiroAlunoButton
+            alunoId={aluno.id}
+            nomeAluno={aluno.profiles?.full_name ?? aluno.email}
+            totalParcelas={totalParcelas ?? 0}
+            totalPagamentos={totalPagamentos ?? 0}
+          />
         </CardContent>
       </Card>
     </div>

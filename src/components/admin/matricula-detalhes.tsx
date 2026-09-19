@@ -3,8 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowLeft, Loader2, Pencil, Printer } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Printer, Trash2 } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
+import { excluirMatricula } from "@/app/admin/matriculas/actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   updateMatriculaDetalhes,
   type MatriculaDetalhada,
@@ -122,6 +133,8 @@ export function MatriculaDetalhes({
   const [erro, setErro] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [excluirAberto, setExcluirAberto] = useState(false);
+  const [isPendingExcluir, startExcluir] = useTransition();
 
   const [status, setStatus] = useState<MatriculaStatus>(matricula.status);
   const [dataInicio, setDataInicio] = useState(matricula.data_inicio ?? "");
@@ -130,6 +143,25 @@ export function MatriculaDetalhes({
   const [fardaEntregue, setFardaEntregue] = useState(matricula.farda_entregue);
   const [kitEntregue, setKitEntregue] = useState(matricula.kit_entregue);
   const [observacoes, setObservacoes] = useState(matricula.observacoes ?? "");
+
+  function handleExcluir() {
+    setErro(null);
+    startExcluir(async () => {
+      const resultado = await excluirMatricula(matriculaAtual.id);
+      setExcluirAberto(false);
+      if ("error" in resultado) {
+        setErro(resultado.error);
+        return;
+      }
+      if (resultado.cobrancasAsaasNaoCanceladas > 0) {
+        window.alert(
+          `Matrícula excluída, mas ${resultado.cobrancasAsaasNaoCanceladas} cobrança(s) em aberto no Asaas não puderam ser canceladas automaticamente. Cancele-as no painel do Asaas.`,
+        );
+      }
+      router.push("/admin/matriculas");
+      router.refresh();
+    });
+  }
 
   function entrarEdicao() {
     setStatus(matriculaAtual.status);
@@ -543,10 +575,20 @@ export function MatriculaDetalhes({
             }
           />
           {!modoEdicao && (
-            <Button onClick={entrarEdicao}>
-              <Pencil />
-              Editar
-            </Button>
+            <>
+              <Button variant="outline" onClick={entrarEdicao}>
+                <Pencil />
+                Edição rápida
+              </Button>
+              <Button nativeButton={false} render={<Link href={`/admin/matriculas/${matriculaAtual.id}/editar`} />}>
+                <Pencil />
+                Editar matrícula
+              </Button>
+              <Button variant="outline" className="text-destructive" onClick={() => setExcluirAberto(true)}>
+                <Trash2 />
+                Excluir matrícula
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -565,6 +607,26 @@ export function MatriculaDetalhes({
       {renderSecaoDatas()}
       {renderSecaoMateriais()}
       {renderSecaoObservacoes()}
+
+      <AlertDialog open={excluirAberto} onOpenChange={setExcluirAberto}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir matrícula</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso irá excluir a matrícula e <strong>TODOS os dados financeiros associados</strong> (parcelas,
+              pagamentos). Presenças, progresso, contrato e certificado desta matrícula também serão removidos, e as
+              cobranças ainda em aberto no Asaas serão canceladas. Pagamentos avulsos (como a taxa de matrícula)
+              não fazem parte da matrícula e continuam registrados. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={isPendingExcluir} onClick={handleExcluir}>
+              {isPendingExcluir ? "Excluindo..." : "Excluir matrícula"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {erro && (
         <p role="alert" className="text-destructive text-sm">

@@ -154,6 +154,32 @@ export const matriculaDetalhesFormSchema = z.object({
 
 export type MatriculaDetalhesFormValues = z.infer<typeof matriculaDetalhesFormSchema>;
 
+// Edição COMPLETA da matrícula (/admin/matriculas/[id]/editar): aluno, turma
+// (o curso e a modalidade decorrem da turma), datas, valores/desconto,
+// parcelamento, forma de pagamento, status, materiais e observações.
+export const matriculaEdicaoSchema = z.object({
+  aluno_id: z.uuid({ error: "Selecione o aluno." }),
+  turma_id: z.uuid({ error: "Selecione a turma." }),
+  status: z.enum(MATRICULA_STATUSES, { error: "Selecione o status." }),
+  data_inicio: z.string().min(1, { error: "Informe a data de início." }),
+  previsao_conclusao: z.string().nullable(),
+  valor_original: z.number({ error: "Valor inválido." }).min(0, { error: "Valor não pode ser negativo." }).nullable(),
+  desconto_tipo: z.enum(DESCONTO_TIPOS),
+  desconto_formato: z.enum(DESCONTO_FORMATOS).nullable(),
+  desconto_valor: z.number({ error: "Desconto inválido." }).min(0, { error: "Desconto não pode ser negativo." }).nullable(),
+  valor_final: z.number({ error: "Valor final inválido." }).min(0, { error: "Valor final não pode ser negativo." }).nullable(),
+  num_parcelas: z.number().int().min(1, { error: "Mínimo de 1 parcela." }).max(12, { error: "Máximo de 12 parcelas." }),
+  valor_parcela: z.number({ error: "Valor da parcela inválido." }).min(0).nullable(),
+  forma_pagamento: z.enum(FORMAS_PAGAMENTO, { error: "Selecione a forma de pagamento." }),
+  data_primeira_mensalidade: z.string().nullable(),
+  farda_entregue: z.boolean(),
+  apostila_entregue: z.boolean(),
+  kit_entregue: z.boolean(),
+  observacoes: z.string().trim().max(2000, { error: "Observações muito longas." }).optional(),
+});
+
+export type MatriculaEdicaoInput = z.infer<typeof matriculaEdicaoSchema>;
+
 export type Matricula = {
   id: string;
   aluno_id: string;
