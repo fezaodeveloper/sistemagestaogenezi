@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { MailX, Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
@@ -54,7 +54,10 @@ export default async function EmailMarketingPage({
     .range(offset, offset + limite - 1);
   if (filtro) consulta = consulta.eq("status", filtro);
 
-  const { data, error, count } = await consulta;
+  const [{ data, error, count }, { count: totalDescadastros }] = await Promise.all([
+    consulta,
+    supabase.from("email_descadastros").select("id", { count: "exact", head: true }),
+  ]);
   const campanhas = (data ?? []) as LinhaCampanha[];
   const totalRegistros = count ?? 0;
 
@@ -67,10 +70,16 @@ export default async function EmailMarketingPage({
             Campanhas de e-mail para os alunos, pelo provedor configurado em Configurações &gt; E-mail.
           </p>
         </div>
-        <Button render={<Link href="/admin/email-marketing/nova" />} nativeButton={false}>
-          <Plus />
-          Nova campanha
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" render={<Link href="/admin/email-marketing/descadastros" />} nativeButton={false}>
+            <MailX />
+            Descadastros{typeof totalDescadastros === "number" ? ` (${totalDescadastros})` : ""}
+          </Button>
+          <Button render={<Link href="/admin/email-marketing/nova" />} nativeButton={false}>
+            <Plus />
+            Nova campanha
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por status">

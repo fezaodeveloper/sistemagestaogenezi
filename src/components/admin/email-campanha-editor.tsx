@@ -302,6 +302,10 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
             <p className="text-muted-foreground text-xs">
               Assunto: <strong>{previewAssunto || "—"}</strong>
             </p>
+            <p className="text-muted-foreground text-xs">
+              Todo e-mail de campanha recebe automaticamente, no fim, o link &quot;para não receber mais e-mails de marketing, clique aqui&quot; (LGPD) —
+              não precisa incluí-lo no texto. Quem se descadastrou nunca entra na lista.
+            </p>
             {/* sandbox="" : o HTML da campanha roda isolado, sem scripts nem acesso à página. */}
             <iframe sandbox="" srcDoc={previewHtml} title="Preview do e-mail" className="h-[30rem] w-full rounded-md border bg-white" />
           </div>

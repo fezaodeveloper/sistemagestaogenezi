@@ -18,7 +18,14 @@ const RESEND_URL = "https://api.resend.com/emails";
 const REMETENTE_PADRAO_RESEND = "GÊNEZI Educação <no-reply@sistemagestaogenezi.com.br>";
 const TIMEOUT_MS = 20_000;
 
-export type EmailParams = { para: string; assunto: string; html: string; texto?: string };
+export type EmailParams = {
+  para: string;
+  assunto: string;
+  html: string;
+  texto?: string;
+  // Cabeçalhos extras (ex.: List-Unsubscribe nos e-mails de marketing).
+  headers?: Record<string, string>;
+};
 export type ResultadoEmail = { ok: boolean; erro?: string };
 export type ResultadoTesteProvedor = { ok: boolean; erro?: string; aviso?: string };
 
@@ -54,6 +61,7 @@ async function enviarPorResend(config: ConfigEmail | null, params: EmailParams):
       subject: params.assunto,
       html: params.html,
       ...(params.texto ? { text: params.texto } : {}),
+      ...(params.headers ? { headers: params.headers } : {}),
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -98,6 +106,7 @@ async function enviarPorSmtp(config: ConfigEmail, params: EmailParams): Promise<
     subject: params.assunto,
     html: params.html,
     text: params.texto ?? htmlParaTexto(params.html),
+    ...(params.headers ? { headers: params.headers } : {}),
   });
   return { ok: true };
 }
@@ -116,6 +125,7 @@ async function enviarPorSendGrid(config: ConfigEmail, params: EmailParams): Prom
       personalizations: [{ to: [{ email: params.para }] }],
       from: { email: sg.fromEmail, ...(sg.fromName ? { name: sg.fromName } : {}) },
       subject: params.assunto,
+      ...(params.headers ? { headers: params.headers } : {}),
       // A API exige text/plain ANTES de text/html.
       content: [
         { type: "text/plain", value: params.texto ?? htmlParaTexto(params.html) },

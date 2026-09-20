@@ -65,6 +65,7 @@ export async function proxy(request: NextRequest) {
     "/conecta",
     "/agendar",
     "/campanha",
+    "/descadastro",
     "/",
   ];
   const isRotaPublica = ROTAS_PUBLICAS.some(

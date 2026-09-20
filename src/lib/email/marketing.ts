@@ -5,6 +5,7 @@ import { carregarConfigEmail } from "@/lib/email/config";
 import { emailConfigurado, enviarEmail } from "@/lib/email/provedor";
 import { htmlParaTexto, renderizarTexto } from "@/lib/email/renderizar";
 import { LIMITE_LOTE, VARIAVEIS_CAMPANHA, type SegmentoEmail } from "@/lib/email/marketing-tipos";
+import { anexarRodapeDescadastro, linkDescadastro } from "@/lib/email/descadastro";
 
 // E-mail Marketing: escolha dos destinatários e envio em lotes.
 //
@@ -46,8 +47,17 @@ async function idsAlunos(consulta: (de: number, ate: number) => PromiseLike<{ da
 export async function getDestinatarios(segmento: SegmentoEmail, cursoId?: string | null): Promise<Destinatario[]> {
   const admin = createAdminClient();
 
-  const alunos = await lerTudo<{ id: string; email: string | null; full_name: string | null }>((de, ate) =>
-    admin.from("alunos").select("id, email, full_name").not("email", "is", null).order("id").range(de, ate),
+  const alunos = await lerTudo<{ id: string; email: string | null; full_name: string | null; email_marketing_ativo: boolean | null }>((de, ate) =>
+    admin.from("alunos").select("id, email, full_name, email_marketing_ativo").not("email", "is", null).order("id").range(de, ate),
+  );
+
+  // Descadastrados (LGPD) NUNCA entram, em nenhum segmento. Dois critérios: a marca no
+  // aluno E o registro por e-mail — este último vale mesmo se o mesmo endereço estiver
+  // em outro cadastro, ou se o aluno original tiver sido excluído.
+  const descadastrados = new Set(
+    (await lerTudo<{ email: string }>((de, ate) => admin.from("email_descadastros").select("email").order("id").range(de, ate))).map((linha) =>
+      linha.email.toLowerCase(),
+    ),
   );
 
   let manter: (alunoId: string) => boolean = () => true;
@@ -81,6 +91,7 @@ export async function getDestinatarios(segmento: SegmentoEmail, cursoId?: string
   for (const aluno of alunos) {
     const email = aluno.email?.trim().toLowerCase();
     if (!email || !REGEX_EMAIL.test(email) || vistos.has(email) || !manter(aluno.id)) continue;
+    if (aluno.email_marketing_ativo === false || descadastrados.has(email)) continue;
     vistos.add(email);
     destinatarios.push({ email, nome: aluno.full_name?.trim() || "", aluno_id: aluno.id });
   }
@@ -126,7 +137,10 @@ export async function iniciarEnvioCampanha(campanhaId: string): Promise<Resultad
   try {
     destinatarios = await getDestinatarios(campanha.segmento, campanha.curso_id);
   } catch {
-    return { ok: false, erro: "Não foi possível montar a lista de destinatários." };
+    return {
+      ok: false,
+      erro: "Não foi possível montar a lista de destinatários (a migration email_descadastros foi aplicada?).",
+    };
   }
   if (destinatarios.length === 0) return { ok: false, erro: "Nenhum destinatário encontrado para este segmento." };
 
@@ -264,16 +278,29 @@ export async function processarEnvios(campanhaId: string, opcoes: { orcamentoMs?
 
       for (const destino of lote as { id: string; email: string; nome: string | null }[]) {
         const variaveis = { nome_cliente: destino.nome || "aluno(a)", email_cliente: destino.email, nome_escola: nomeEscola };
-        const html = renderizarTexto(corpo, variaveis, VARIAVEIS_CAMPANHA, { escapar: true });
         const assuntoFinal = renderizarTexto(assunto, variaveis, VARIAVEIS_CAMPANHA, { escapar: false });
+
+        // Rodapé de descadastro OBRIGATÓRIO em todo e-mail de campanha, com o link único
+        // deste destinatário (não faz parte do texto editável). O cabeçalho List-Unsubscribe
+        // faz o próprio Gmail/Outlook mostrar "cancelar inscrição".
+        const link = linkDescadastro(destino.email);
+        const html = anexarRodapeDescadastro(renderizarTexto(corpo, variaveis, VARIAVEIS_CAMPANHA, { escapar: true }), link);
+        const enviar = () =>
+          enviarEmail({
+            para: destino.email,
+            assunto: assuntoFinal,
+            html,
+            texto: htmlParaTexto(html),
+            headers: { "List-Unsubscribe": `<${link}>` },
+          });
 
         // O espaçamento conta do INÍCIO de cada envio (a latência da chamada entra no intervalo).
         const [resultado] = await Promise.all([
           (async () => {
-            let r = await enviarEmail({ para: destino.email, assunto: assuntoFinal, html, texto: htmlParaTexto(html) });
+            let r = await enviar();
             for (let tentativa = 0; tentativa < 2 && !r.ok && REGEX_LIMITE.test(r.erro ?? ""); tentativa++) {
               await dormir(2000 * (tentativa + 1));
-              r = await enviarEmail({ para: destino.email, assunto: assuntoFinal, html, texto: htmlParaTexto(html) });
+              r = await enviar();
             }
             return r;
           })(),

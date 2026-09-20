@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { emailConfigurado, enviarEmail } from "@/lib/email/provedor";
 import { htmlParaTexto, renderizarTexto } from "@/lib/email/renderizar";
+import { anexarRodapeDescadastro, linkDescadastro } from "@/lib/email/descadastro";
 import { getDestinatarios, iniciarEnvioCampanha, processarEnvios, type ResultadoProcessamento } from "@/lib/email/marketing";
 import { EXEMPLO_CAMPANHA, SEGMENTOS_EMAIL, VARIAVEIS_CAMPANHA } from "@/lib/email/marketing-tipos";
 
@@ -96,9 +97,12 @@ export async function enviarTesteCampanha(assunto: string, corpoHtml: string, de
   if (!assunto.trim() || !corpoHtml.trim()) return { ok: false, erro: "Assunto e corpo não podem ficar vazios." };
   if (!(await emailConfigurado())) return { ok: false, erro: "O provedor de e-mail não está configurado." };
 
-  const html = renderizarTexto(corpoHtml, EXEMPLO_CAMPANHA, VARIAVEIS_CAMPANHA, { escapar: true });
+  // Igual ao envio real: com o rodapé de descadastro (o link vale pra este endereço).
+  const link = linkDescadastro(destinatario.trim());
+  const html = anexarRodapeDescadastro(renderizarTexto(corpoHtml, EXEMPLO_CAMPANHA, VARIAVEIS_CAMPANHA, { escapar: true }), link);
   const r = await enviarEmail({
     para: destinatario.trim(),
+    headers: { "List-Unsubscribe": `<${link}>` },
     assunto: `[TESTE] ${renderizarTexto(assunto, EXEMPLO_CAMPANHA, VARIAVEIS_CAMPANHA, { escapar: false })}`,
     html,
     texto: htmlParaTexto(html),
