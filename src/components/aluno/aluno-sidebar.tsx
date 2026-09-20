@@ -5,6 +5,7 @@ import type { RecursosHabilitados } from "@/lib/configuracoes/recursos";
 import { UserMenu } from "@/components/auth/user-menu";
 import { PushSubscribeAluno } from "@/components/aluno/push-subscribe";
 import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
+import { DocumentosLegaisMenu } from "@/components/aluno/documentos-legais-menu";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 import { getContagemNaoLidasAlunoAction } from "@/lib/chat/badge-actions";
 import {
@@ -168,19 +169,14 @@ export function AlunoSidebar({
                   </SidebarMenuBadge>
                 )}
               </SidebarMenuItem>
+              {/* Privacidade, Termos, LGPD e Uso de Imagem num submenu único. */}
+              <DocumentosLegaisMenu />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <UserMenu user={user} />
-        {/* Um único ponto de entrada; o índice /aluno/legal lista os 4 documentos
-            (privacidade, termos, LGPD e uso de imagem). */}
-        <nav className="flex justify-center px-2 pb-1 text-[11px] text-muted-foreground/70">
-          <Link href="/aluno/legal" className="hover:text-muted-foreground hover:underline">
-            Termos e Privacidade
-          </Link>
-        </nav>
         <PushSubscribeAluno vapidPublicKey={vapidPublicKey} />
         <PwaInstallButton />
       </SidebarFooter>
