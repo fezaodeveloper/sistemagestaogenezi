@@ -63,9 +63,10 @@ async function processarEvento(supabase: SupabaseAdmin, evento: EventoPagarme): 
       return baixarParcelaPaga(supabase, parcelaId, {
         forma: normalizarMetodoPagarme(cobranca.payment_method),
         idNotificacao: cobranca.id ?? parcelaId,
+        gateway: "pagarme",
       });
     case "charge.canceled":
-      return cancelarParcelaEmAberto(supabase, parcelaId);
+      return cancelarParcelaEmAberto(supabase, parcelaId, "pagarme");
     case "charge.refunded":
       return estornarParcelaPaga(supabase, parcelaId);
     default: {

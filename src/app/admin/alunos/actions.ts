@@ -12,6 +12,7 @@ import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
+import { dispararWebhook } from "@/lib/webhooks/disparar";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -593,6 +594,14 @@ export async function enviarSenhaAlunoWhatsApp(
     "Por segurança, altere a senha no seu primeiro acesso.",
   ].join("\n");
   console.log(`[whatsapp:stub] Enviaria para ${aluno.telefone}:\n${mensagem}`);
+
+  // Webhook de saída. Nunca inclui a senha — só avisa que o acesso foi enviado.
+  dispararWebhook("acesso_enviado", {
+    aluno_id: alunoId,
+    aluno_nome: aluno.full_name,
+    aluno_email: aluno.email,
+    aluno_telefone: aluno.telefone,
+  });
 
   return { success: true };
 }

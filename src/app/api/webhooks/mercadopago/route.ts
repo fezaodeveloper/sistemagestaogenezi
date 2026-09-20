@@ -40,9 +40,10 @@ async function processarPagamento(supabase: SupabaseAdmin, pagamento: PagamentoM
       return baixarParcelaPaga(supabase, parcelaId, {
         forma: normalizarMetodoMercadoPago(pagamento),
         idNotificacao: String(pagamento.id),
+        gateway: "mercadopago",
       });
     case "cancelled":
-      return cancelarParcelaEmAberto(supabase, parcelaId);
+      return cancelarParcelaEmAberto(supabase, parcelaId, "mercadopago");
     case "refunded":
     case "charged_back":
       return estornarParcelaPaga(supabase, parcelaId);

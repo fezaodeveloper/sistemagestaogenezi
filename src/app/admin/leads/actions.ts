@@ -20,6 +20,7 @@ import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LeadFormState } from "@/components/admin/lead-form";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
+import { dispararWebhook } from "@/lib/webhooks/disparar";
 
 function parseLeadForm(formData: FormData) {
   return leadFormSchema.safeParse({
@@ -68,6 +69,15 @@ export async function createLead(_prevState: LeadFormState, formData: FormData):
   if (error || !lead) {
     return { error: "Não foi possível cadastrar o lead. Tente novamente.", values: echoValues(formData) };
   }
+
+  dispararWebhook("lead_criado", {
+    lead_id: lead.id,
+    nome: parsed.data.nome,
+    telefone: parsed.data.telefone,
+    curso_id: parsed.data.curso_id,
+    origem: parsed.data.origem ?? null,
+    campanha_origem: null,
+  });
 
   try {
     const { data: curso } = await supabase

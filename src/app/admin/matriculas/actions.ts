@@ -16,6 +16,7 @@ import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
 import { notificarMatriculaWhatsApp } from "@/lib/matriculas/notificacoes";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { dispararWebhookDeMatricula } from "@/lib/webhooks/payloads";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
 import type { DIAS_SEMANA } from "@/lib/turmas/schema";
@@ -231,6 +232,9 @@ export async function createMatricula(
     // O stub atual só faz console.log e não lança — o try/catch já fica
     // pronto pro dia em que isso virar uma chamada de rede de verdade.
   }
+
+  // Webhook de saída (Apps > Webhooks): roda depois da resposta, nunca bloqueia.
+  dispararWebhookDeMatricula("matricula_criada", matricula.id);
 
   try {
     const { data: detalhes } = await supabase
@@ -722,4 +726,6 @@ export async function registrarWhatsappStub(tipo: WhatsappStubTipo, matriculaId:
     { tipo, matriculaId },
     `whatsapp-stub-${tipo}-${matriculaId}-${Date.now()}`,
   );
+  // "Dados de acesso" enviados ao aluno.
+  if (tipo === "dados_acesso") dispararWebhookDeMatricula("acesso_enviado", matriculaId);
 }

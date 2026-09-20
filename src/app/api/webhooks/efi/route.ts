@@ -47,7 +47,7 @@ async function processarPix(supabase: SupabaseAdmin, adapter: EfiAdapter, txid: 
   // Cobrança PIX que não nasceu de uma parcela.
   if (!parcelaId) return null;
 
-  return baixarParcelaPaga(supabase, parcelaId, { forma: "pix", idNotificacao: txid });
+  return baixarParcelaPaga(supabase, parcelaId, { forma: "pix", idNotificacao: txid, gateway: "efi" });
 }
 
 async function processarNotificacao(supabase: SupabaseAdmin, adapter: EfiAdapter, token: string): Promise<string | null> {
@@ -75,11 +75,11 @@ async function processarNotificacao(supabase: SupabaseAdmin, adapter: EfiAdapter
         } catch {
           forma = undefined; // a forma é só informativa; não impede a baixa
         }
-        erro = await baixarParcelaPaga(supabase, parcelaId, { forma, idNotificacao: `efi-${chargeId}` });
+        erro = await baixarParcelaPaga(supabase, parcelaId, { forma, idNotificacao: `efi-${chargeId}`, gateway: "efi" });
         break;
       }
       case "canceled":
-        erro = await cancelarParcelaEmAberto(supabase, parcelaId);
+        erro = await cancelarParcelaEmAberto(supabase, parcelaId, "efi");
         break;
       case "refunded":
         erro = await estornarParcelaPaga(supabase, parcelaId);

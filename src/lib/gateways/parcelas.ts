@@ -4,6 +4,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { agoraEmBrasilia } from "@/lib/datas/util";
 import type { MetodoPagamento } from "@/lib/gateways/types";
+import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 
 // Atualizações de `parcelas` disparadas pelos webhooks dos gateways (Stripe,
 // Pagar.me). Espelham o que o webhook do Asaas faz, mas achando a parcela pelo id
@@ -35,7 +36,7 @@ function formatarDataHora(): string {
 export async function baixarParcelaPaga(
   supabase: SupabaseAdmin,
   parcelaId: string,
-  opcoes: { forma?: MetodoPagamento; idNotificacao: string },
+  opcoes: { forma?: MetodoPagamento; idNotificacao: string; gateway?: string },
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from("parcelas")
@@ -50,6 +51,10 @@ export async function baixarParcelaPaga(
 
   if (error) return "Não foi possível atualizar a parcela para paga.";
   if (!data?.length) return null;
+
+  // Webhook de saída (Apps > Webhooks). Só aqui — quando a parcela de fato virou
+  // paga agora —, então um reenvio do gateway não dispara de novo.
+  dispararWebhookDeParcela("pedido_pago", parcelaId, opcoes.gateway ? { gateway: opcoes.gateway } : {});
 
   // Best-effort, como no Asaas: a parcela já foi atualizada, a notificação é secundária.
   try {
@@ -110,17 +115,27 @@ export async function anotarFalhaParcela(
 
   const observacoes = parcela.observacoes ? `${parcela.observacoes}\n${registro}` : registro;
   const { error } = await supabase.from("parcelas").update({ observacoes }).eq("id", parcelaId);
-  return error ? "Não foi possível registrar a falha na parcela." : null;
+  if (error) return "Não foi possível registrar a falha na parcela.";
+
+  dispararWebhookDeParcela("pagamento_recusado", parcelaId, { gateway: origem, motivo });
+  return null;
 }
 
 // Só cancela parcela ainda em aberto — um cancelamento tardio nunca desfaz uma parcela já paga.
-export async function cancelarParcelaEmAberto(supabase: SupabaseAdmin, parcelaId: string): Promise<string | null> {
-  const { error } = await supabase
+export async function cancelarParcelaEmAberto(
+  supabase: SupabaseAdmin,
+  parcelaId: string,
+  gateway?: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
     .from("parcelas")
     .update({ status: "cancelado" })
     .eq("id", parcelaId)
-    .in("status", ["pendente", "atrasado"]);
-  return error ? "Não foi possível cancelar a parcela." : null;
+    .in("status", ["pendente", "atrasado"])
+    .select("id");
+  if (error) return "Não foi possível cancelar a parcela.";
+  if (data?.length) dispararWebhookDeParcela("pedido_cancelado", parcelaId, gateway ? { gateway } : {});
+  return null;
 }
 
 // Estorno de uma parcela já paga (mesmo efeito do PAYMENT_REFUNDED do Asaas).

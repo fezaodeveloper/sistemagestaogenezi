@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { dispararWebhook } from "@/lib/webhooks/disparar";
 import {
   contarVagasOcupadasNoSlot,
   getAgendamentoPaginaPublica,
@@ -107,6 +108,19 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
   } catch {
     // Best-effort — o agendamento já foi confirmado com sucesso acima.
   }
+
+  // Webhook de saída (Apps > Webhooks): depois da resposta, nunca bloqueia.
+  dispararWebhook("agendamento_criado", {
+    agendamento_id: agendamento.id,
+    pagina_id: pagina.id,
+    titulo_pagina: pagina.titulo,
+    nome: parsed.data.nome,
+    whatsapp: parsed.data.whatsapp,
+    data_agendada: parsed.data.data_agendada,
+    horario: parsed.data.horario,
+    mensagem: parsed.data.mensagem ?? null,
+    campos_extras: parsed.data.campos_extras ?? {},
+  });
 
   return { success: true };
 }

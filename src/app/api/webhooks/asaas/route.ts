@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 
@@ -41,6 +42,14 @@ async function processarEvento(
   switch (payload.event) {
     case "PAYMENT_RECEIVED":
     case "PAYMENT_CONFIRMED": {
+      // O Asaas manda RECEIVED e CONFIRMED pro mesmo pagamento (cartão): o status
+      // anterior decide se o webhook de saída já foi disparado.
+      const { data: antes } = await supabase
+        .from("parcelas")
+        .select("id, status")
+        .eq("asaas_payment_id", paymentId)
+        .maybeSingle();
+
       const { error } = await supabase
         .from("parcelas")
         .update({
@@ -49,6 +58,10 @@ async function processarEvento(
           asaas_status: payload.payment?.status ?? null,
         })
         .eq("asaas_payment_id", paymentId);
+
+      if (!error && antes && antes.status !== "pago") {
+        dispararWebhookDeParcela("pedido_pago", antes.id as string, { gateway: "asaas" });
+      }
 
       if (!error) {
         // Best-effort: motor de automações nunca lança exceção, mas o
@@ -103,10 +116,20 @@ async function processarEvento(
       return error ? "Não foi possível atualizar a parcela para atrasada." : null;
     }
     case "PAYMENT_DELETED": {
+      const { data: antes } = await supabase
+        .from("parcelas")
+        .select("id, status")
+        .eq("asaas_payment_id", paymentId)
+        .maybeSingle();
+
       const { error } = await supabase
         .from("parcelas")
         .update({ status: "cancelado", asaas_status: payload.payment?.status ?? null })
         .eq("asaas_payment_id", paymentId);
+
+      if (!error && antes && antes.status !== "cancelado") {
+        dispararWebhookDeParcela("pedido_cancelado", antes.id as string, { gateway: "asaas" });
+      }
       return error ? "Não foi possível cancelar a parcela." : null;
     }
     case "PAYMENT_REFUNDED": {

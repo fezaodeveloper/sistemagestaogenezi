@@ -3,6 +3,7 @@ import "server-only";
 import { UserPlus } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefone } from "@/lib/mensagens/texto";
+import { dispararWebhook } from "@/lib/webhooks/disparar";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
 import { KANBAN_COLUNAS_PADRAO, type KanbanColuna, type KanbanColunaConfig, type Lead, type LeadFormValues, type Temperatura } from "./schema";
@@ -204,17 +205,34 @@ export async function criarOuAtualizarLeadPublico(
     }
   }
 
-  const { error } = await admin.from("leads").insert({
-    nome: input.nome,
-    telefone: input.telefone,
-    curso_id: input.curso_id,
-    origem: input.origem,
-    observacoes: input.observacoes ?? null,
-    campanha_origem: extras?.campanha_origem ?? null,
-  });
+  const { data: novo, error } = await admin
+    .from("leads")
+    .insert({
+      nome: input.nome,
+      telefone: input.telefone,
+      curso_id: input.curso_id,
+      origem: input.origem,
+      observacoes: input.observacoes ?? null,
+      campanha_origem: extras?.campanha_origem ?? null,
+    })
+    .select("id")
+    .single();
 
   if (error && error.code !== "23505") {
     return { error: "Não foi possível enviar. Tente novamente." };
+  }
+
+  // Webhook de saída (Apps > Webhooks). Só lead NOVO (o ramo acima, de lead já
+  // aberto, só atualiza). Cobre campanha, captação e agendamento, que passam por aqui.
+  if (novo) {
+    dispararWebhook("lead_criado", {
+      lead_id: novo.id,
+      nome: input.nome,
+      telefone: input.telefone,
+      curso_id: input.curso_id,
+      origem: input.origem,
+      campanha_origem: extras?.campanha_origem ?? null,
+    });
   }
 
   return {};

@@ -45,6 +45,7 @@ async function processarEvento(supabase: SupabaseAdmin, adapter: StripeAdapter, 
       return baixarParcelaPaga(supabase, parcelaId, {
         forma: await adapter.metodoDoPaymentIntent(intent),
         idNotificacao: intent.id,
+        gateway: "stripe",
       });
     case "payment_intent.payment_failed":
       return anotarFalhaParcela(
@@ -54,7 +55,7 @@ async function processarEvento(supabase: SupabaseAdmin, adapter: StripeAdapter, 
         intent.last_payment_error?.message ?? intent.last_payment_error?.code ?? "motivo não informado",
       );
     case "payment_intent.canceled":
-      return cancelarParcelaEmAberto(supabase, parcelaId);
+      return cancelarParcelaEmAberto(supabase, parcelaId, "stripe");
   }
 }
 

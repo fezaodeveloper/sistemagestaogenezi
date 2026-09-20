@@ -30,6 +30,7 @@ async function notificarCobrancaGerada(dados: {
   }
 }
 import { onlyDigits } from "@/lib/alunos/schema";
+import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import {
   criarClienteAsaas,
   buscarClienteAsaasPorCpf,
@@ -451,6 +452,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
         vencimento: `${formatarDataTelegram(parcela.matriculas.data_primeira_mensalidade)} (1ª parcela)`,
         link: primeiraParcela?.invoiceUrl,
       });
+      dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", parcelamento: true });
 
       revalidatePath("/admin/financeiro");
       return { success: true };
@@ -483,6 +485,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
       vencimento: formatarDataTelegram(parcela.data_vencimento),
       link: cobranca.invoiceUrl,
     });
+    dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", link_pagamento: cobranca.invoiceUrl });
 
     revalidatePath("/admin/financeiro");
     return { success: true };
@@ -515,6 +518,8 @@ export async function cancelarParcela(parcelaId: string): Promise<ParcelaActionR
   const { error } = await supabase.from("parcelas").update({ status: "cancelado" }).eq("id", parcelaId);
 
   if (error) return { error: "Não foi possível cancelar a parcela." };
+
+  dispararWebhookDeParcela("pedido_cancelado", parcelaId, { gateway: parcela.asaas_payment_id ? "asaas" : "manual" });
 
   revalidatePath("/admin/financeiro");
   return { success: true };
@@ -565,6 +570,8 @@ export async function marcarComoPagoManual(
     .eq("id", parcelaId);
 
   if (error) return { error: "Não foi possível marcar a parcela como paga." };
+
+  dispararWebhookDeParcela("pedido_pago", parcelaId, { gateway: "manual" });
 
   revalidatePath("/admin/financeiro");
   return { success: true };
