@@ -1,265 +1,87 @@
 import "server-only";
 
-const ASAAS_API_URL = process.env.ASAAS_API_URL ?? "https://api.asaas.com/v3";
-const ASAAS_API_KEY = process.env.ASAAS_API_KEY ?? "";
+import { obterAsaasAdapter, type AsaasAdapter } from "@/lib/gateways/adapters/asaas";
 
-async function asaasRequest<T>(
-  endpoint: string,
-  method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {
-    method,
-    headers: {
-      access_token: ASAAS_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+// Camada de COMPATIBILIDADE: a lógica de chamada ao Asaas mudou-se para o adapter
+// (src/lib/gateways/adapters/asaas.ts). Estas funções mantêm os mesmos nomes e
+// assinaturas de sempre, então webhooks, crons e Server Actions existentes
+// continuam importando daqui sem qualquer alteração.
+//
+// A chave da API agora é resolvida pelo adapter: primeiro a salva em
+// gateways_config (tela /admin/configuracoes/gateways), depois — como sempre foi —
+// as variáveis de ambiente ASAAS_API_KEY / ASAAS_API_URL. Código novo deve
+// preferir getGatewayAtivo()/getAdapter() de "@/lib/gateways/manager".
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null);
-    const message =
-      (errorBody as { errors?: { description?: string }[] } | null)?.errors?.[0]?.description ??
-      `Erro na API do Asaas (${response.status}).`;
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<T>;
-}
+type Dados<M extends keyof AsaasAdapter> = AsaasAdapter[M] extends (...args: infer A) => unknown ? A : never;
 
 // ===== CLIENTES =====
 
-export async function criarClienteAsaas(dados: {
-  name: string;
-  cpfCnpj: string;
-  email?: string;
-  phone?: string;
-}): Promise<{ id: string }> {
-  return asaasRequest<{ id: string }>("/customers", "POST", dados);
+export async function criarClienteAsaas(...args: Dados<"criarCliente">) {
+  return (await obterAsaasAdapter()).criarCliente(...args);
 }
 
-export async function buscarClienteAsaasPorCpf(cpf: string): Promise<{ id: string } | null> {
-  const resultado = await asaasRequest<{ data: { id: string }[] }>(
-    `/customers?cpfCnpj=${encodeURIComponent(cpf)}`,
-  );
-  return resultado.data[0] ?? null;
+export async function buscarClienteAsaasPorCpf(...args: Dados<"buscarClientePorCpf">) {
+  return (await obterAsaasAdapter()).buscarClientePorCpf(...args);
 }
 
 // ===== COBRANÇAS =====
 
-export async function criarCobrancaAsaas(dados: {
-  customer: string;
-  billingType: "BOLETO" | "PIX" | "CREDIT_CARD" | "UNDEFINED";
-  value: number;
-  dueDate: string;
-  description: string;
-  externalReference?: string;
-}): Promise<{ id: string; invoiceUrl: string; bankSlipUrl?: string; status: string }> {
-  return asaasRequest<{ id: string; invoiceUrl: string; bankSlipUrl?: string; status: string }>(
-    "/payments",
-    "POST",
-    dados,
-  );
+export async function criarCobrancaAsaas(...args: Dados<"criarCobranca">) {
+  return (await obterAsaasAdapter()).criarCobranca(...args);
 }
 
-export async function cancelarCobrancaAsaas(asaasPaymentId: string): Promise<void> {
-  await asaasRequest<unknown>(`/payments/${asaasPaymentId}`, "DELETE");
+export async function cancelarCobrancaAsaas(...args: Dados<"cancelarCobranca">) {
+  return (await obterAsaasAdapter()).cancelarCobranca(...args);
 }
 
-// Estorno integral — sem body, o Asaas devolve o valor ao meio de pagamento
-// original automaticamente. Diferente de cancelarCobrancaAsaas (DELETE, pra
-// cobrança ainda não paga): aqui a cobrança já foi recebida, então precisa
-// de fato estornar o dinheiro, não só cancelar a cobrança.
-export async function estornarCobrancaAsaas(asaasPaymentId: string): Promise<void> {
-  await asaasRequest<unknown>(`/payments/${asaasPaymentId}/refund`, "POST");
+export async function estornarCobrancaAsaas(...args: Dados<"estornarCobranca">) {
+  return (await obterAsaasAdapter()).estornarCobranca(...args);
+}
+
+export async function buscarCobrancaAsaas(...args: Dados<"buscarCobranca">) {
+  return (await obterAsaasAdapter()).buscarCobranca(...args);
+}
+
+export async function confirmarRecebimentoDinheiro(...args: Dados<"confirmarRecebimentoDinheiro">) {
+  return (await obterAsaasAdapter()).confirmarRecebimentoDinheiro(...args);
 }
 
 // ===== PARCELAMENTO =====
-// Mesmo endpoint de criarCobrancaAsaas (POST /payments), mas com
-// installmentCount + totalValue — o Asaas cria todas as cobranças da vez e
-// devolve a primeira, com o campo installment identificando o parcelamento
-// inteiro (usado depois em buscarParcelasDoParcelamento e gerarCarneAsaas).
 
-export async function criarParcelamentoAsaas(dados: {
-  customer: string;
-  billingType: "BOLETO";
-  totalValue: number;
-  installmentCount: number;
-  dueDate: string;
-  description: string;
-  externalReference?: string;
-}): Promise<{
-  id: string;
-  installment: string;
-  invoiceUrl: string;
-  bankSlipUrl?: string;
-  status: string;
-}> {
-  return asaasRequest("/payments", "POST", dados);
+export async function criarParcelamentoAsaas(...args: Dados<"criarParcelamento">) {
+  return (await obterAsaasAdapter()).criarParcelamento(...args);
 }
 
-export async function buscarParcelasDoParcelamento(installmentId: string): Promise<
-  Array<{
-    id: string;
-    installmentNumber: number;
-    value: number;
-    dueDate: string;
-    status: string;
-    invoiceUrl: string;
-    bankSlipUrl?: string;
-  }>
-> {
-  const resultado = await asaasRequest<{
-    data: Array<{
-      id: string;
-      installmentNumber: number;
-      value: number;
-      dueDate: string;
-      status: string;
-      invoiceUrl: string;
-      bankSlipUrl?: string;
-    }>;
-  }>(`/installments/${installmentId}/payments`);
-  return resultado.data;
+export async function buscarParcelasDoParcelamento(...args: Dados<"buscarParcelasDoParcelamento">) {
+  return (await obterAsaasAdapter()).buscarParcelasDoParcelamento(...args);
 }
 
-// Carnê oficial do Asaas (boleto + QR Code Pix de todas as parcelas) — PDF
-// binário, não JSON, então a chamada final não passa por asaasRequest. O
-// 400 genérico que o Asaas devolve em /paymentBook não diz o motivo real
-// (parcelamento inexistente vs. parcelamento só com Pix, sem boleto) —
-// os dois GETs abaixo diagnosticam a causa antes, pra devolver uma
-// mensagem que o admin consegue agir (ver ITEM 13).
-export async function gerarCarneAsaas(installmentId: string): Promise<ArrayBuffer> {
-  try {
-    await asaasRequest<unknown>(`/installments/${installmentId}`);
-  } catch {
-    throw new Error("Parcelamento não encontrado no Asaas.");
-  }
-
-  const cobrancas = await asaasRequest<{ data: { billingType: string }[] }>(
-    `/payments?installment=${installmentId}`,
-  );
-  const temBoleto = cobrancas.data.some((cobranca) => cobranca.billingType === "BOLETO");
-  if (!temBoleto) {
-    throw new Error(
-      "Este parcelamento não tem boletos gerados. O carnê só está disponível para cobranças com boleto.",
-    );
-  }
-
-  const response = await fetch(`${ASAAS_API_URL}/installments/${installmentId}/paymentBook`, {
-    headers: {
-      access_token: ASAAS_API_KEY,
-      Accept: "application/pdf",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Não foi possível gerar o carnê no Asaas (${response.status}).`);
-  }
-
-  return response.arrayBuffer();
-}
-
-// Baixa manual (dinheiro na mão, cartão na maquininha Infinipay, etc.) —
-// dá baixa no Asaas pra manter o status lá sincronizado com o pagamento
-// registrado no sistema, mesmo sem ter sido o Asaas quem recebeu de fato.
-export async function confirmarRecebimentoDinheiro(
-  asaasPaymentId: string,
-  dados: { paymentDate: string; value: number; notifyCustomer?: boolean },
-): Promise<void> {
-  await asaasRequest<unknown>(`/payments/${asaasPaymentId}/receiveInCash`, "POST", dados);
-}
-
-export async function buscarCobrancaAsaas(asaasPaymentId: string): Promise<{
-  id: string;
-  status: string;
-  value: number;
-  dueDate: string;
-  billingType?: string;
-  invoiceUrl?: string;
-  bankSlipUrl?: string;
-  paymentDate?: string;
-}> {
-  return asaasRequest(`/payments/${asaasPaymentId}`);
+export async function gerarCarneAsaas(...args: Dados<"gerarCarne">) {
+  return (await obterAsaasAdapter()).gerarCarne(...args);
 }
 
 // ===== ASSINATURAS (Gênezi Conecta — candidatos externos pagos) =====
-// Cobrança recorrente mensal, diferente do resto do financeiro (cobrança
-// avulsa por parcela) — endpoints /customers e /subscriptions próprios do
-// Asaas para esse modelo.
 
-export async function criarClienteAsaasConecta(dados: {
-  name: string;
-  email: string;
-  cpfCnpj?: string;
-  phone?: string;
-}): Promise<{ id: string }> {
-  return asaasRequest<{ id: string }>("/customers", "POST", dados);
+export async function criarClienteAsaasConecta(...args: Dados<"criarClienteConecta">) {
+  return (await obterAsaasAdapter()).criarClienteConecta(...args);
 }
 
-// invoiceUrl é opcional aqui de propósito: o objeto de assinatura do Asaas
-// não traz o link de pagamento (isso pertence à primeira COBRANÇA gerada a
-// partir dela, buscada separadamente em buscarCobrancasAssinaturaConecta,
-// logo depois da criação) — o campo fica tipado como opcional só pra não
-// quebrar se uma versão futura da API passar a incluir.
-export async function criarAssinaturaConecta(dados: {
-  customer: string;
-  billingType: "BOLETO" | "PIX" | "CREDIT_CARD" | "UNDEFINED";
-  value: number;
-  nextDueDate: string;
-  cycle: "MONTHLY";
-  description: string;
-}): Promise<{ id: string; status: string; invoiceUrl?: string }> {
-  return asaasRequest<{ id: string; status: string; invoiceUrl?: string }>(
-    "/subscriptions",
-    "POST",
-    dados,
-  );
+export async function criarAssinaturaConecta(...args: Dados<"criarAssinaturaConecta">) {
+  return (await obterAsaasAdapter()).criarAssinaturaConecta(...args);
 }
 
-export async function cancelarAssinaturaConecta(subscriptionId: string): Promise<void> {
-  await asaasRequest<unknown>(`/subscriptions/${subscriptionId}`, "DELETE");
+export async function cancelarAssinaturaConecta(...args: Dados<"cancelarAssinaturaConecta">) {
+  return (await obterAsaasAdapter()).cancelarAssinaturaConecta(...args);
 }
 
-export async function buscarStatusAssinaturaConecta(
-  subscriptionId: string,
-): Promise<{ id: string; status: string }> {
-  return asaasRequest<{ id: string; status: string }>(`/subscriptions/${subscriptionId}`);
+export async function buscarStatusAssinaturaConecta(...args: Dados<"buscarStatusAssinaturaConecta">) {
+  return (await obterAsaasAdapter()).buscarStatusAssinaturaConecta(...args);
 }
 
-// Cobranças geradas por uma assinatura — a mais recente (primeira da lista,
-// já vem ordenada por dueDate ascendente com a próxima em aberto primeiro)
-// é a que o candidato precisa pagar agora. billingType vem junto pra
-// decidir, na página de espera, se mostra o fluxo de PIX (QR Code) ou só o
-// link/boleto.
-export async function buscarCobrancasAssinaturaConecta(subscriptionId: string): Promise<
-  Array<{
-    id: string;
-    status: string;
-    billingType: string;
-    invoiceUrl: string;
-    bankSlipUrl?: string;
-  }>
-> {
-  const resultado = await asaasRequest<{
-    data: Array<{
-      id: string;
-      status: string;
-      billingType: string;
-      invoiceUrl: string;
-      bankSlipUrl?: string;
-    }>;
-  }>(`/subscriptions/${subscriptionId}/payments`);
-  return resultado.data;
+export async function buscarCobrancasAssinaturaConecta(...args: Dados<"buscarCobrancasAssinaturaConecta">) {
+  return (await obterAsaasAdapter()).buscarCobrancasAssinaturaConecta(...args);
 }
 
-// QR Code Pix de uma cobrança específica — o Asaas não inclui isso na lista
-// de cobranças acima (nem no payload da cobrança em si), é um endpoint à
-// parte. encodedImage já vem em base64 (pronto pra <img src="data:...">),
-// payload é o "copia e cola".
-export async function buscarQrCodePixConecta(
-  paymentId: string,
-): Promise<{ encodedImage: string; payload: string }> {
-  return asaasRequest<{ encodedImage: string; payload: string }>(`/payments/${paymentId}/pixQrCode`);
+export async function buscarQrCodePixConecta(...args: Dados<"buscarQrCodePixConecta">) {
+  return (await obterAsaasAdapter()).buscarQrCodePixConecta(...args);
 }
