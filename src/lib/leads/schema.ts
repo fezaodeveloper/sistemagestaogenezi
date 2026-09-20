@@ -231,6 +231,20 @@ export function formatarDataLead(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: FUSO_LEADS });
 }
 
+// "18/09/2026 às 14:32" (horário de Brasília).
+export function formatarDataHoraLead(iso: string): string {
+  const data = new Date(iso);
+  const dia = data.toLocaleDateString("pt-BR", { timeZone: FUSO_LEADS });
+  const hora = data.toLocaleTimeString("pt-BR", { timeZone: FUSO_LEADS, hour: "2-digit", minute: "2-digit" });
+  return `${dia} às ${hora}`;
+}
+
+// "Quinta-feira, 18/09/2026 às 14:32" (horário de Brasília).
+export function formatarDataHoraCompletaLead(iso: string): string {
+  const semana = new Date(iso).toLocaleDateString("pt-BR", { timeZone: FUSO_LEADS, weekday: "long" });
+  return `${semana.charAt(0).toUpperCase()}${semana.slice(1)}, ${formatarDataHoraLead(iso)}`;
+}
+
 // "YYYY-MM-DD" pra <input type="date">.
 export function dataLeadParaInput(iso: string | null): string {
   if (!iso) return "";

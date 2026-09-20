@@ -9,7 +9,7 @@ import {
   TEMPERATURA_LABELS,
   dataLeadParaInput,
   extrairHistoricoFollowups,
-  formatarDataLead,
+  formatarDataHoraCompletaLead,
   type KanbanColunaConfig,
   type Temperatura,
 } from "@/lib/leads/schema";
@@ -168,7 +168,7 @@ export function LeadDetalhesDrawer({
               Origem: {LEAD_ORIGEM_LABELS[lead.origem]}
               {lead.campanha_origem ? ` · ${lead.campanha_origem}` : ""}
             </p>
-            <p className="text-muted-foreground">Criado em {formatarDataLead(lead.created_at)}</p>
+            <p className="text-muted-foreground">Cadastrado em {formatarDataHoraCompletaLead(lead.created_at)}</p>
             {/* leads não tem email/cidade no schema atual (só nome, telefone,
                 curso_id, origem) — sinalizado ao admin em vez de omitir em
                 silêncio, ver conversa sobre esta migration. */}

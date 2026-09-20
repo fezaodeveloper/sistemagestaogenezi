@@ -215,3 +215,54 @@
 .animate-conquista-pop { animation: conquista-pop 600ms ease-out; }
 .animate-conquista-glow { animation: conquista-glow 1.8s ease-in-out infinite; }
 .animate-conquista-confete { animation: conquista-confete linear infinite; }
+
+/* Tema escuro da página pública de agendamento (/agendar/[slug]).
+   Sem JS (sem "flash"): segue prefers-color-scheme quando o visitante não
+   escolheu nada (data-tema="auto"); o botão da página força "claro"/"escuro"
+   via data-tema. Só sobrescreve os tokens dentro de .agendar-tema — a cor da
+   escola (cor_primaria) vem de style inline nos destaques e não é tocada;
+   --primary/--primary-foreground ficam nos valores do tema claro pra que o
+   texto dos botões coloridos continue branco. Fica DEPOIS de .dark de propósito
+   (mesma especificidade — a ordem decide). */
+.agendar-tema[data-tema="escuro"] {
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --border: #334155;
+  --input: #334155;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #334155;
+  --accent-foreground: #f1f5f9;
+  --secondary: #334155;
+  --secondary-foreground: #f1f5f9;
+  --ring: #64748b;
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  .agendar-tema:not([data-tema="claro"]) {
+    --background: #0f172a;
+    --foreground: #f1f5f9;
+    --card: #1e293b;
+    --card-foreground: #f1f5f9;
+    --popover: #1e293b;
+    --popover-foreground: #f1f5f9;
+    --border: #334155;
+    --input: #334155;
+    --muted: #334155;
+    --muted-foreground: #94a3b8;
+    --accent: #334155;
+    --accent-foreground: #f1f5f9;
+    --secondary: #334155;
+    --secondary-foreground: #f1f5f9;
+    --ring: #64748b;
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    color-scheme: dark;
+  }
+}

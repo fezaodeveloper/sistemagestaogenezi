@@ -21,6 +21,7 @@ import {
   TEMPERATURA_LABELS,
   campanhaBadgeClass,
   contarFollowups,
+  formatarDataHoraLead,
   formatarDataLead,
   kanbanColunaEstilo,
   type KanbanColunaConfig,
@@ -140,7 +141,7 @@ function LeadCard({
 
             <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
               <p>
-                🗓️ Criado em {formatarDataLead(lead.created_at)} ({diasDesdeCadastro(lead.created_at)} dia(s))
+                🗓️ Cadastrado em {formatarDataHoraLead(lead.created_at)} ({diasDesdeCadastro(lead.created_at)} dia(s))
               </p>
               {lead.ultimo_followup && <p>📞 Último contato: {formatarDataLead(lead.ultimo_followup)}</p>}
               <p>
