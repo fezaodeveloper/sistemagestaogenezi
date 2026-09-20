@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { getFinanceiroDados, getMatriculasParaParcela } from "@/app/admin/financeiro/actions";
 import { FinanceiroView } from "@/components/admin/financeiro-view";
+import { existeIntegracaoSpedyAtiva } from "@/lib/spedy/config";
 
 export default async function FinanceiroPage() {
   await requireRole("admin");
@@ -9,9 +10,10 @@ export default async function FinanceiroPage() {
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth() + 1;
 
-  const [dados, matriculas] = await Promise.all([
+  const [dados, matriculas, spedyAtivo] = await Promise.all([
     getFinanceiroDados(ano, mes),
     getMatriculasParaParcela(),
+    existeIntegracaoSpedyAtiva(),
   ]);
 
   return (
@@ -27,6 +29,7 @@ export default async function FinanceiroPage() {
         anoInicial={ano}
         mesInicial={mes}
         matriculas={matriculas}
+        spedyAtivo={spedyAtivo}
       />
     </div>
   );

@@ -31,6 +31,7 @@ async function notificarCobrancaGerada(dados: {
 }
 import { onlyDigits } from "@/lib/alunos/schema";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
+import { emitirNotaAutomatica } from "@/lib/spedy/nfe";
 import {
   notificarSmsCobrancaGerada,
   notificarSmsPagamentoRecebido,
@@ -579,6 +580,7 @@ export async function marcarComoPagoManual(
 
   dispararWebhookDeParcela("pedido_pago", parcelaId, { gateway: "manual" });
   notificarSmsPagamentoRecebido(parcelaId);
+  emitirNotaAutomatica(parcelaId);
 
   revalidatePath("/admin/financeiro");
   return { success: true };

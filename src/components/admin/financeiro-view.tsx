@@ -69,6 +69,7 @@ import {
   PARCELA_STATUS_LABELS,
 } from "@/lib/financeiro/schema";
 import { FORMAS_PAGAMENTO, FORMA_PAGAMENTO_LABELS } from "@/lib/matriculas/schema";
+import { SpedyNotaParcela } from "@/components/admin/spedy-nota-parcela";
 
 const NOMES_MES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -512,9 +513,11 @@ function NotaFiscalControl({
 function AcoesParcela({
   parcela,
   onAtualizada,
+  spedyAtivo,
 }: {
   parcela: ParcelaComRelacoes;
   onAtualizada: () => void;
+  spedyAtivo: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -759,6 +762,20 @@ function AcoesParcela({
       {parcela.status === "pago" && (
         <NotaFiscalControl parcela={parcela} onAtualizada={onAtualizada} />
       )}
+      {/* NFS-e pela Spedy: só em parcela paga, com integração ativa e nota ainda não
+          emitida (ou, se já emitida, o selo + "Ver status"). */}
+      {parcela.status === "pago" && (
+        <SpedyNotaParcela
+          parcelaId={parcela.id}
+          notaId={parcela.spedy_nota_id ?? null}
+          spedyAtivo={spedyAtivo}
+          alunoNome={parcela.alunos?.full_name ?? parcela.alunos?.email ?? "—"}
+          alunoCpf={parcela.alunos?.cpf ?? null}
+          cursoNome={parcela.matriculas?.turmas?.cursos?.nome ?? "—"}
+          valor={Number(parcela.valor)}
+          onAtualizada={onAtualizada}
+        />
+      )}
       {error && !pagamentoDialogOpen && <span className="text-destructive text-xs">{error}</span>}
     </div>
   );
@@ -769,11 +786,14 @@ export function FinanceiroView({
   anoInicial,
   mesInicial,
   matriculas,
+  spedyAtivo,
 }: {
   dadosIniciais: FinanceiroDados;
   anoInicial: number;
   mesInicial: number;
   matriculas: MatriculaParaParcela[];
+  // Há integração Spedy (NF-e) ativa — libera o botão "Emitir NF" nas parcelas pagas.
+  spedyAtivo: boolean;
 }) {
   const [ano, setAno] = useState(anoInicial);
   const [mes, setMes] = useState(mesInicial);
@@ -1183,7 +1203,7 @@ export function FinanceiroView({
                   {parcela.forma_pagamento ? FORMA_PAGAMENTO_LABELS[parcela.forma_pagamento] : "—"}
                 </TableCell>
                 <TableCell>
-                  <AcoesParcela parcela={parcela} onAtualizada={recarregar} />
+                  <AcoesParcela parcela={parcela} onAtualizada={recarregar} spedyAtivo={spedyAtivo} />
                 </TableCell>
               </TableRow>
             ))}

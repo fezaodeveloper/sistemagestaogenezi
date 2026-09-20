@@ -36,6 +36,7 @@ const APPS: App[] = [
     descricao: "Emissão automática de notas fiscais eletrônicas a partir dos pagamentos.",
     icone: FileText,
     cor: "#16A34A",
+    href: "/admin/configuracoes/apps/spedy",
   },
   {
     nome: "Pixels e Rastreamento",
@@ -50,11 +51,19 @@ export default async function AppsPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const [metricas, { data: sms }, pixelsAtivos] = await Promise.all([
+  const [metricas, { data: sms }, pixelsAtivos, spedyAtivas] = await Promise.all([
     getMetricasWebhooks24h(supabase),
     supabase.from("integracoes_sms_config").select("token, ativo").eq("id", INTEGRAX_CONFIG_ID).maybeSingle(),
     supabase.from("pixels_config").select("id", { count: "exact", head: true }).eq("ativo", true),
+    supabase.from("spedy_integracoes").select("id", { count: "exact", head: true }).eq("ativo", true),
   ]);
+
+  // Status real da Spedy: integrações ativas (tabela ausente = 0).
+  const totalSpedy = spedyAtivas.error ? 0 : (spedyAtivas.count ?? 0);
+  const statusSpedy =
+    totalSpedy > 0
+      ? { texto: `${totalSpedy} integraç${totalSpedy > 1 ? "ões ativas" : "ão ativa"}`, classe: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400" }
+      : { texto: "Não configurado", classe: "bg-muted text-muted-foreground" };
 
   // Status real dos pixels: quantos estão ativos (tabela ausente = 0).
   const totalPixels = pixelsAtivos.error ? 0 : (pixelsAtivos.count ?? 0);
@@ -94,6 +103,7 @@ export default async function AppsPage() {
                   {!app.href && <Badge variant="secondary">Em breve</Badge>}
                   {app.nome === "IntegraX SMS" && <Badge className={statusSms.classe}>{statusSms.texto}</Badge>}
                   {app.nome === "Pixels e Rastreamento" && <Badge className={statusPixels.classe}>{statusPixels.texto}</Badge>}
+                  {app.nome === "Spedy NF-e" && <Badge className={statusSpedy.classe}>{statusSpedy.texto}</Badge>}
                 </div>
                 <div className="flex flex-col gap-1">
                   <p className="font-semibold">{app.nome}</p>

@@ -6,6 +6,7 @@ import { agoraEmBrasilia } from "@/lib/datas/util";
 import type { MetodoPagamento } from "@/lib/gateways/types";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import { notificarSmsPagamentoRecebido } from "@/lib/integrax/notificacoes";
+import { emitirNotaAutomatica } from "@/lib/spedy/nfe";
 
 // Atualizações de `parcelas` disparadas pelos webhooks dos gateways (Stripe,
 // Pagar.me). Espelham o que o webhook do Asaas faz, mas achando a parcela pelo id
@@ -57,6 +58,9 @@ export async function baixarParcelaPaga(
   // paga agora —, então um reenvio do gateway não dispara de novo.
   dispararWebhookDeParcela("pedido_pago", parcelaId, opcoes.gateway ? { gateway: opcoes.gateway } : {});
   notificarSmsPagamentoRecebido(parcelaId);
+  // Nota fiscal automática (Spedy) — só se houver integração ativa pro curso; roda
+  // depois da resposta e uma falha aqui NUNCA afeta a confirmação do pagamento.
+  emitirNotaAutomatica(parcelaId);
 
   // Best-effort, como no Asaas: a parcela já foi atualizada, a notificação é secundária.
   try {

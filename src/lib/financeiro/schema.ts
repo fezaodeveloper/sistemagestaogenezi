@@ -77,6 +77,9 @@ export type Parcela = {
   nota_fiscal_emitida: boolean;
   nota_fiscal_url: string | null;
   nota_fiscal_path: string | null;
+  // ID da NFS-e emitida pela Spedy (ausente/null = não emitida). Coluna da migration
+  // parcelas_spedy_nota_id: opcional no tipo pra não quebrar antes dela ser aplicada.
+  spedy_nota_id?: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
