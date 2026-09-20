@@ -54,6 +54,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/comercial/campanhas", label: "Campanhas", icon: Megaphone },
     { href: "/admin/comercial/agendamentos", label: "Agendamentos", icon: CalendarCheck },
     { href: "/admin/comercial/paginas-campanha", label: "Páginas de Campanha", icon: Megaphone },
+    { href: "/admin/email-marketing", label: "E-mail Marketing", icon: Mail },
   ]},
   { id: "engajamento", label: "Engajamento", icon: Gift, items: [
     { href: "/admin/premios", label: "Prêmios", icon: Gift },
