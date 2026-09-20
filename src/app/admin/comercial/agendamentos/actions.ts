@@ -20,6 +20,7 @@ import {
   type Agendamento,
   type AgendamentoStatus,
 } from "@/lib/agendamentos/schema";
+import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 
 const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const HORARIO_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -261,6 +262,22 @@ export async function excluirAgendamento(id: string): Promise<{ error?: string }
 
   revalidarAgendamentos();
   return {};
+}
+
+// Exclusão em lote (seleção múltipla na lista de agendamentos) — mesma regra de
+// excluirAgendamento, num único delete.
+export async function excluirAgendamentosEmLote(ids: string[]): Promise<ResultadoExclusaoLote> {
+  await requireRole("admin");
+
+  const validos = sanitizarIdsLote(ids);
+  if (!validos) return { excluidos: 0, falhas: [], erro: ERRO_LOTE_INVALIDO };
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("agendamentos").delete().in("id", validos).select("id");
+  const apagados = new Set((data ?? []).map((linha) => linha.id as string));
+
+  revalidarAgendamentos();
+  return { excluidos: apagados.size, falhas: validos.filter((id) => !apagados.has(id)) };
 }
 
 export type HorarioReagendamento = { horario: string; vagasRestantes: number };

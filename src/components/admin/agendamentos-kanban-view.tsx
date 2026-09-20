@@ -3,13 +3,17 @@
 // "use client": drag-and-drop (eventos nativos do navegador), atualização
 // otimista de status e dialogs de confirmação.
 
-import { useEffect, useOptimistic, useState, useTransition, type DragEvent } from "react";
+import { useEffect, useMemo, useOptimistic, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LayoutGrid, List, Trash2 } from "lucide-react";
 import {
   atualizarStatusAgendamento,
   excluirAgendamento,
+  excluirAgendamentosEmLote,
 } from "@/app/admin/comercial/agendamentos/actions";
+import { useSelecaoMultipla } from "@/hooks/use-selecao-multipla";
+import { BarraSelecaoExclusao } from "@/components/admin/excluir-selecionados";
+import { descreverResultadoLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import type { ResumoAgendamentos } from "@/lib/agendamentos/agendamentos";
 import {
   AGENDAMENTO_STATUS_BADGE_CLASS,
@@ -22,6 +26,7 @@ import { AgendamentoReagendarDialog } from "@/components/admin/agendamento-reage
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -72,6 +77,8 @@ function LinhaAgendamento({
   agendamento,
   camposExtrasConfigurados,
   arrastando,
+  selecionado,
+  onSelecionar,
   onMover,
   onExcluir,
   onReagendado,
@@ -81,6 +88,8 @@ function LinhaAgendamento({
   agendamento: Agendamento;
   camposExtrasConfigurados: CampoExtra[];
   arrastando: boolean;
+  selecionado: boolean;
+  onSelecionar: () => void;
   onMover: (status: StatusColuna) => void;
   onExcluir: () => void;
   onReagendado: () => void;
@@ -98,8 +107,12 @@ function LinhaAgendamento({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      data-state={selecionado ? "selected" : undefined}
       className={`cursor-grab active:cursor-grabbing ${arrastando ? "opacity-40" : ""}`}
     >
+      <TableCell className="align-top">
+        <Checkbox checked={selecionado} onCheckedChange={onSelecionar} aria-label={`Selecionar agendamento de ${agendamento.nome}`} />
+      </TableCell>
       <TableCell className="max-w-64 align-top">
         <p className="font-medium">{agendamento.nome}</p>
         {camposExtras && <p className="text-muted-foreground text-xs">{camposExtras}</p>}
@@ -287,6 +300,7 @@ export function AgendamentosKanbanView({
   const [excluindo, setExcluindo] = useState<Agendamento | null>(null);
   const [isPending, startTransition] = useTransition();
   const [visualizacao, setVisualizacao] = useState<Visualizacao>("card");
+  const [mensagemLote, setMensagemLote] = useState<string | null>(null);
 
   // localStorage só existe no client: restaura a preferência em efeito (nunca
   // no render inicial, senão o HTML do server diverge do client e dá hydration
@@ -315,6 +329,16 @@ export function AgendamentosKanbanView({
     (atuais, movimento: { id: string; status: AgendamentoStatus }) =>
       atuais.map((a) => (a.id === movimento.id ? { ...a, status: movimento.status } : a)),
   );
+
+  // Seleção múltipla só na visualização em lista (é a que tem tabela/linhas).
+  const idsVisiveis = useMemo(() => visiveis.map((agendamento) => agendamento.id), [visiveis]);
+  const selecao = useSelecaoMultipla(idsVisiveis);
+
+  function aoExcluirLote(resultado: ResultadoExclusaoLote) {
+    selecao.definir(resultado.falhas);
+    setMensagemLote(descreverResultadoLote(resultado));
+    router.refresh();
+  }
 
   function mover(agendamento: Agendamento, status: StatusColuna) {
     if (agendamento.status === status) return;
@@ -432,6 +456,19 @@ export function AgendamentosKanbanView({
         </Card>
       ) : visualizacao === "lista" ? (
         <div className="flex flex-col gap-3">
+          {selecao.selecionados.length > 0 && (
+            <BarraSelecaoExclusao
+              quantidade={selecao.selecionados.length}
+              onLimpar={selecao.limpar}
+              onExcluir={() => excluirAgendamentosEmLote(selecao.selecionados)}
+              onConcluido={aoExcluirLote}
+            />
+          )}
+          {mensagemLote && (
+            <p role="status" className="text-muted-foreground text-sm">
+              {mensagemLote}
+            </p>
+          )}
           {/* Zonas de soltura: arrastar uma linha até um status o move (mesmo
               efeito das colunas do Kanban). */}
           <div className="grid grid-cols-3 gap-2">
@@ -463,6 +500,14 @@ export function AgendamentosKanbanView({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={selecao.todos}
+                      indeterminate={selecao.parcial}
+                      onCheckedChange={selecao.alternarTodos}
+                      aria-label="Selecionar todos os agendamentos visíveis"
+                    />
+                  </TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>WhatsApp</TableHead>
                   <TableHead>Data</TableHead>
@@ -478,6 +523,8 @@ export function AgendamentosKanbanView({
                     agendamento={agendamento}
                     camposExtrasConfigurados={camposExtrasConfigurados}
                     arrastando={arrastandoId === agendamento.id}
+                    selecionado={selecao.marcado(agendamento.id)}
+                    onSelecionar={() => selecao.alternar(agendamento.id)}
                     onMover={(status) => mover(agendamento, status)}
                     onExcluir={() => setExcluindo(agendamento)}
                     onReagendado={() => router.refresh()}

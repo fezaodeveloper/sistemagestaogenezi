@@ -19,6 +19,7 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
 import type { DIAS_SEMANA } from "@/lib/turmas/schema";
+import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 
 export type AlunoParaMatricula = {
   id: string;
@@ -611,6 +612,40 @@ export async function excluirMatricula(id: string): Promise<ExcluirMatriculaResu
   revalidatePath("/admin/matriculas");
   revalidatePath("/admin/financeiro");
   return { success: true, parcelasExcluidas: parcelas.length, cobrancasAsaasNaoCanceladas };
+}
+
+// Exclusão em lote (seleção múltipla na listagem): roda excluirMatricula em cada
+// id, então vale a MESMA regra da exclusão individual — as parcelas (financeiro)
+// da matrícula vão junto e as cobranças em aberto são canceladas no Asaas.
+// Em sequência, por causa das chamadas ao Asaas.
+export async function excluirMatriculasEmLote(ids: string[]): Promise<ResultadoExclusaoLote> {
+  await requireRole("admin");
+
+  const validos = sanitizarIdsLote(ids);
+  if (!validos) return { excluidos: 0, falhas: [], erro: ERRO_LOTE_INVALIDO };
+
+  let excluidos = 0;
+  let parcelas = 0;
+  let asaasNaoCanceladas = 0;
+  const falhas: string[] = [];
+
+  for (const id of validos) {
+    const resultado = await excluirMatricula(id);
+    if ("error" in resultado) {
+      falhas.push(id);
+      continue;
+    }
+    excluidos++;
+    parcelas += resultado.parcelasExcluidas;
+    asaasNaoCanceladas += resultado.cobrancasAsaasNaoCanceladas;
+  }
+
+  const avisos: string[] = [];
+  if (excluidos > 0) avisos.push(`${parcelas} parcela(s) do financeiro excluída(s) junto.`);
+  if (asaasNaoCanceladas > 0) {
+    avisos.push(`Atenção: ${asaasNaoCanceladas} cobrança(s) no Asaas não puderam ser canceladas — cancele manualmente no painel do Asaas.`);
+  }
+  return { excluidos, falhas, aviso: avisos.length > 0 ? avisos.join(" ") : undefined };
 }
 
 // ===== Edição em lote (MELHORIA 8) =====

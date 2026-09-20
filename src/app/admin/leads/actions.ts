@@ -19,6 +19,7 @@ import { adicionarEntradaNotas, formatarEntradaFollowup } from "@/lib/leads/lead
 import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LeadFormState } from "@/components/admin/lead-form";
+import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 
 function parseLeadForm(formData: FormData) {
   return leadFormSchema.safeParse({
@@ -139,6 +140,33 @@ export async function updateLeadStatus(id: string, status: string): Promise<{ er
   revalidatePath("/admin/leads");
   revalidatePath(`/admin/leads/${id}/editar`);
   return {};
+}
+
+// Exclusão em lote (seleção múltipla na listagem). O lead É a linha do Kanban
+// (kanban_coluna é uma coluna de `leads`), então apagar o lead já o tira do
+// Kanban — mesma regra de deleteLead. Se o lote inteiro falhar (ex.: uma FK de
+// um único lead), tenta um a um pra não perder os que podem ser excluídos.
+export async function deleteLeadsEmLote(ids: string[]): Promise<ResultadoExclusaoLote> {
+  await requireRole("admin");
+
+  const validos = sanitizarIdsLote(ids);
+  if (!validos) return { excluidos: 0, falhas: [], erro: ERRO_LOTE_INVALIDO };
+
+  const supabase = await createClient();
+  let apagados = new Set<string>();
+
+  const { data, error } = await supabase.from("leads").delete().in("id", validos).select("id");
+  if (error) {
+    for (const id of validos) {
+      const { data: um, error: erroUm } = await supabase.from("leads").delete().eq("id", id).select("id");
+      if (!erroUm && um?.length) apagados.add(id);
+    }
+  } else {
+    apagados = new Set((data ?? []).map((linha) => linha.id as string));
+  }
+
+  revalidatePath("/admin/leads");
+  return { excluidos: apagados.size, falhas: validos.filter((id) => !apagados.has(id)) };
 }
 
 export async function deleteLead(id: string): Promise<{ error?: string }> {

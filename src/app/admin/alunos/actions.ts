@@ -11,6 +11,7 @@ import { alunoFormSchema, alunoEditFormSchema, isMinor } from "@/lib/alunos/sche
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
+import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -609,6 +610,39 @@ export async function forcarVerificacaoBadgesAluno(alunoId: string): Promise<{ s
   await verificarBadgesProgressivos(alunoId);
 
   return { success: true };
+}
+
+// Exclusão em lote (seleção múltipla na listagem): mesma regra de deleteAluno —
+// apaga o usuário no Auth e o cascade leva profile, aluno, matrículas (e o
+// financeiro ligado a elas). Só ids que existem em `alunos` são tocados: o
+// client admin apagaria qualquer usuário do Auth, inclusive um administrador,
+// se recebesse o id dele por um POST forjado.
+export async function deleteAlunosEmLote(ids: string[]): Promise<ResultadoExclusaoLote> {
+  await requireRole("admin");
+
+  const validos = sanitizarIdsLote(ids);
+  if (!validos) return { excluidos: 0, falhas: [], erro: ERRO_LOTE_INVALIDO };
+
+  const admin = createAdminClient();
+  const { data: existentes } = await admin.from("alunos").select("id").in("id", validos);
+  const idsAlunos = new Set((existentes ?? []).map((linha) => linha.id as string));
+
+  let excluidos = 0;
+  const falhas: string[] = [];
+  // Em sequência (não em paralelo): cada delete dispara cascatas pesadas e a
+  // Admin API do Auth tem limite de taxa.
+  for (const id of validos) {
+    if (!idsAlunos.has(id)) {
+      falhas.push(id);
+      continue;
+    }
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) falhas.push(id);
+    else excluidos++;
+  }
+
+  revalidatePath("/admin/alunos");
+  return { excluidos, falhas };
 }
 
 export async function deleteAluno(id: string): Promise<{ error?: string }> {

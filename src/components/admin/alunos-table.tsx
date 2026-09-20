@@ -9,11 +9,16 @@ import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Paginacao } from "@/components/ui/paginacao";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 import { useBuscaUrl } from "@/hooks/use-busca-url";
+import { useSelecaoMultipla } from "@/hooks/use-selecao-multipla";
+import { deleteAlunosEmLote } from "@/app/admin/alunos/actions";
+import { BarraSelecaoExclusao } from "@/components/admin/excluir-selecionados";
+import { descreverResultadoLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import {
   Select,
   SelectContent,
@@ -272,6 +277,7 @@ export function AlunosTable({
   const [dataAte, setDataAte] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
+  const [mensagemLote, setMensagemLote] = useState<string | null>(null);
 
   // A BUSCA (nome, CPF, telefone) é feita no servidor (parâmetro q) e vale
   // pra todos os registros. Status, faixa etária, risco e período de cadastro
@@ -310,6 +316,15 @@ export function AlunosTable({
   // Mesma convenção de URL "limpa" de construirHref (paginacao.tsx): só
   // entra na URL o que difere do padrão. Volta pra página 1 ao trocar a
   // ordenação, preservando o limite atual.
+  const idsVisiveis = useMemo(() => alunosFiltrados.map((aluno) => aluno.id), [alunosFiltrados]);
+  const selecao = useSelecaoMultipla(idsVisiveis);
+
+  function aoExcluirLote(resultado: ResultadoExclusaoLote) {
+    selecao.definir(resultado.falhas);
+    setMensagemLote(descreverResultadoLote(resultado));
+    router.refresh();
+  }
+
   function handleOrderByChange(novoOrderBy: string) {
     const params = new URLSearchParams();
     if (novoOrderBy !== "nome") params.set("orderBy", novoOrderBy);
@@ -495,6 +510,21 @@ export function AlunosTable({
         Filtros aplicados apenas na página atual. Use a busca para encontrar registros específicos.
       </p>
 
+      {selecao.selecionados.length > 0 && (
+        <BarraSelecaoExclusao
+          quantidade={selecao.selecionados.length}
+          onLimpar={selecao.limpar}
+          onExcluir={() => deleteAlunosEmLote(selecao.selecionados)}
+          onConcluido={aoExcluirLote}
+          aviso="Os alunos selecionados serão excluídos junto com a conta de acesso, as matrículas e o financeiro ligados a eles."
+        />
+      )}
+      {mensagemLote && (
+        <p role="status" className="text-muted-foreground text-sm">
+          {mensagemLote}
+        </p>
+      )}
+
       {alunosFiltrados.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
           Nenhum aluno encontrado com os filtros aplicados.
@@ -503,6 +533,14 @@ export function AlunosTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={selecao.todos}
+                  indeterminate={selecao.parcial}
+                  onCheckedChange={selecao.alternarTodos}
+                  aria-label="Selecionar todos os alunos visíveis"
+                />
+              </TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>E-mail</TableHead>
               <TableHead>CPF</TableHead>
@@ -517,7 +555,14 @@ export function AlunosTable({
           </TableHeader>
           <TableBody>
             {alunosFiltrados.map((aluno) => (
-              <TableRow key={aluno.id}>
+              <TableRow key={aluno.id} data-state={selecao.marcado(aluno.id) ? "selected" : undefined}>
+                <TableCell>
+                  <Checkbox
+                    checked={selecao.marcado(aluno.id)}
+                    onCheckedChange={() => selecao.alternar(aluno.id)}
+                    aria-label={`Selecionar ${aluno.profiles?.full_name ?? aluno.email}`}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
                     <AlunoFotoAvatar aluno={aluno} />

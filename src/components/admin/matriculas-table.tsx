@@ -8,7 +8,9 @@ import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { updateMatriculaStatus } from "@/app/admin/alunos/matriculas-actions";
-import { alterarStatusEmLote, downloadContrato } from "@/app/admin/matriculas/actions";
+import { alterarStatusEmLote, downloadContrato, excluirMatriculasEmLote } from "@/app/admin/matriculas/actions";
+import { ExcluirSelecionadosButton } from "@/components/admin/excluir-selecionados";
+import { descreverResultadoLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,10 +156,12 @@ function AcoesEmLoteBar({
   selecionados,
   onLimpar,
   onAplicado,
+  onExcluido,
 }: {
   selecionados: string[];
   onLimpar: () => void;
   onAplicado: () => void;
+  onExcluido: (resultado: ResultadoExclusaoLote) => void;
 }) {
   const [novoStatus, setNovoStatus] = useState<string>(STATUS_LOTE_OPCOES[0]);
   const [confirmando, setConfirmando] = useState(false);
@@ -181,8 +185,7 @@ function AcoesEmLoteBar({
     <div className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm font-medium">
-          {selecionados.length} matrícula{selecionados.length > 1 ? "s" : ""} selecionada
-          {selecionados.length > 1 ? "s" : ""}
+          {selecionados.length} item(s) selecionado(s)
         </span>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground text-sm">Alterar status para:</span>
@@ -237,6 +240,12 @@ function AcoesEmLoteBar({
           <Button size="sm" variant="ghost" onClick={onLimpar}>
             Cancelar seleção
           </Button>
+          <ExcluirSelecionadosButton
+            quantidade={selecionados.length}
+            onExcluir={() => excluirMatriculasEmLote(selecionados)}
+            onConcluido={onExcluido}
+            aviso="As parcelas (financeiro) de cada matrícula são excluídas junto, e as cobranças em aberto são canceladas no Asaas."
+          />
         </div>
       </div>
     </div>
@@ -467,6 +476,7 @@ export function MatriculasTable({
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [mensagemLote, setMensagemLote] = useState<string | null>(null);
 
   // A BUSCA (aluno ou curso) é feita no servidor (parâmetro q) e vale pra
   // todas as matrículas. O filtro de status continua client-side, só sobre a
@@ -586,7 +596,17 @@ export function MatriculasTable({
             setSelecionados(new Set());
             router.refresh();
           }}
+          onExcluido={(resultado) => {
+            setSelecionados(new Set(resultado.falhas));
+            setMensagemLote(descreverResultadoLote(resultado));
+            router.refresh();
+          }}
         />
+      )}
+      {mensagemLote && (
+        <p role="status" className="text-muted-foreground text-sm">
+          {mensagemLote}
+        </p>
       )}
 
       {matriculasFiltradas.length === 0 ? (
@@ -600,6 +620,7 @@ export function MatriculasTable({
               <TableHead className="w-10">
                 <Checkbox
                   checked={todasVisiveisSelecionadas}
+                  indeterminate={selecionados.size > 0 && !todasVisiveisSelecionadas}
                   onCheckedChange={toggleTodasVisiveis}
                   aria-label="Selecionar todas as matrículas visíveis"
                 />

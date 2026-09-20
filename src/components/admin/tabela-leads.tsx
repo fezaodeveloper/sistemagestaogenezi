@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { enviarRecontatoLeads, updateLeadStatus } from "@/app/admin/leads/actions";
+import { deleteLeadsEmLote, enviarRecontatoLeads, updateLeadStatus } from "@/app/admin/leads/actions";
+import { ExcluirSelecionadosButton } from "@/components/admin/excluir-selecionados";
+import { descreverResultadoLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -163,6 +165,20 @@ export function TabelaLeads({
     router.push(construirUrl({ campanha: valor }));
   }
 
+  // A seleção só vale pra o que está na tela: ao trocar de página/filtro (itens
+  // novos), tira da seleção o que saiu da lista — senão uma exclusão em lote
+  // poderia atingir leads que o admin não está vendo. Ajuste de estado derivado
+  // durante o render (mesmo padrão de matriculas-table.tsx), não um useEffect.
+  const [itensAnteriores, setItensAnteriores] = useState(itens);
+  if (itens !== itensAnteriores) {
+    setItensAnteriores(itens);
+    const visiveis = new Set(itens.map((item) => item.id));
+    setSelecionados((prev) => {
+      const podados = Array.from(prev).filter((id) => visiveis.has(id));
+      return podados.length === prev.size ? prev : new Set(podados);
+    });
+  }
+
   function toggleUm(id: string) {
     setSelecionados((prev) => {
       const next = new Set(prev);
@@ -194,6 +210,13 @@ export function TabelaLeads({
   }
 
   const todosSelecionados = itens.length > 0 && selecionados.size === itens.length;
+
+  function aoExcluirLote(resultado: ResultadoExclusaoLote) {
+    setError(resultado.erro ?? null);
+    setSucesso(resultado.erro ? null : descreverResultadoLote(resultado));
+    setSelecionados(new Set(resultado.falhas));
+    router.refresh();
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -248,14 +271,24 @@ export function TabelaLeads({
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground text-sm">
           {selecionados.size > 0
-            ? `${selecionados.size} selecionado${selecionados.size > 1 ? "s" : ""}`
+            ? `${selecionados.size} item(s) selecionado(s)`
             : "Selecione um ou mais leads para disparar recontato."}
         </p>
-        <Button size="sm" disabled={selecionados.size === 0 || isPending} onClick={enviarRecontato}>
-          {isPending
-            ? "Enviando..."
-            : `Enviar recontato${selecionados.size > 0 ? ` (${selecionados.size})` : ""}`}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" disabled={selecionados.size === 0 || isPending} onClick={enviarRecontato}>
+            {isPending
+              ? "Enviando..."
+              : `Enviar recontato${selecionados.size > 0 ? ` (${selecionados.size})` : ""}`}
+          </Button>
+          {selecionados.size > 0 && (
+            <ExcluirSelecionadosButton
+              quantidade={selecionados.size}
+              onExcluir={() => deleteLeadsEmLote(Array.from(selecionados))}
+              onConcluido={aoExcluirLote}
+              aviso="Os leads também saem do Kanban."
+            />
+          )}
+        </div>
       </div>
 
       {error && (
@@ -270,7 +303,12 @@ export function TabelaLeads({
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">
-                <Checkbox checked={todosSelecionados} onCheckedChange={toggleTodos} aria-label="Selecionar todos" />
+                <Checkbox
+                  checked={todosSelecionados}
+                  indeterminate={selecionados.size > 0 && !todosSelecionados}
+                  onCheckedChange={toggleTodos}
+                  aria-label="Selecionar todos"
+                />
               </TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Telefone</TableHead>
