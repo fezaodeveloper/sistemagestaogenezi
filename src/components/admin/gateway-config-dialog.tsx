@@ -42,6 +42,7 @@ export function GatewayConfigDialog({
   const [taxas, setTaxas] = useState<Record<string, string>>(() =>
     Object.fromEntries(TAXA_CAMPOS.map((campo) => [campo.chave, taxaParaTexto(gateway.taxas[campo.chave])])),
   );
+  const [arquivos, setArquivos] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [teste, setTeste] = useState<ResultadoTesteConexao | null>(null);
   const [salvando, startSalvar] = useTransition();
@@ -49,6 +50,25 @@ export function GatewayConfigDialog({
 
   function dados(): DadosGatewayForm {
     return { ativo, sandbox, credenciais, taxas };
+  }
+
+  // Campo de arquivo (ex.: certificado .p12): lê o arquivo no navegador e guarda o
+  // conteúdo em base64 — é isso que segue pro servidor.
+  function lerArquivo(chave: string, arquivo: File | null) {
+    if (!arquivo) return;
+    if (arquivo.size > 200_000) {
+      setErro("Arquivo grande demais para um certificado (máx. 200 KB).");
+      return;
+    }
+    setErro(null);
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const resultado = String(leitor.result ?? "");
+      setCredenciais((prev) => ({ ...prev, [chave]: resultado.slice(resultado.indexOf(",") + 1) }));
+      setArquivos((prev) => ({ ...prev, [chave]: `${arquivo.name} (${Math.max(1, Math.round(arquivo.size / 1024))} KB)` }));
+    };
+    leitor.onerror = () => setErro("Não foi possível ler o arquivo selecionado.");
+    leitor.readAsDataURL(arquivo);
   }
 
   function handleTestar() {
@@ -118,7 +138,23 @@ export function GatewayConfigDialog({
                     {campo.label}
                     {campo.obrigatorio && <span className="text-destructive"> *</span>}
                   </Label>
-                  {campo.multilinha ? (
+                  {campo.arquivoBase64 ? (
+                    <div className="flex flex-col gap-1">
+                      <Input
+                        id={id}
+                        type="file"
+                        accept=".p12,.pfx"
+                        onChange={(event) => lerArquivo(campo.chave, event.target.files?.[0] ?? null)}
+                      />
+                      <p className="text-muted-foreground text-xs">
+                        {arquivos[campo.chave]
+                          ? `Selecionado: ${arquivos[campo.chave]}`
+                          : campo.preenchido
+                            ? "Certificado já salvo — escolha um arquivo só para substituí-lo."
+                            : "Nenhum arquivo selecionado."}
+                      </p>
+                    </div>
+                  ) : campo.multilinha ? (
                     <Textarea
                       id={id}
                       rows={3}
@@ -201,7 +237,10 @@ export function GatewayConfigDialog({
               }`}
             >
               {teste.ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <XCircle className="mt-0.5 size-4 shrink-0" />}
-              {teste.ok ? "Conexão realizada com sucesso." : (teste.erro ?? "Não foi possível conectar.")}
+              <span className="flex flex-col gap-1">
+                <span>{teste.ok ? "Conexão realizada com sucesso." : (teste.erro ?? "Não foi possível conectar.")}</span>
+                {teste.ok && teste.aviso && <span className="text-xs opacity-90">{teste.aviso}</span>}
+              </span>
             </p>
           )}
           {erro && (

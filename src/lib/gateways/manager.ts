@@ -1,8 +1,8 @@
 import "server-only";
 
 import { AsaasAdapter, asaasTemChaveNoAmbiente, montarConfigAsaas } from "@/lib/gateways/adapters/asaas";
-import { EfiAdapter } from "@/lib/gateways/adapters/efi";
-import { MercadoPagoAdapter } from "@/lib/gateways/adapters/mercadopago";
+import { EfiAdapter, type EfiConfig } from "@/lib/gateways/adapters/efi";
+import { MercadoPagoAdapter, type MercadoPagoConfig } from "@/lib/gateways/adapters/mercadopago";
 import { PagarmeAdapter, type PagarmeConfig } from "@/lib/gateways/adapters/pagarme";
 import { StripeAdapter, type StripeConfig } from "@/lib/gateways/adapters/stripe";
 import { GATEWAYS_CATALOGO, type CampoCredencial } from "@/lib/gateways/catalogo";
@@ -29,9 +29,9 @@ export function criarAdapter(tipo: GatewayTipo, config: ConfigGateway | null): G
     case GatewayTipo.Pagarme:
       return new PagarmeAdapter(montarConfigPagarme(config));
     case GatewayTipo.Mercadopago:
-      return new MercadoPagoAdapter();
+      return new MercadoPagoAdapter(montarConfigMercadoPago(config));
     case GatewayTipo.Efi:
-      return new EfiAdapter();
+      return new EfiAdapter(montarConfigEfi(config));
   }
 }
 
@@ -47,6 +47,26 @@ export function montarConfigPagarme(config: ConfigGateway | null): PagarmeConfig
   return {
     secretKey: config?.credenciais.secretKey ?? "",
     publicKey: config?.credenciais.publicKey ?? "",
+  };
+}
+
+export function montarConfigMercadoPago(config: ConfigGateway | null): MercadoPagoConfig {
+  return {
+    accessToken: config?.credenciais.accessToken ?? "",
+    publicKey: config?.credenciais.publicKey ?? "",
+    webhookSecret: config?.credenciais.webhookSecret ?? "",
+  };
+}
+
+export function montarConfigEfi(config: ConfigGateway | null): EfiConfig {
+  return {
+    clientId: config?.credenciais.clientId ?? "",
+    clientSecret: config?.credenciais.clientSecret ?? "",
+    chavePix: config?.credenciais.chavePix ?? "",
+    payeeCode: config?.credenciais.payeeCode ?? "",
+    certificadoP12: config?.credenciais.certificadoP12 ?? "",
+    // A Efí tem credenciais e hosts próprios de homologação.
+    sandbox: config?.sandbox ?? false,
   };
 }
 

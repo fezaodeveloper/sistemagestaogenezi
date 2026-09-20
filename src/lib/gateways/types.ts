@@ -89,7 +89,9 @@ export type CobrancaStatus = {
   urlPagamento?: string;
 };
 
-export type ResultadoTesteConexao = { ok: boolean; erro?: string };
+// aviso: conexão OK, mas com uma ressalva que o admin precisa ver (ex.: falta um
+// dado opcional que só um dos meios de pagamento usa).
+export type ResultadoTesteConexao = { ok: boolean; erro?: string; aviso?: string };
 
 export interface GatewayAdapter {
   readonly tipo: GatewayTipo;

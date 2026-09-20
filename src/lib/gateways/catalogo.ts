@@ -12,6 +12,9 @@ export type CampoCredencial = {
   placeholder?: string;
   ajuda?: string;
   multilinha?: boolean;
+  // Campo preenchido escolhendo um arquivo (ex.: certificado .p12): a tela lê o
+  // arquivo e guarda o conteúdo em base64.
+  arquivoBase64?: boolean;
 };
 
 export type GatewayCatalogoItem = {
@@ -99,32 +102,60 @@ export const GATEWAYS_CATALOGO: Record<GatewayTipo, GatewayCatalogoItem> = {
     tipo: GatewayTipo.Mercadopago,
     nome: "Mercado Pago",
     cor: "#00A8E8",
-    descricao: "Cartão, PIX e boleto.",
+    descricao: "PIX direto com QR Code; cartão e boleto pela página de pagamento do Mercado Pago.",
     metodos: ["pix", "cartao", "boleto"],
-    implementado: false,
+    implementado: true,
     campos: [
       { chave: "accessToken", label: "Access Token", secreto: true, obrigatorio: true, placeholder: "APP_USR-..." },
-      { chave: "publicKey", label: "Public Key", secreto: false, obrigatorio: false, placeholder: "APP_USR-..." },
+      { chave: "publicKey", label: "Public Key", secreto: false, obrigatorio: true, placeholder: "APP_USR-..." },
+      {
+        chave: "webhookSecret",
+        label: "Assinatura secreta do webhook",
+        secreto: true,
+        obrigatorio: true,
+        ajuda:
+          "Em Suas integrações > Webhooks do Mercado Pago, cadastre https://sistemagestaogenezi.vercel.app/api/webhooks/mercadopago com o evento Pagamentos e cole aqui a assinatura secreta gerada.",
+      },
     ],
   },
   [GatewayTipo.Efi]: {
     tipo: GatewayTipo.Efi,
     nome: "Efí (Gerencianet)",
     cor: "#F37021",
-    descricao: "PIX e boleto.",
-    metodos: ["pix", "boleto"],
-    implementado: false,
+    descricao: "PIX imediato com QR Code, boleto e cartão (pelo link de pagamento da Efí).",
+    metodos: ["pix", "cartao", "boleto"],
+    implementado: true,
     campos: [
-      { chave: "clientId", label: "Client ID", secreto: false, obrigatorio: true },
-      { chave: "clientSecret", label: "Client Secret", secreto: true, obrigatorio: true },
-      { chave: "chavePix", label: "Chave PIX", secreto: false, obrigatorio: false },
       {
-        chave: "certificado",
-        label: "Certificado (.p12 em base64)",
+        chave: "clientId",
+        label: "Client ID",
+        secreto: false,
+        obrigatorio: true,
+        ajuda: "Produção e homologação têm credenciais diferentes: use as do ambiente que o modo sandbox indica.",
+      },
+      { chave: "clientSecret", label: "Client Secret", secreto: true, obrigatorio: true },
+      {
+        chave: "chavePix",
+        label: "Chave PIX",
+        secreto: false,
+        obrigatorio: false,
+        ajuda: "Necessária para gerar cobranças PIX (a chave cadastrada na sua conta Efí).",
+      },
+      {
+        chave: "certificadoP12",
+        label: "Certificado .p12",
         secreto: true,
         obrigatorio: false,
-        multilinha: true,
-        ajuda: "Conteúdo do certificado .p12 codificado em base64.",
+        arquivoBase64: true,
+        ajuda:
+          "A API Pix da Efí exige o certificado em TODA chamada (autenticação mTLS), não só no cartão. Sem ele só boleto e cartão funcionam. Ao salvar com tudo preenchido, o webhook PIX é cadastrado na Efí automaticamente.",
+      },
+      {
+        chave: "payeeCode",
+        label: "Payee Code (opcional)",
+        secreto: false,
+        obrigatorio: false,
+        ajuda: "Só é usado por cartão tokenizado no navegador; o link de pagamento usado aqui não precisa.",
       },
     ],
   },

@@ -8,7 +8,8 @@ import { GATEWAYS_CATALOGO } from "@/lib/gateways/catalogo";
 import { carregarConfigsGateways, invalidarCacheGateways, type ConfigGateway } from "@/lib/gateways/config";
 import { ChaveCriptografiaAusenteError, criptografar } from "@/lib/gateways/crypto";
 import { asaasTemChaveNoAmbiente } from "@/lib/gateways/adapters/asaas";
-import { credenciaisCompletas, criarAdapter } from "@/lib/gateways/manager";
+import { EfiAdapter } from "@/lib/gateways/adapters/efi";
+import { credenciaisCompletas, criarAdapter, montarConfigEfi } from "@/lib/gateways/manager";
 import { GatewayTipo, TAXA_CAMPOS, isGatewayTipo, type ResultadoTesteConexao, type TaxasGateway } from "@/lib/gateways/types";
 
 export type DadosGatewayForm = {
@@ -22,7 +23,7 @@ export type DadosGatewayForm = {
 
 export type SalvarGatewayResultado = { success: true } | { error: string };
 
-const CREDENCIAL_MAXIMO = 10_000;
+const CREDENCIAL_MAXIMO = 60_000; // cabe um certificado .p12 em base64
 
 const dadosSchema = z.object({
   ativo: z.boolean(),
@@ -135,6 +136,20 @@ export async function salvarGateway(tipoBruto: string, dadosBrutos: DadosGateway
 
   invalidarCacheGateways();
   revalidatePath("/admin/configuracoes/gateways");
+
+  // Efí: o webhook PIX precisa ser cadastrado na conta deles (PUT /v2/webhook/:chave).
+  // Feito aqui, ao salvar com tudo preenchido, pra o admin não ter que chamar a API à mão.
+  if (tipo === GatewayTipo.Efi && credenciais.clientId && credenciais.clientSecret && credenciais.certificadoP12 && credenciais.chavePix) {
+    try {
+      await new EfiAdapter(
+        montarConfigEfi({ gateway: tipo, ativo: dados.ativo, sandbox: dados.sandbox, credenciais, taxas: resultadoTaxas.taxas }),
+      ).registrarWebhookPix();
+    } catch (erro) {
+      const motivo = erro instanceof Error ? erro.message : "erro desconhecido";
+      return { error: `Configuração salva, mas não foi possível cadastrar o webhook PIX na Efí: ${motivo}` };
+    }
+  }
+
   return { success: true };
 }
 
