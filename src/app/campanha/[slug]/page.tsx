@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampanhaPaginaPublica, contarRespostasAdmin } from "@/lib/campanha-paginas/campanha-paginas";
 import { CampanhaPublicaView } from "@/components/campanha/campanha-publica-view";
+import { getPixelsParaPagina } from "@/lib/pixels/injetar";
+import { PixelsScripts } from "@/components/pixels/pixels-scripts";
 
 // Página pública (sem login), acessível por qualquer visitante — sem
 // requireRole. force-dynamic: status/vagas/período mudam a qualquer
@@ -28,11 +30,15 @@ export default async function CampanhaPage({ params }: { params: Promise<{ slug:
 
   const escuro = pagina.tema === "escuro";
 
+  // Pixels de rastreamento (Apps > Pixels): os sem restrição de curso + os do curso da campanha.
+  const pixels = await getPixelsParaPagina(pagina.curso_id);
+
   return (
     <main
       className="flex min-h-svh flex-col items-center p-6"
       style={{ backgroundColor: pagina.cor_fundo, color: escuro ? "#f8fafc" : "#0f172a" }}
     >
+      <PixelsScripts pixels={pixels} />
       <div className="flex w-full max-w-lg flex-col gap-6 py-6">
         {/* Encerrada: a própria view mostra o banner vermelho "Inscrições
             encerradas!" no topo e bloqueia o formulário (o cabeçalho, com título e

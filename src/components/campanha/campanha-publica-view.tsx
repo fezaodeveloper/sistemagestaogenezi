@@ -18,6 +18,7 @@ import {
   type UfBrasil,
 } from "@/lib/campanha-paginas/schema";
 import { FONTE_CSS } from "@/lib/campanha-paginas/fontes";
+import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -478,6 +479,8 @@ export function CampanhaPublicaView({
       } catch {
         // sem localStorage — nada a limpar.
       }
+      // Inscrição enviada com sucesso = lead pros pixels (no preview do editor não passa por aqui).
+      dispararEventoPixels("lead");
       setSucesso(true);
     });
   }

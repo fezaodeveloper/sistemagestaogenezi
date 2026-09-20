@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAgendamentoPaginaPublica, getContagemPorHorario } from "@/lib/agendamentos/agendamentos";
 import { AgendamentoPublicoView } from "@/components/agendamentos/agendamento-publico-view";
 import { AgendarTema } from "@/components/agendamentos/agendar-tema";
+import { getPixelsParaPagina } from "@/lib/pixels/injetar";
+import { PixelsScripts } from "@/components/pixels/pixels-scripts";
 import { AGENDAMENTO_JANELA_DIAS } from "@/lib/agendamentos/schema";
 
 const JANELA_DIAS = AGENDAMENTO_JANELA_DIAS;
@@ -39,8 +41,12 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
 
   const contagemPorHorario = foraDoPeriodo ? {} : await getContagemPorHorario(pagina.id, hoje, dataFimJanelaISO);
 
+  // Pixels de rastreamento (Apps > Pixels). O agendamento não tem curso: só recebe os sem restrição.
+  const pixels = await getPixelsParaPagina();
+
   return (
     <AgendarTema>
+      <PixelsScripts pixels={pixels} />
       <div className="flex w-full max-w-lg flex-col gap-6 py-6">
         <div className="flex flex-col items-center gap-2 text-center">
           {config?.escola_logo_url ? (

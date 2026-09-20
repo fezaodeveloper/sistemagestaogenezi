@@ -42,6 +42,7 @@ const APPS: App[] = [
     descricao: "Meta Pixel, Google Analytics e outros pixels nas páginas públicas.",
     icone: BarChart3,
     cor: "#F97316",
+    href: "/admin/configuracoes/apps/pixels",
   },
 ];
 
@@ -49,10 +50,18 @@ export default async function AppsPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const [metricas, { data: sms }] = await Promise.all([
+  const [metricas, { data: sms }, pixelsAtivos] = await Promise.all([
     getMetricasWebhooks24h(supabase),
     supabase.from("integracoes_sms_config").select("token, ativo").eq("id", INTEGRAX_CONFIG_ID).maybeSingle(),
+    supabase.from("pixels_config").select("id", { count: "exact", head: true }).eq("ativo", true),
   ]);
+
+  // Status real dos pixels: quantos estão ativos (tabela ausente = 0).
+  const totalPixels = pixelsAtivos.error ? 0 : (pixelsAtivos.count ?? 0);
+  const statusPixels =
+    totalPixels > 0
+      ? { texto: `${totalPixels} pixel${totalPixels > 1 ? "s" : ""} ativo${totalPixels > 1 ? "s" : ""}`, classe: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400" }
+      : { texto: "Nenhum pixel ativo", classe: "bg-muted text-muted-foreground" };
 
   // Status real da IntegraX: ativo (token + ligada), configurado mas desligado, ou sem token.
   const statusSms = sms?.token
@@ -84,6 +93,7 @@ export default async function AppsPage() {
                   </span>
                   {!app.href && <Badge variant="secondary">Em breve</Badge>}
                   {app.nome === "IntegraX SMS" && <Badge className={statusSms.classe}>{statusSms.texto}</Badge>}
+                  {app.nome === "Pixels e Rastreamento" && <Badge className={statusPixels.classe}>{statusPixels.texto}</Badge>}
                 </div>
                 <div className="flex flex-col gap-1">
                   <p className="font-semibold">{app.nome}</p>

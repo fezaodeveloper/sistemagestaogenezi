@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { criarAgendamentoPublico } from "@/app/agendar/[slug]/actions";
 import { AGENDAMENTO_JANELA_DIAS, type AgendamentoPagina } from "@/lib/agendamentos/schema";
 import { dataComDiaSemana } from "@/lib/datas/util";
+import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -223,6 +224,8 @@ export function AgendamentoPublicoView({
         setError(resultado.error);
         return;
       }
+      // Agendamento confirmado = lead pros pixels (Apps > Pixels).
+      dispararEventoPixels("lead");
       setSucesso(true);
     });
   }
