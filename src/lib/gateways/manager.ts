@@ -4,7 +4,7 @@ import { AsaasAdapter, asaasTemChaveNoAmbiente, montarConfigAsaas } from "@/lib/
 import { EfiAdapter } from "@/lib/gateways/adapters/efi";
 import { MercadoPagoAdapter } from "@/lib/gateways/adapters/mercadopago";
 import { PagarmeAdapter } from "@/lib/gateways/adapters/pagarme";
-import { StripeAdapter } from "@/lib/gateways/adapters/stripe";
+import { StripeAdapter, type StripeConfig } from "@/lib/gateways/adapters/stripe";
 import { GATEWAYS_CATALOGO, type CampoCredencial } from "@/lib/gateways/catalogo";
 import { carregarConfigGateway, carregarConfigsGateways, type ConfigGateway } from "@/lib/gateways/config";
 import {
@@ -25,7 +25,7 @@ export function criarAdapter(tipo: GatewayTipo, config: ConfigGateway | null): G
     case GatewayTipo.Asaas:
       return new AsaasAdapter(montarConfigAsaas(config?.credenciais.apiKey, config?.sandbox ?? false));
     case GatewayTipo.Stripe:
-      return new StripeAdapter();
+      return new StripeAdapter(montarConfigStripe(config));
     case GatewayTipo.Pagarme:
       return new PagarmeAdapter();
     case GatewayTipo.Mercadopago:
@@ -33,6 +33,14 @@ export function criarAdapter(tipo: GatewayTipo, config: ConfigGateway | null): G
     case GatewayTipo.Efi:
       return new EfiAdapter();
   }
+}
+
+export function montarConfigStripe(config: ConfigGateway | null): StripeConfig {
+  return {
+    secretKey: config?.credenciais.secretKey ?? "",
+    publishableKey: config?.credenciais.publishableKey ?? "",
+    webhookSecret: config?.credenciais.webhookSecret ?? "",
+  };
 }
 
 export async function getAdapter(tipo: GatewayTipo): Promise<GatewayAdapter> {

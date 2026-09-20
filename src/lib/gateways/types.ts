@@ -48,6 +48,9 @@ export type CobrancaParams = {
   metodo: MetodoCobranca;
   // Identificador do lado do sistema (ex.: id da parcela) devolvido nos webhooks.
   referenciaExterna?: string;
+  // Pra onde o pagador volta depois de pagar/cancelar, nos gateways com página de
+  // pagamento hospedada (ex.: Stripe Checkout). Vazio = página padrão do sistema.
+  urlRetorno?: string;
 };
 
 // Status normalizado — cada adapter traduz o status do seu gateway pra estes.

@@ -51,13 +51,28 @@ export const GATEWAYS_CATALOGO: Record<GatewayTipo, GatewayCatalogoItem> = {
     tipo: GatewayTipo.Stripe,
     nome: "Stripe",
     cor: "#635BFF",
-    descricao: "Cartão de crédito internacional e PIX.",
+    descricao: "Cartão de crédito e PIX, com página de pagamento hospedada pelo Stripe.",
     metodos: ["pix", "cartao"],
-    implementado: false,
+    implementado: true,
     campos: [
-      { chave: "secretKey", label: "Secret Key", secreto: true, obrigatorio: true, placeholder: "sk_live_..." },
+      {
+        chave: "secretKey",
+        label: "Secret Key",
+        secreto: true,
+        obrigatorio: true,
+        placeholder: "sk_live_...",
+        ajuda: "A chave do modo teste (sk_test_...) e a do modo real (sk_live_...) são independentes.",
+      },
       { chave: "publishableKey", label: "Publishable Key", secreto: false, obrigatorio: true, placeholder: "pk_live_..." },
-      { chave: "webhookSecret", label: "Webhook Secret", secreto: true, obrigatorio: false, placeholder: "whsec_..." },
+      {
+        chave: "webhookSecret",
+        label: "Webhook Secret",
+        secreto: true,
+        obrigatorio: true,
+        placeholder: "whsec_...",
+        ajuda:
+          "No painel do Stripe, cadastre o endpoint https://sistemagestaogenezi.vercel.app/api/webhooks/stripe com os eventos payment_intent.succeeded, payment_intent.payment_failed e payment_intent.canceled.",
+      },
     ],
   },
   [GatewayTipo.Pagarme]: {
