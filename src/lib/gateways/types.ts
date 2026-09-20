@@ -39,6 +39,16 @@ export type CobrancaParams = {
     cpfCnpj: string;
     email?: string;
     telefone?: string;
+    // Opcional. Alguns meios (ex.: boleto no Pagar.me) podem exigir o endereço.
+    endereco?: {
+      logradouro: string;
+      numero: string;
+      bairro: string;
+      cep: string;
+      cidade: string;
+      estado: string;
+      complemento?: string;
+    };
   };
   // Em reais (não centavos).
   valor: number;
@@ -54,7 +64,7 @@ export type CobrancaParams = {
 };
 
 // Status normalizado — cada adapter traduz o status do seu gateway pra estes.
-export type StatusCobranca = "pendente" | "paga" | "vencida" | "cancelada" | "estornada" | "outro";
+export type StatusCobranca = "pendente" | "paga" | "vencida" | "cancelada" | "estornada" | "falhou" | "outro";
 
 export type CobrancaResult = {
   id: string;
@@ -62,6 +72,9 @@ export type CobrancaResult = {
   // Página de pagamento hospedada pelo gateway.
   urlPagamento?: string;
   urlBoleto?: string;
+  // PIX (quando a cobrança é PIX direto): "copia e cola" e imagem do QR Code.
+  pixCopiaECola?: string;
+  pixQrCodeUrl?: string;
 };
 
 export type CobrancaStatus = {

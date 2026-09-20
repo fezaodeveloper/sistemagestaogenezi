@@ -3,7 +3,7 @@ import "server-only";
 import { AsaasAdapter, asaasTemChaveNoAmbiente, montarConfigAsaas } from "@/lib/gateways/adapters/asaas";
 import { EfiAdapter } from "@/lib/gateways/adapters/efi";
 import { MercadoPagoAdapter } from "@/lib/gateways/adapters/mercadopago";
-import { PagarmeAdapter } from "@/lib/gateways/adapters/pagarme";
+import { PagarmeAdapter, type PagarmeConfig } from "@/lib/gateways/adapters/pagarme";
 import { StripeAdapter, type StripeConfig } from "@/lib/gateways/adapters/stripe";
 import { GATEWAYS_CATALOGO, type CampoCredencial } from "@/lib/gateways/catalogo";
 import { carregarConfigGateway, carregarConfigsGateways, type ConfigGateway } from "@/lib/gateways/config";
@@ -27,7 +27,7 @@ export function criarAdapter(tipo: GatewayTipo, config: ConfigGateway | null): G
     case GatewayTipo.Stripe:
       return new StripeAdapter(montarConfigStripe(config));
     case GatewayTipo.Pagarme:
-      return new PagarmeAdapter();
+      return new PagarmeAdapter(montarConfigPagarme(config));
     case GatewayTipo.Mercadopago:
       return new MercadoPagoAdapter();
     case GatewayTipo.Efi:
@@ -40,6 +40,13 @@ export function montarConfigStripe(config: ConfigGateway | null): StripeConfig {
     secretKey: config?.credenciais.secretKey ?? "",
     publishableKey: config?.credenciais.publishableKey ?? "",
     webhookSecret: config?.credenciais.webhookSecret ?? "",
+  };
+}
+
+export function montarConfigPagarme(config: ConfigGateway | null): PagarmeConfig {
+  return {
+    secretKey: config?.credenciais.secretKey ?? "",
+    publicKey: config?.credenciais.publicKey ?? "",
   };
 }
 

@@ -79,12 +79,20 @@ export const GATEWAYS_CATALOGO: Record<GatewayTipo, GatewayCatalogoItem> = {
     tipo: GatewayTipo.Pagarme,
     nome: "Pagar.me",
     cor: "#65A300",
-    descricao: "Cartão, PIX e boleto.",
+    descricao: "Cartão (página de pagamento hospedada), PIX e boleto.",
     metodos: ["pix", "cartao", "boleto"],
-    implementado: false,
+    implementado: true,
     campos: [
-      { chave: "secretKey", label: "Secret Key", secreto: true, obrigatorio: true, placeholder: "sk_..." },
-      { chave: "publicKey", label: "Public Key", secreto: false, obrigatorio: false, placeholder: "pk_..." },
+      {
+        chave: "secretKey",
+        label: "Secret Key",
+        secreto: true,
+        obrigatorio: true,
+        placeholder: "sk_...",
+        ajuda:
+          "É também a chave que assina os webhooks. No painel do Pagar.me, cadastre o endpoint https://sistemagestaogenezi.vercel.app/api/webhooks/pagarme com os eventos charge.paid, charge.payment_failed, charge.canceled e charge.refunded.",
+      },
+      { chave: "publicKey", label: "Public Key", secreto: false, obrigatorio: true, placeholder: "pk_..." },
     ],
   },
   [GatewayTipo.Mercadopago]: {
