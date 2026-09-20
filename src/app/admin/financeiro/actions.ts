@@ -32,6 +32,7 @@ async function notificarCobrancaGerada(dados: {
 import { onlyDigits } from "@/lib/alunos/schema";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import { emitirNotaAutomatica } from "@/lib/spedy/nfe";
+import { notificarEmailCobrancaGerada } from "@/lib/email/eventos";
 import {
   notificarSmsCobrancaGerada,
   notificarSmsPagamentoRecebido,
@@ -459,6 +460,8 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
       });
       dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", parcelamento: true });
       notificarSmsCobrancaGerada(parcelaId);
+      // No parcelamento o link do boleto/fatura é o da 1ª parcela (a fatura do Asaas também aceita PIX).
+      notificarEmailCobrancaGerada(parcelaId, { boleto: primeiraParcela?.bankSlipUrl ?? primeiraParcela?.invoiceUrl, pix: primeiraParcela?.invoiceUrl });
 
       revalidatePath("/admin/financeiro");
       return { success: true };
@@ -493,6 +496,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
     });
     dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", link_pagamento: cobranca.invoiceUrl });
     notificarSmsCobrancaGerada(parcelaId);
+    notificarEmailCobrancaGerada(parcelaId, { boleto: cobranca.bankSlipUrl ?? cobranca.invoiceUrl, pix: cobranca.invoiceUrl });
 
     revalidatePath("/admin/financeiro");
     return { success: true };

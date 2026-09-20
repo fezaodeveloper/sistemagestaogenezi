@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { resendConfigurado } from "@/lib/resend/client";
+import { emailConfigurado } from "@/lib/resend/client";
 import { enviarPremioDigital } from "@/lib/resend/emails";
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
@@ -33,12 +33,12 @@ export async function enviarEmailEntregaPremio(
   if (!premio.entrega_email_conteudo) {
     return { error: "Este prêmio não tem conteúdo de email de entrega configurado." };
   }
-  if (!resendConfigurado()) {
+  if (!(await emailConfigurado())) {
     await admin
       .from("entregas_premios")
-      .update({ status: "falhou", observacoes: "RESEND_API_KEY não configurado" })
+      .update({ status: "falhou", observacoes: "Provedor de e-mail não configurado" })
       .eq("id", entregaId);
-    return { error: "RESEND_API_KEY não configurado — não é possível enviar o email." };
+    return { error: "Provedor de e-mail não configurado — não é possível enviar o email." };
   }
   if (!alunoEmail) {
     await admin

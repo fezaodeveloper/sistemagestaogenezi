@@ -1,35 +1,24 @@
 import "server-only";
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
-const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "GÊNEZI Educação <no-reply@sistemagestaogenezi.com.br>";
+import { emailConfigurado, enviarEmail as enviarEmailUnificado } from "@/lib/email/provedor";
 
+// Camada de COMPATIBILIDADE: o envio real mora em src/lib/email/provedor.ts, que lê o
+// provedor escolhido em /admin/configuracoes/email (Resend, SMTP ou SendGrid). Sem
+// nenhuma configuração salva, continua sendo exatamente o Resend do ambiente
+// (RESEND_API_KEY / RESEND_FROM_EMAIL) — mesma chamada de sempre. Quem já importa
+// daqui não precisou mudar.
+
+// @deprecated Só olha a variável de ambiente. Prefira emailConfigurado() (async), que
+// considera o provedor escolhido na tela de configuração.
 export function resendConfigurado(): boolean {
-  return Boolean(RESEND_API_KEY);
+  return Boolean(process.env.RESEND_API_KEY);
 }
 
-// Mesmo padrão de enviarMensagemTelegram (src/lib/telegram/client.ts):
-// best-effort, nunca lança — falha de rede, token ausente ou erro da API
-// só retorna false. REGRA: só chama a API se RESEND_API_KEY estiver
-// configurado (ver resendConfigurado, checada antes por quem chama).
-export async function enviarEmail(params: { to: string; subject: string; html: string }): Promise<boolean> {
-  if (!RESEND_API_KEY) return false;
+export { emailConfigurado };
 
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: RESEND_FROM_EMAIL,
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-      }),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+// Best-effort: nunca lança — falha de rede, chave ausente ou erro do provedor só
+// retorna false.
+export async function enviarEmail(params: { to: string; subject: string; html: string }): Promise<boolean> {
+  const resultado = await enviarEmailUnificado({ para: params.to, assunto: params.subject, html: params.html });
+  return resultado.ok;
 }

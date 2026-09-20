@@ -5,6 +5,7 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import { criarOuAtualizarLeadPublico } from "@/lib/leads/leads";
 import { MUNICIPIOS_POR_UF } from "@/lib/ibge/municipios";
 import { normalizarBusca } from "@/lib/busca";
+import { notificarEmailLeadCampanha } from "@/lib/email/eventos";
 import { getCampanhaPaginaPublica, contarRespostasAdmin } from "@/lib/campanha-paginas/campanha-paginas";
 import {
   campanhaRespostaPublicaSchema,
@@ -137,6 +138,9 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
       // principal, o lead é um bônus pro CRM.
     }
   }
+
+  // E-mail de confirmação da inscrição (só sai se o visitante informou e-mail).
+  notificarEmailLeadCampanha({ nome: parsed.data.nome, email: parsed.data.email, nomeCampanha: pagina.titulo });
 
   // Stub — Evolution API virá depois.
   console.log(

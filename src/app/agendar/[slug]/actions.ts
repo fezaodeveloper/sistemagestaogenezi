@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
+import { notificarEmailAgendamento } from "@/lib/email/eventos";
 import {
   contarVagasOcupadasNoSlot,
   getAgendamentoPaginaPublica,
@@ -108,6 +109,15 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
   } catch {
     // Best-effort — o agendamento já foi confirmado com sucesso acima.
   }
+
+  // E-mail de confirmação (só sai se a página tiver um campo extra com e-mail).
+  notificarEmailAgendamento({
+    nome: parsed.data.nome,
+    camposExtras: parsed.data.campos_extras,
+    dataISO: parsed.data.data_agendada,
+    horario: parsed.data.horario,
+    tituloPagina: pagina.titulo,
+  });
 
   // Webhook de saída (Apps > Webhooks): depois da resposta, nunca bloqueia.
   dispararWebhook("agendamento_criado", {

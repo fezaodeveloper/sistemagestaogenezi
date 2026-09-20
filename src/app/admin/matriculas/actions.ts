@@ -18,6 +18,7 @@ import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeMatricula } from "@/lib/webhooks/payloads";
 import { notificarSmsMatriculaCriada } from "@/lib/integrax/notificacoes";
+import { notificarEmailMatriculaCriada } from "@/lib/email/eventos";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
 import type { DIAS_SEMANA } from "@/lib/turmas/schema";
@@ -240,6 +241,9 @@ export async function createMatricula(
   // SMS de boas-vindas (IntegraX). Sem a integração ativa só registra no console
   // o que seria enviado; roda depois da resposta e nunca bloqueia.
   notificarSmsMatriculaCriada(matricula.id);
+
+  // E-mails de dados de acesso + boas-vindas (templates editáveis em Configurações > E-mail).
+  notificarEmailMatriculaCriada(matricula.id);
 
   try {
     const { data: detalhes } = await supabase

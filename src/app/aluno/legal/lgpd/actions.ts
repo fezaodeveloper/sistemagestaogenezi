@@ -2,7 +2,7 @@
 
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { enviarEmail, resendConfigurado } from "@/lib/resend/client";
+import { emailConfigurado, enviarEmail } from "@/lib/resend/client";
 
 const MENSAGEM_MAX_LENGTH = 2000;
 
@@ -27,7 +27,7 @@ export async function enviarSolicitacaoLgpd(formData: FormData): Promise<{ error
   // perdida (o aluno já viu a mensagem de confirmação) — só não dispara o
   // e-mail. Uma fila/registro de solicitações fica pra uma versão futura,
   // se o volume justificar.
-  if (resendConfigurado()) {
+  if (await emailConfigurado()) {
     const supabase = await createClient();
     const { data: config } = await supabase
       .from("configuracoes")
