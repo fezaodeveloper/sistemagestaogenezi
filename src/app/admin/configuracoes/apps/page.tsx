@@ -3,6 +3,7 @@ import { BarChart3, FileText, MessageSquareText, Webhook, type LucideIcon } from
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getMetricasWebhooks24h } from "@/lib/webhooks/metricas";
+import { INTEGRAX_CONFIG_ID } from "@/lib/integrax/config";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -28,6 +29,7 @@ const APPS: App[] = [
     descricao: "Envio de SMS para lembretes de aula, cobranças e avisos aos alunos.",
     icone: MessageSquareText,
     cor: "#0EA5E9",
+    href: "/admin/configuracoes/apps/integrax",
   },
   {
     nome: "Spedy NF-e",
@@ -46,7 +48,18 @@ const APPS: App[] = [
 export default async function AppsPage() {
   await requireRole("admin");
 
-  const metricas = await getMetricasWebhooks24h(await createClient());
+  const supabase = await createClient();
+  const [metricas, { data: sms }] = await Promise.all([
+    getMetricasWebhooks24h(supabase),
+    supabase.from("integracoes_sms_config").select("token, ativo").eq("id", INTEGRAX_CONFIG_ID).maybeSingle(),
+  ]);
+
+  // Status real da IntegraX: ativo (token + ligada), configurado mas desligado, ou sem token.
+  const statusSms = sms?.token
+    ? sms.ativo
+      ? { texto: "Ativo", classe: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400" }
+      : { texto: "Configurado (inativo)", classe: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400" }
+    : { texto: "Não configurado", classe: "bg-muted text-muted-foreground" };
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,6 +83,7 @@ export default async function AppsPage() {
                     <Icone className="size-5" />
                   </span>
                   {!app.href && <Badge variant="secondary">Em breve</Badge>}
+                  {app.nome === "IntegraX SMS" && <Badge className={statusSms.classe}>{statusSms.texto}</Badge>}
                 </div>
                 <div className="flex flex-col gap-1">
                   <p className="font-semibold">{app.nome}</p>

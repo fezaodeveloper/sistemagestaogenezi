@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
+import { notificarSmsPagamentoRecebido } from "@/lib/integrax/notificacoes";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 
@@ -61,6 +62,7 @@ async function processarEvento(
 
       if (!error && antes && antes.status !== "pago") {
         dispararWebhookDeParcela("pedido_pago", antes.id as string, { gateway: "asaas" });
+        notificarSmsPagamentoRecebido(antes.id as string);
       }
 
       if (!error) {

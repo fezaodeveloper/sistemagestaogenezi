@@ -5,6 +5,7 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import { agoraEmBrasilia } from "@/lib/datas/util";
 import type { MetodoPagamento } from "@/lib/gateways/types";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
+import { notificarSmsPagamentoRecebido } from "@/lib/integrax/notificacoes";
 
 // Atualizações de `parcelas` disparadas pelos webhooks dos gateways (Stripe,
 // Pagar.me). Espelham o que o webhook do Asaas faz, mas achando a parcela pelo id
@@ -55,6 +56,7 @@ export async function baixarParcelaPaga(
   // Webhook de saída (Apps > Webhooks). Só aqui — quando a parcela de fato virou
   // paga agora —, então um reenvio do gateway não dispara de novo.
   dispararWebhookDeParcela("pedido_pago", parcelaId, opcoes.gateway ? { gateway: opcoes.gateway } : {});
+  notificarSmsPagamentoRecebido(parcelaId);
 
   // Best-effort, como no Asaas: a parcela já foi atualizada, a notificação é secundária.
   try {

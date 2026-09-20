@@ -32,6 +32,10 @@ async function notificarCobrancaGerada(dados: {
 import { onlyDigits } from "@/lib/alunos/schema";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import {
+  notificarSmsCobrancaGerada,
+  notificarSmsPagamentoRecebido,
+} from "@/lib/integrax/notificacoes";
+import {
   criarClienteAsaas,
   buscarClienteAsaasPorCpf,
   criarCobrancaAsaas,
@@ -453,6 +457,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
         link: primeiraParcela?.invoiceUrl,
       });
       dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", parcelamento: true });
+      notificarSmsCobrancaGerada(parcelaId);
 
       revalidatePath("/admin/financeiro");
       return { success: true };
@@ -486,6 +491,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
       link: cobranca.invoiceUrl,
     });
     dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", link_pagamento: cobranca.invoiceUrl });
+    notificarSmsCobrancaGerada(parcelaId);
 
     revalidatePath("/admin/financeiro");
     return { success: true };
@@ -572,6 +578,7 @@ export async function marcarComoPagoManual(
   if (error) return { error: "Não foi possível marcar a parcela como paga." };
 
   dispararWebhookDeParcela("pedido_pago", parcelaId, { gateway: "manual" });
+  notificarSmsPagamentoRecebido(parcelaId);
 
   revalidatePath("/admin/financeiro");
   return { success: true };
