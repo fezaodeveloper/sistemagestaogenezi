@@ -18,7 +18,7 @@ import { TermoImagemMatriculaForm } from "@/components/admin/termo-imagem-matric
 import { AlterarEmailAdminForm } from "@/components/admin/alterar-email-admin-form";
 import { BackupSection } from "@/components/admin/backup-section";
 import { LogSistemaView } from "@/components/admin/log-sistema-view";
-import { CreditCard, GraduationCap, LayoutGrid, Mail } from "lucide-react";
+import { CreditCard, GraduationCap, LayoutGrid, Mail, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -73,6 +73,10 @@ export default async function ConfiguracoesPage({
           <p className="text-muted-foreground text-sm">Configurações gerais da plataforma.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" render={<Link href="/admin/configuracoes/personalizacao" />} nativeButton={false}>
+            <Palette />
+            Personalização
+          </Button>
           <Button variant="outline" render={<Link href="/admin/configuracoes/gateways" />} nativeButton={false}>
             <CreditCard />
             Gateways de pagamento
