@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verificarConquistasPersonalizadas } from "@/lib/conquistas/verificar";
 import { gerarCertificadoPdf } from "./pdf";
 import type { CertificadoTemplate } from "./schema";
 
@@ -104,6 +105,10 @@ export async function emitirCertificado(
   if (updateError) {
     return { error: "PDF gerado, mas não foi possível atualizar o certificado." };
   }
+
+  // Conquistas personalizadas (gatilho certificado_emitido). Único funil de emissão (auto
+  // EAD, aluno, admin), então é o ponto certo. Nunca lança nem altera o retorno.
+  await verificarConquistasPersonalizadas(matricula.aluno_id);
 
   return {};
 }

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { enviarPushParaAluno } from "@/lib/push/enviar";
+import { verificarConquistasPersonalizadas } from "@/lib/conquistas/verificar";
 import { COMENTARIO_LIMITE_TEXTO } from "@/lib/comentarios/tipos";
 
 const PAGINA = "/admin/configuracoes/portal-aluno/comentarios";
@@ -55,9 +56,14 @@ export async function moderarComentario(
   if (status !== "aprovado" && status !== "rejeitado") return { error: "Status inválido." };
 
   const supabase = await createClient();
-  const { data, error } = await supabase.from("aula_comentarios").update({ status }).eq("id", id).select("id");
+  const { data, error } = await supabase.from("aula_comentarios").update({ status }).eq("id", id).select("id, aluno_id");
   if (error) return { error: "Não foi possível atualizar o comentário." };
   if (!data?.length) return { error: "Comentário não encontrado." };
+
+  // Conquistas personalizadas (gatilho primeiro_comentario): só conta comentário aprovado.
+  if (status === "aprovado") {
+    await verificarConquistasPersonalizadas(data[0].aluno_id as string);
+  }
 
   revalidarTudo();
   return { success: true };

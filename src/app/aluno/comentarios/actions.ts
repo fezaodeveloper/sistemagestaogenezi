@@ -11,6 +11,7 @@ import {
 } from "@/lib/matriculas/access";
 import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 import { getConfigComentarios } from "@/lib/comentarios/aula";
+import { verificarConquistasPersonalizadas } from "@/lib/conquistas/verificar";
 import { COMENTARIO_LIMITE_TEXTO } from "@/lib/comentarios/tipos";
 
 const textoSchema = z
@@ -94,6 +95,11 @@ export async function criarComentario(
     .single();
 
   if (error || !data) return { error: "Não foi possível publicar o comentário. Tente novamente." };
+
+  // Moderação desligada = o comentário já nasce aprovado: conta pro gatilho primeiro_comentario.
+  if (data.status === "aprovado") {
+    await verificarConquistasPersonalizadas(user.id);
+  }
 
   revalidarAula(cursoId, moduloId, aulaId);
   return { success: true, aprovado: data.status === "aprovado" };

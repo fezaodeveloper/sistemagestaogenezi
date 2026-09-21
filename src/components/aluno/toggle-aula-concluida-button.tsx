@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
 import { toggleAulaConcluida } from "@/app/aluno/cursos/[id]/modulos/[moduloId]/aulas/[aulaId]/actions";
+import { EVENTO_VERIFICAR_CONQUISTAS } from "@/components/aluno/conquistas-personalizadas-provider";
 import { Button } from "@/components/ui/button";
 
 export function ToggleAulaConcluidaButton({
@@ -28,6 +29,9 @@ export function ToggleAulaConcluidaButton({
         setError(result.error);
       } else {
         setConcluida((prev) => !prev);
+        // Marcou (não desmarcou): pode ter desbloqueado uma conquista — avisa o provider do
+        // layout para mostrar o modal agora.
+        if (!concluida) window.dispatchEvent(new Event(EVENTO_VERIFICAR_CONQUISTAS));
       }
     });
   }

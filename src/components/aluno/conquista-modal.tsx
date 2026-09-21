@@ -12,7 +12,7 @@ type Particula = { left: number; delay: number; duracao: number; cor: string };
 // Pontos coloridos caindo do topo — Math.random é uma função impura, por
 // isso a geração roda num efeito pós-montagem (não durante o render), uma
 // única vez; sem isso violaria a regra de pureza de render do React.
-function Confetes() {
+export function Confetes() {
   const [particulas, setParticulas] = useState<Particula[]>([]);
 
   useEffect(() => {

@@ -7,6 +7,8 @@ import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressiv
 import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
 import { getConfigComunidade } from "@/lib/comunidade/config";
+import { getConquistasAtivo } from "@/lib/conquistas/config";
+import { ConquistasPersonalizadasProvider } from "@/components/aluno/conquistas-personalizadas-provider";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
 import { Separator } from "@/components/ui/separator";
@@ -53,6 +55,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
     conectaHabilitado,
     { data: pushConfig },
     configComunidade,
+    conquistasHabilitadas,
   ] = await Promise.all([
       getConversaPorAluno(supabase, user.id),
       supabase
@@ -69,6 +72,8 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
       supabase.from("configuracoes").select("push_vapid_public_key").eq("id", true).maybeSingle(),
       // Nunca lança: erro/migration pendente = comunidade desligada (menu escondido).
       getConfigComunidade(supabase),
+      // Idem: erro/migration pendente = conquistas desligadas.
+      getConquistasAtivo(supabase),
     ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
@@ -77,6 +82,8 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   return (
     <div className="dark bg-background text-foreground min-h-svh">
       <ConquistasProvider alunoId={user.id} />
+      {/* Conquistas personalizadas (sistema separado das medalhas acima). */}
+      {conquistasHabilitadas && <ConquistasPersonalizadasProvider />}
       <SidebarProvider>
         <AlunoSidebar
           user={user}
@@ -87,6 +94,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           recursos={recursos}
           conectaHabilitado={conectaHabilitado}
           comunidadeHabilitada={configComunidade.ativo}
+          conquistasHabilitadas={conquistasHabilitadas}
           vapidPublicKey={pushConfig?.push_vapid_public_key ?? null}
         />
         <SidebarInset>

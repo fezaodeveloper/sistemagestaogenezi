@@ -7,6 +7,7 @@ import { getExpiracaoMatricula, getMatriculaAtivaComTurma } from "@/lib/matricul
 import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 import { verificarEmissaoAutomaticaEad } from "@/lib/certificados/emitir";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
+import { verificarConquistasPersonalizadas } from "@/lib/conquistas/verificar";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -115,6 +116,11 @@ export async function toggleAulaConcluida(
     } catch {
       // Nunca deve impedir a conclusão da aula.
     }
+
+    // Conquistas personalizadas (n_aulas, primeira_aula, percentual_curso, curso_completo).
+    // O trigger em pontos_eventos já cobre este caminho; a chamada explícita garante o
+    // desbloqueio mesmo se a pontuação for pulada. Idempotente e nunca lança.
+    await verificarConquistasPersonalizadas(user.id);
   }
 
   // Revalida a própria página da aula (o pill da prova, no AulaAcoesBar de
