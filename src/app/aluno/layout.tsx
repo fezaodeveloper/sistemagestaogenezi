@@ -6,6 +6,7 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
+import { getConfigComunidade } from "@/lib/comunidade/config";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
 import { Separator } from "@/components/ui/separator";
@@ -45,8 +46,14 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
   const recursos = await getRecursosHabilitadosAluno(user.id);
 
   const supabase = await createClient();
-  const [conversa, { count: parcelasAtrasadas }, { count: contratosPendentes }, conectaHabilitado, { data: pushConfig }] =
-    await Promise.all([
+  const [
+    conversa,
+    { count: parcelasAtrasadas },
+    { count: contratosPendentes },
+    conectaHabilitado,
+    { data: pushConfig },
+    configComunidade,
+  ] = await Promise.all([
       getConversaPorAluno(supabase, user.id),
       supabase
         .from("parcelas")
@@ -60,6 +67,8 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
         .eq("status", "pendente"),
       getConectaHabilitado(supabase),
       supabase.from("configuracoes").select("push_vapid_public_key").eq("id", true).maybeSingle(),
+      // Nunca lança: erro/migration pendente = comunidade desligada (menu escondido).
+      getConfigComunidade(supabase),
     ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
@@ -77,6 +86,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           contratosPendentes={contratosPendentes ?? 0}
           recursos={recursos}
           conectaHabilitado={conectaHabilitado}
+          comunidadeHabilitada={configComunidade.ativo}
           vapidPublicKey={pushConfig?.push_vapid_public_key ?? null}
         />
         <SidebarInset>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, Briefcase, Coins, FileBadge, FileText, GraduationCap, MessagesSquare, Trophy, User } from "lucide-react";
+import { Banknote, Briefcase, Coins, FileBadge, FileText, GraduationCap, MessagesSquare, Trophy, User, Users } from "lucide-react";
 import type { CurrentUser } from "@/lib/auth/dal";
 import type { RecursosHabilitados } from "@/lib/configuracoes/recursos";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -30,6 +30,7 @@ export function AlunoSidebar({
   contratosPendentes,
   recursos,
   conectaHabilitado,
+  comunidadeHabilitada,
   vapidPublicKey,
 }: {
   user: CurrentUser;
@@ -39,6 +40,7 @@ export function AlunoSidebar({
   contratosPendentes: number;
   recursos: RecursosHabilitados;
   conectaHabilitado: boolean;
+  comunidadeHabilitada: boolean;
   vapidPublicKey: string | null;
 }) {
   return (
@@ -94,6 +96,18 @@ export function AlunoSidebar({
                       refetchAction={getContagemNaoLidasAlunoAction.bind(null, conversaId)}
                     />
                   )}
+                </SidebarMenuItem>
+              )}
+              {comunidadeHabilitada && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link href="/aluno/comunidade">
+                        <Users />
+                        <span>Comunidade</span>
+                      </Link>
+                    }
+                  />
                 </SidebarMenuItem>
               )}
               {recursos.ranking && (
