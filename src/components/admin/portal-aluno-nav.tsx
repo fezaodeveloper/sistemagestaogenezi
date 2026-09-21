@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogIn, type LucideIcon } from "lucide-react";
+import { LogIn, MessageSquare, type LucideIcon } from "lucide-react";
 
 // Abas do portal do aluno. Cada uma é uma SUBROTA de /admin/configuracoes/portal-aluno:
 // para acrescentar uma aba nova, crie a pasta da rota e uma entrada aqui.
@@ -14,6 +14,12 @@ export const SECOES_PORTAL_ALUNO: { href: string; label: string; descricao: stri
     label: "Login",
     descricao: "Aparência e acesso",
     icone: LogIn,
+  },
+  {
+    href: "/admin/configuracoes/portal-aluno/comentarios",
+    label: "Comentários",
+    descricao: "Comentários nas aulas",
+    icone: MessageSquare,
   },
 ];
 

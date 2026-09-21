@@ -33,7 +33,7 @@ async function enviarPushPara(
   titulo: string,
   corpo: string,
   url: string,
-  filtro: "admin" | "aluno",
+  filtro: "admin" | "aluno" | { alunoId: string },
 ): Promise<number> {
   try {
     const admin = createAdminClient();
@@ -53,7 +53,9 @@ async function enviarPushPara(
     );
 
     let query = admin.from("push_subscriptions").select("id, endpoint, p256dh, auth_key");
-    query = filtro === "admin" ? query.is("aluno_id", null) : query.not("aluno_id", "is", null);
+    if (filtro === "admin") query = query.is("aluno_id", null);
+    else if (filtro === "aluno") query = query.not("aluno_id", "is", null);
+    else query = query.eq("aluno_id", filtro.alunoId);
     const { data: subscriptions } = await query;
 
     if (!subscriptions || subscriptions.length === 0) return 0;
@@ -102,4 +104,16 @@ export async function enviarPushAdmin(titulo: string, corpo: string, url: string
 // quantidade de dispositivos pra que a tela mostre o resultado do envio.
 export async function enviarPushAlunos(titulo: string, corpo: string, url: string): Promise<number> {
   return enviarPushPara(titulo, corpo, url, "aluno");
+}
+
+// Notificação pra UM aluno específico (todos os dispositivos dele) — ex.: o admin
+// respondeu um comentário dele numa aula. Best-effort como as demais: aluno sem
+// dispositivo registrado (ou push não configurado) retorna 0 e nunca lança.
+export async function enviarPushParaAluno(
+  alunoId: string,
+  titulo: string,
+  corpo: string,
+  url: string,
+): Promise<number> {
+  return enviarPushPara(titulo, corpo, url, { alunoId });
 }

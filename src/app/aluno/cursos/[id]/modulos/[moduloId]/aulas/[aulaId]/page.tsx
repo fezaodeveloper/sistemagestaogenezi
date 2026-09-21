@@ -15,6 +15,8 @@ import { getMeusPontos } from "@/lib/gamificacao/ranking";
 import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
 import { AulaListaModulo } from "@/components/aluno/aula-lista-modulo";
+import { AulaComentarios } from "@/components/aluno/aula-comentarios";
+import { getSecaoComentarios } from "@/lib/comentarios/aula";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -280,6 +282,7 @@ export default async function AulaConteudoPage({
     recursos,
     pontos,
     { data: ofensivaData },
+    secaoComentarios,
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -307,6 +310,8 @@ export default async function AulaConteudoPage({
       .order("ofensiva_atual", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // null = comentários desativados (ou migration ainda não aplicada): a seção some.
+    getSecaoComentarios(supabase, aulaId, user.id),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
@@ -397,6 +402,17 @@ export default async function AulaConteudoPage({
                 <ArrowRight />
               </Button>
             </div>
+          )}
+
+          {secaoComentarios && (
+            <AulaComentarios
+              cursoId={cursoId}
+              moduloId={moduloId}
+              aulaId={aulaId}
+              moderacao={secaoComentarios.moderacao}
+              comentarios={secaoComentarios.comentarios}
+              erroAoCarregar={secaoComentarios.erro}
+            />
           )}
         </div>
 
