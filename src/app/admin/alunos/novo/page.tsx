@@ -1,8 +1,12 @@
 import { requireRole } from "@/lib/auth/dal";
 import { AlunoCreateForm } from "@/components/admin/aluno-create-form";
+import { lerConfigSenhaPortal } from "@/lib/portal-login/config";
 
 export default async function NovoAlunoPage() {
   await requireRole("admin");
+
+  // Como o portal do aluno trata a senha (Configurações > Portal do Aluno > Login).
+  const portal = await lerConfigSenhaPortal();
 
   return (
     <div className="flex flex-col gap-6">
@@ -13,7 +17,7 @@ export default async function NovoAlunoPage() {
           turmas é feita depois, na tela do aluno.
         </p>
       </div>
-      <AlunoCreateForm />
+      <AlunoCreateForm tipoSenhaPortal={portal.tipo} senhaPadraoDefinida={!!portal.senhaPadrao} />
     </div>
   );
 }

@@ -38,6 +38,19 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=link_invalido`);
   }
 
+  // Login por link de acesso (portal do aluno em modo "somente e-mail": signInWithOtp).
+  // Com o template de e-mail do Supabase usando {{ .TokenHash }}, o link abre em QUALQUER
+  // navegador/aparelho (o fluxo com "code" abaixo só funciona no navegador que pediu).
+  if (tokenHash && (type === "magiclink" || type === "email")) {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+
+    if (!error) {
+      return NextResponse.redirect(`${origin}${next}`);
+    }
+    return NextResponse.redirect(`${origin}/entrar?error=link_invalido`);
+  }
+
   // Login social (Google) e confirmação de e-mail via PKCE — fluxo existente.
   if (code) {
     const supabase = await createClient();
@@ -51,6 +64,10 @@ export async function GET(request: Request) {
     // erro do Google.
     if (next.startsWith("/admin")) {
       return NextResponse.redirect(`${origin}/login?error=link_invalido`);
+    }
+    // Link de acesso do portal do aluno aberto em outro navegador/aparelho.
+    if (next.startsWith("/aluno")) {
+      return NextResponse.redirect(`${origin}/entrar?error=link_invalido`);
     }
   }
 

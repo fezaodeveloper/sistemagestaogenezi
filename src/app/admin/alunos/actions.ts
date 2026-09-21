@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomInt } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
@@ -13,6 +13,9 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
+import { lerConfigSenhaPortal } from "@/lib/portal-login/config";
+import { enviarEmail } from "@/lib/email/provedor";
+import { renderizarTemplate } from "@/lib/email/templates";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -152,11 +155,29 @@ export async function createAluno(
   const data = parsed.data;
   const admin = createAdminClient();
 
+  // Tipo de senha do portal (Configurações > Portal do Aluno > Login):
+  //  - padrao: senha gerada pelo admin no formulário — ou, se a escola definiu uma
+  //    "senha padrão", ela vale pra todo aluno novo;
+  //  - aleatoria: o servidor gera uma senha de 8 caracteres e a ENVIA por e-mail;
+  //  - so_email: o aluno entra por link de acesso; a conta recebe uma senha aleatória
+  //    longa que ninguém conhece.
+  const portal = await lerConfigSenhaPortal();
+  let senhaInicial = data.senha_temporaria;
+  let enviarSenhaPorEmail = false;
+  if (portal.tipo === "aleatoria") {
+    senhaInicial = gerarSenhaAleatoria();
+    enviarSenhaPorEmail = true;
+  } else if (portal.tipo === "so_email") {
+    senhaInicial = randomBytes(24).toString("base64url");
+  } else if (portal.senhaPadrao) {
+    senhaInicial = portal.senhaPadrao;
+  }
+
   // Senha gerada no cliente (crypto.getRandomValues) e mostrada só pro
   // admin copiar — nunca é exibida em outro lugar depois disso.
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: data.email,
-    password: data.senha_temporaria,
+    password: senhaInicial,
     email_confirm: true,
     user_metadata: {
       full_name: data.full_name,
@@ -226,10 +247,32 @@ export async function createAluno(
     }
   }
 
+  // Modo "senha aleatória": o admin nunca vê a senha, então o e-mail com o acesso é o
+  // único caminho. Enviado AQUI (não em segundo plano) pra a tela poder avisar se falhou.
+  let acesso: "enviado" | "falhou" | null = null;
+  if (enviarSenhaPorEmail) {
+    acesso = "falhou";
+    try {
+      const renderizado = await renderizarTemplate("acesso", {
+        nome_cliente: data.full_name,
+        email_cliente: data.email,
+        senha: senhaInicial,
+        nome_produto: "Portal do Aluno",
+        link_acesso: `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/entrar`,
+      });
+      if (renderizado) {
+        const r = await enviarEmail({ para: data.email, assunto: renderizado.assunto, html: renderizado.html, texto: renderizado.texto });
+        if (r.ok) acesso = "enviado";
+      }
+    } catch {
+      // acesso continua "falhou"
+    }
+  }
+
   // Sem tela de sucesso separada: a senha já foi mostrada (e copiada) pelo
   // admin no próprio formulário, antes do envio — aqui só redireciona.
   revalidatePath("/admin/alunos");
-  redirect("/admin/alunos?criado=1");
+  redirect(acesso ? `/admin/alunos?criado=1&acesso=${acesso}` : "/admin/alunos?criado=1");
 }
 
 export async function updateAluno(

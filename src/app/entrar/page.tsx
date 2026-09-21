@@ -1,11 +1,37 @@
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { roleHome } from "@/lib/auth/roles";
+import { getPortalLoginConfig } from "@/lib/portal-login/config";
 import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/components/auth/login-form";
+import { AlunoLoginForm } from "@/components/auth/aluno-login-form";
 import { BannerSlideshow } from "@/components/auth/banner-slideshow";
+import { PortalLoginLayout } from "@/components/auth/portal-login-layout";
+import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
 
 const RODAPE_LOGIN_PADRAO = "© 2026 GÊNEZI Educação Profissional";
+
+function MensagensDeErro({ error }: { error?: string }) {
+  return (
+    <>
+      {error === "google" && (
+        <p role="alert" className="text-destructive text-sm">
+          Não foi possível entrar com o Google. Tente novamente.
+        </p>
+      )}
+      {error === "conecta-desativado" && (
+        <p role="alert" className="text-destructive text-sm">
+          O Gênezi Conecta está temporariamente desativado.
+        </p>
+      )}
+      {error === "link_invalido" && (
+        <p role="alert" className="text-destructive text-sm">
+          Link de acesso inválido ou expirado. Peça um novo link na tela de entrada.
+        </p>
+      )}
+    </>
+  );
+}
 
 export default async function EntrarPage({
   searchParams,
@@ -19,10 +45,35 @@ export default async function EntrarPage({
   }
 
   const supabase = await createClient();
-  const [{ error }, { data: configuracoes }] = await Promise.all([
+  const [{ error }, { data: configuracoes }, portal] = await Promise.all([
     searchParams,
     supabase.from("configuracoes").select("escola_logo_url, login_rodape").single(),
+    getPortalLoginConfig(supabase),
   ]);
+
+  // Tela personalizada em Configurações > Portal do Aluno > Login (templates cartão e
+  // dividido). `portal` só é null se as colunas ainda não existem (migration pendente):
+  // aí segue a tela de antes, sem quebrar.
+  if (portal) {
+    const { config, nomeEscola } = portal;
+    return (
+      <PortalLoginLayout
+        config={config}
+        logoUrl={configuracoes?.escola_logo_url ?? null}
+        nomeEscola={nomeEscola}
+        rodape={configuracoes?.login_rodape ?? RODAPE_LOGIN_PADRAO}
+        // Split sem imagem hero: mantém o carrossel de banners que já existia.
+        heroFallback={<BannerSlideshow tipo="aluno" />}
+        instalarApp={config.mostrarInstalarApp ? <PwaInstallButton /> : null}
+        formulario={
+          <div className="flex flex-col gap-6">
+            <MensagensDeErro error={error} />
+            <AlunoLoginForm tipoSenha={config.tipoSenha} />
+          </div>
+        }
+      />
+    );
+  }
 
   return (
     <main className="flex h-svh">
@@ -63,16 +114,7 @@ export default async function EntrarPage({
             <h2 className="text-xl font-semibold">Bem-vindo!</h2>
             <p className="text-muted-foreground text-sm">Acesse sua conta para continuar.</p>
           </div>
-          {error === "google" && (
-            <p role="alert" className="text-destructive text-sm">
-              Não foi possível entrar com o Google. Tente novamente.
-            </p>
-          )}
-          {error === "conecta-desativado" && (
-            <p role="alert" className="text-destructive text-sm">
-              O Gênezi Conecta está temporariamente desativado.
-            </p>
-          )}
+          <MensagensDeErro error={error} />
           <LoginForm />
         </div>
 

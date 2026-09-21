@@ -21,10 +21,10 @@ function parseAlunosOrderBy(valor: string | undefined): AlunosOrderBy {
 export default async function AlunosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ criado?: string; page?: string; limit?: string; orderBy?: string; q?: string }>;
+  searchParams: Promise<{ criado?: string; acesso?: string; page?: string; limit?: string; orderBy?: string; q?: string }>;
 }) {
   await requireRole("admin");
-  const { criado, page, limit, orderBy: orderByRaw, q: qRaw } = await searchParams;
+  const { criado, acesso, page, limit, orderBy: orderByRaw, q: qRaw } = await searchParams;
   const q = parseBusca(qRaw);
 
   const paginaAtual = parsePagina(page);
@@ -137,7 +137,16 @@ export default async function AlunosPage({
       </div>
 
       {criado === "1" && (
-        <p className="text-muted-foreground text-sm">Aluno cadastrado com sucesso.</p>
+        <p className="text-muted-foreground text-sm">
+          Aluno cadastrado com sucesso.
+          {acesso === "enviado" && " O e-mail com os dados de acesso foi enviado ao aluno."}
+        </p>
+      )}
+      {criado === "1" && acesso === "falhou" && (
+        <p role="alert" className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+          Não foi possível enviar o e-mail com a senha (provedor de e-mail não configurado ou template desativado). Abra a
+          edição do aluno e use &quot;Gerar nova senha&quot; em &quot;Acesso à plataforma&quot; para obter uma senha e repassar.
+        </p>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

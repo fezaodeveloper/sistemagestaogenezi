@@ -74,6 +74,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/configuracoes/gateways", label: "Gateways", icon: CreditCard },
     { href: "/admin/configuracoes/apps", label: "Apps", icon: LayoutGrid },
     { href: "/admin/configuracoes/email", label: "E-mail", icon: Mail },
+    { href: "/admin/configuracoes/portal-aluno", label: "Portal do Aluno", icon: GraduationCap },
     { href: "/admin/estoque", label: "Estoque", icon: Package },
     { href: "/admin/manutencao", label: "Manutenção", icon: Wrench },
     { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck },

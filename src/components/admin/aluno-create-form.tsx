@@ -70,7 +70,19 @@ function gerarSenhaTemporaria(): string {
   return caracteres.join("");
 }
 
-export function AlunoCreateForm() {
+// Marcador enviado no lugar da senha quando o SERVIDOR decide a senha (o schema exige
+// 8+ caracteres no campo; o valor é ignorado nesses modos).
+const SENHA_DEFINIDA_PELO_SERVIDOR = "definida-pelo-servidor";
+
+export function AlunoCreateForm({
+  tipoSenhaPortal = "padrao",
+  senhaPadraoDefinida = false,
+}: {
+  tipoSenhaPortal?: "padrao" | "aleatoria" | "so_email";
+  senhaPadraoDefinida?: boolean;
+}) {
+  // O admin só gera/copia senha no modo "padrao" sem senha padrão da escola.
+  const servidorDefineSenha = tipoSenhaPortal !== "padrao" || senhaPadraoDefinida;
   const [state, formAction] = useActionState<AlunoFormState, FormData>(createAluno, undefined);
   const values = state?.values;
 
@@ -154,7 +166,7 @@ export function AlunoCreateForm() {
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    if (!senhaTemporaria) {
+    if (!servidorDefineSenha && !senhaTemporaria) {
       event.preventDefault();
       setErroSenha("Gere uma senha temporária antes de cadastrar.");
     }
@@ -181,6 +193,21 @@ export function AlunoCreateForm() {
           )}
         </div>
 
+        {servidorDefineSenha && (
+          <div className="flex flex-col gap-1">
+            <input type="hidden" name="senha_temporaria" value={SENHA_DEFINIDA_PELO_SERVIDOR} />
+            <p className="bg-muted/50 rounded-md p-3 text-sm">
+              {tipoSenhaPortal === "aleatoria"
+                ? "A senha será gerada automaticamente e enviada por e-mail ao aluno."
+                : tipoSenhaPortal === "so_email"
+                  ? "O aluno entra só com o e-mail, por um link de acesso — não há senha para repassar."
+                  : "O aluno receberá a senha padrão definida em Configurações > Portal do Aluno > Login."}
+            </p>
+            <p className="text-muted-foreground text-xs">Definido em Configurações &gt; Portal do Aluno &gt; Login.</p>
+          </div>
+        )}
+
+        {!servidorDefineSenha && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="senha_temporaria_display">Senha temporária</Label>
           <div className="flex gap-2">
@@ -216,6 +243,7 @@ export function AlunoCreateForm() {
             </p>
           )}
         </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
