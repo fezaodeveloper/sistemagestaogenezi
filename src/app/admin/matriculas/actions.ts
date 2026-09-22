@@ -13,11 +13,12 @@ import {
   type MatriculaWizardInput,
 } from "@/lib/matriculas/schema";
 import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
-import { notificarMatriculaWhatsApp } from "@/lib/matriculas/notificacoes";
+import { enviarMensagemMatriculaCriada } from "@/lib/mensagens/mensagens";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeMatricula } from "@/lib/webhooks/payloads";
 import { notificarSmsMatriculaCriada } from "@/lib/integrax/notificacoes";
+import { notificarWhatsappDadosAcesso } from "@/lib/whatsapp/eventos";
 import { notificarEmailMatriculaCriada } from "@/lib/email/eventos";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
@@ -157,7 +158,7 @@ export type CreateMatriculaResult =
 export async function createMatricula(
   input: MatriculaWizardInput,
 ): Promise<CreateMatriculaResult> {
-  await requireRole("admin");
+  const admin = await requireRole("admin");
 
   const parsed = matriculaWizardSchema.safeParse(input);
   if (!parsed.success) {
@@ -226,13 +227,15 @@ export async function createMatricula(
     return { success: false, error: "Não foi possível criar a matrícula. Tente novamente." };
   }
 
-  // Best-effort, nunca bloqueia a matrícula (já criada com sucesso acima) —
-  // mesma política das outras notificações do sistema (ver lib/mensagens).
+  // WhatsApp de boas-vindas (Evolution API — GênZap). Era um stub (notificarMatriculaWhatsApp,
+  // só console.log); passa a reaproveitar o mesmo envio REAL já usado pela outra tela de criar
+  // matrícula (src/app/admin/alunos/matriculas-actions.ts), com o mesmo template
+  // "matricula_criada" configurável em Mensagens > Configuração. Best-effort, nunca bloqueia a
+  // matrícula já criada com sucesso acima.
   try {
-    await notificarMatriculaWhatsApp(matricula.id);
+    await enviarMensagemMatriculaCriada(matricula.id, admin.id);
   } catch {
-    // O stub atual só faz console.log e não lança — o try/catch já fica
-    // pronto pro dia em que isso virar uma chamada de rede de verdade.
+    // enviarMensagemMatriculaCriada já engole os próprios erros; este catch é rede de segurança.
   }
 
   // Webhook de saída (Apps > Webhooks): roda depois da resposta, nunca bloqueia.
@@ -714,27 +717,35 @@ export async function downloadContrato(matriculaId: string): Promise<DownloadCon
   return { pdf: data.conteudo_pdf_base64 };
 }
 
-// ===== Botões WhatsApp — stub (5 melhorias: WhatsApp stub + taxa de matrícula) =====
+// ===== Botões WhatsApp (5 melhorias: WhatsApp stub + taxa de matrícula) =====
 
-// "dados_acesso" não estava no exemplo de payload da tarefa
+// "dados_acesso" não estava no exemplo de payload da tarefa original
 // (que lista só 'contrato'|'comprovante'|'cobranca'), mas a MELHORIA 1
 // pede um terceiro botão "Dados de acesso" — adicionado como um 4º valor
 // de tipo, mesmo mecanismo de log.
+//
+// "contrato"/"comprovante"/"cobranca" continuam STUB (só registram a intenção via
+// dispararEvento, sem chamar WhatsApp de verdade) — ficam pra quando ganharem template próprio.
+// "dados_acesso" passou a enviar de verdade pelo GênZap (Evolution API) — ver
+// notificarWhatsappDadosAcesso.
 export type WhatsappStubTipo = "contrato" | "comprovante" | "cobranca" | "dados_acesso";
 
-// Nunca chama a API do WhatsApp de verdade — só registra a intenção via
-// dispararEvento, criando histórico em /admin/automacoes pra quando a
-// integração real (API Evolution) for ligada. Cada clique gera um evento
-// novo (idempotencyKey com timestamp): diferente de matricula.criada etc.,
-// aqui não faz sentido deduplicar — o admin pode clicar "Enviar contrato"
-// mais de uma vez de propósito (reenviar).
 export async function registrarWhatsappStub(tipo: WhatsappStubTipo, matriculaId: string): Promise<void> {
   await requireRole("admin");
+
+  if (tipo === "dados_acesso") {
+    // Fire-and-forget: a mensagem em si (com delay anti-banimento) roda depois da resposta.
+    notificarWhatsappDadosAcesso(matriculaId);
+    dispararWebhookDeMatricula("acesso_enviado", matriculaId);
+    return;
+  }
+
+  // Cada clique gera um evento novo (idempotencyKey com timestamp): diferente de
+  // matricula.criada etc., aqui não faz sentido deduplicar — o admin pode clicar "Enviar
+  // contrato" mais de uma vez de propósito (reenviar).
   await dispararEvento(
     "whatsapp.stub",
     { tipo, matriculaId },
     `whatsapp-stub-${tipo}-${matriculaId}-${Date.now()}`,
   );
-  // "Dados de acesso" enviados ao aluno.
-  if (tipo === "dados_acesso") dispararWebhookDeMatricula("acesso_enviado", matriculaId);
 }

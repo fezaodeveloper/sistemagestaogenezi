@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { notificarSmsAgendamentoLembrete } from "@/lib/integrax/notificacoes";
+import { notificarWhatsappAgendamentoLembrete } from "@/lib/whatsapp/eventos";
 import { escapeHtml, sendTelegram } from "@/lib/telegram";
 
 type AgendamentoLembrete = {
@@ -27,9 +28,12 @@ function extrairInteresse(campos: Record<string, string> | null): string {
   return interesse ? interesse[1] : "—";
 }
 
-// Disparado 1x/dia às 18:00 UTC (ver vercel.json) — roadmap item 2. Sem
-// Evolution API ainda: o lembrete D-1 é só um stub (console.log) que marca
-// lembrete_enviado, pra não reenviar em execuções seguintes.
+// Disparado 1x/dia às 18:00 UTC (ver vercel.json) — roadmap item 2. Lembrete real por WhatsApp
+// (GênZap) desde esta tarefa — antes era só um stub (console.log). Segue marcando
+// lembrete_enviado, pra não reenviar em execuções seguintes, mesmo se o WhatsApp não estiver
+// configurado (o "stub silencioso" de enviarWhatsApp já cobre esse caso).
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -52,12 +56,11 @@ export async function GET(request: Request) {
   const lista = (agendamentos ?? []) as unknown as AgendamentoLembrete[];
 
   for (const agendamento of lista) {
-    // Stub — Evolution API virá depois.
-    console.log(
-      `[lembrete-agendamentos] Enviaria WhatsApp para ${agendamento.nome}: lembrete de amanhã ${agendamento.horario}`,
-    );
+    // WhatsApp (GênZap/Evolution API). Sequencial — o delay entre chamadas (anti-banimento) é o
+    // próprio comportamento desejado aqui, não um custo a evitar. Nunca lança.
+    await notificarWhatsappAgendamentoLembrete(agendamento.id);
 
-    // Lembrete no Telegram (além do stub de WhatsApp acima). Best-effort:
+    // Lembrete no Telegram (pro admin, além do WhatsApp ao cliente acima). Best-effort:
     // sendTelegram nunca lança.
     await sendTelegram(
       [

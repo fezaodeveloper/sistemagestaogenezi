@@ -11,13 +11,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Nenhum botão desta tela chama a API do WhatsApp de verdade — todos são
-// stubs que só disparam whatsapp.stub (ver registrarWhatsappStub em
-// src/app/admin/matriculas/actions.ts) pra registrar a intenção no log de
-// automações, e mostram esta mensagem padrão. "Desabilitados visualmente"
-// (pedido da tarefa) é lido aqui como "com cara de recurso ainda não
-// ativo" (opacidade reduzida) — os botões continuam clicáveis de verdade,
-// já que precisam dessa interação pra disparar o evento e o alerta.
+// "contrato" e "comprovante" continuam STUB — só disparam whatsapp.stub (ver
+// registrarWhatsappStub em src/app/admin/matriculas/actions.ts) pra registrar a intenção no log
+// de automações, e mostram esta mensagem padrão. "dados_acesso" passou a enviar de verdade pelo
+// GênZap (Evolution API) — tem mensagem própria (ver OPCOES_PADRAO). "Desabilitados
+// visualmente" (pedido da tarefa original) é lido aqui como "com cara de recurso ainda não
+// ativo" (opacidade reduzida) — os botões continuam clicáveis de verdade.
 const MENSAGEM_PADRAO =
   "Integração com WhatsApp em breve. Esta funcionalidade será habilitada com a API Evolution.";
 
@@ -66,10 +65,13 @@ export function WhatsappStubButton({
 
 type OpcaoWhatsappStub = { tipo: WhatsappStubTipo; label: string; mensagem?: string };
 
+const MENSAGEM_DADOS_ACESSO = "Enviando os dados de acesso por WhatsApp (GênZap)...";
+
 const OPCOES_PADRAO: OpcaoWhatsappStub[] = [
   { tipo: "contrato", label: "📱 Enviar contrato" },
   { tipo: "comprovante", label: "📱 Enviar comprovante" },
-  { tipo: "dados_acesso", label: "📱 Dados de acesso" },
+  // Único que não é mais stub — envia de verdade pelo GênZap (Evolution API).
+  { tipo: "dados_acesso", label: "📱 Dados de acesso", mensagem: MENSAGEM_DADOS_ACESSO },
 ];
 
 export function WhatsappStubDropdown({

@@ -3,6 +3,7 @@ import "server-only";
 import { MessageCircleWarning } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { substituirVariaveis } from "@/lib/certificados/texto";
+import { descriptografar } from "@/lib/gateways/crypto";
 import { enviarWhatsapp } from "./evolution";
 import { normalizarTelefone } from "./texto";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
@@ -83,12 +84,19 @@ async function enviarMensagem(params: {
       return;
     }
 
+    // A chave passou a ser gravada criptografada (Configurações > WhatsApp — GênZap). Valor sem
+    // o prefixo "enc:v1:" é tratado como texto legado e devolvido sem alteração (ver
+    // src/lib/gateways/crypto.ts) — chave salva antes dessa mudança continua funcionando.
+    let apiKey: string;
+    try {
+      apiKey = descriptografar(config.evolution_api_key);
+    } catch {
+      await registrar("falha", numero, "Não foi possível ler a chave da Evolution API (chave de criptografia ausente ou trocada).");
+      return;
+    }
+
     const resultado = await enviarWhatsapp(
-      {
-        url: config.evolution_api_url,
-        instancia: config.evolution_instance_name,
-        apiKey: config.evolution_api_key,
-      },
+      { url: config.evolution_api_url, instancia: config.evolution_instance_name, apiKey },
       numero,
       mensagemTexto,
     );
@@ -307,8 +315,16 @@ export async function reenviarMensagemFalha(id: string): Promise<{ error?: strin
   }
 
   const numero = normalizarTelefone(original.telefone_destino) ?? original.telefone_destino;
+
+  let apiKey: string;
+  try {
+    apiKey = descriptografar(config.evolution_api_key);
+  } catch {
+    return { error: "Não foi possível ler a chave da Evolution API (chave de criptografia ausente ou trocada)." };
+  }
+
   const resultado = await enviarWhatsapp(
-    { url: config.evolution_api_url, instancia: config.evolution_instance_name, apiKey: config.evolution_api_key },
+    { url: config.evolution_api_url, instancia: config.evolution_instance_name, apiKey },
     numero,
     original.mensagem_texto,
   );

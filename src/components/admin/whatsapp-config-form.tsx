@@ -3,9 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { WhatsappConfigFormState } from "@/app/admin/mensagens/configuracao/actions";
 
@@ -21,78 +19,20 @@ function SubmitButton() {
 export function WhatsappConfigForm({
   action,
   defaultValues,
-  chaveConfigurada,
 }: {
   action: (state: WhatsappConfigFormState, formData: FormData) => Promise<WhatsappConfigFormState>;
   defaultValues: {
-    evolution_api_url: string;
-    evolution_instance_name: string;
-    ativo: boolean;
     template_matricula_criada: string;
     template_lembrete_aula: string;
     template_falta: string;
     template_lead_recontato: string;
   };
-  chaveConfigurada: boolean;
 }) {
   const [state, formAction] = useActionState<WhatsappConfigFormState, FormData>(action, undefined);
   const values = state?.values ?? defaultValues;
 
   return (
     <form key={JSON.stringify(state?.values)} action={formAction} className="flex max-w-2xl flex-col gap-6">
-      <div className="flex flex-col gap-4">
-        <h2 className="font-medium">Conexão com a Evolution API</h2>
-
-        <div className="flex items-center gap-3">
-          <Switch id="ativo" name="ativo" defaultChecked={values.ativo} />
-          <Label htmlFor="ativo" className="font-normal">
-            Envio automático de mensagens ativo
-          </Label>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="evolution_api_url">URL da instância</Label>
-          <Input
-            id="evolution_api_url"
-            name="evolution_api_url"
-            placeholder="https://minha-evolution-api.com"
-            defaultValue={values.evolution_api_url}
-          />
-          {state?.errors?.evolution_api_url && (
-            <p role="alert" className="text-destructive text-sm">
-              {state.errors.evolution_api_url[0]}
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="evolution_instance_name">Nome da instância</Label>
-          <Input
-            id="evolution_instance_name"
-            name="evolution_instance_name"
-            defaultValue={values.evolution_instance_name}
-          />
-          {state?.errors?.evolution_instance_name && (
-            <p role="alert" className="text-destructive text-sm">
-              {state.errors.evolution_instance_name[0]}
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="evolution_api_key">Chave da API</Label>
-          <Input
-            id="evolution_api_key"
-            name="evolution_api_key"
-            type="password"
-            placeholder={chaveConfigurada ? "•••••••• (configurada — deixe em branco pra manter)" : "Não configurada"}
-          />
-          <p className="text-muted-foreground text-sm">
-            Por segurança, a chave salva nunca é exibida aqui. Deixe em branco para manter a atual.
-          </p>
-        </div>
-      </div>
-
       <div className="flex flex-col gap-4">
         <h2 className="font-medium">Modelos de mensagem</h2>
         <p className="text-muted-foreground text-sm">

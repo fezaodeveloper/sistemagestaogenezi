@@ -51,28 +51,10 @@ export type MensagemEnviada = {
   created_at: string;
 };
 
+// URL/instância/chave/ativo (conexão com a Evolution API) saíram deste formulário — ver
+// Configurações > WhatsApp (GênZap, src/app/admin/configuracoes/whatsapp/). Este schema cobre
+// só os modelos de mensagem, que continuam editados aqui.
 export const whatsappConfigFormSchema = z.object({
-  evolution_api_url: z
-    .string()
-    .trim()
-    .max(500)
-    .optional()
-    .transform((v) => v || undefined),
-  evolution_instance_name: z
-    .string()
-    .trim()
-    .max(200)
-    .optional()
-    .transform((v) => v || undefined),
-  // Vazio = "manter a chave atual" (a tela nunca mostra o valor salvo, então
-  // não dá pra distinguir "sem chave" de "não mexi no campo" de outro jeito).
-  evolution_api_key: z
-    .string()
-    .trim()
-    .max(500)
-    .optional()
-    .transform((v) => v || undefined),
-  ativo: z.coerce.boolean().optional().default(false),
   template_matricula_criada: z
     .string({ error: "Informe o texto da mensagem de matrícula criada." })
     .trim()

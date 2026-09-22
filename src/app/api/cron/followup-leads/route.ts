@@ -5,11 +5,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { adicionarEntradaNotas, formatarEntradaFollowup } from "@/lib/leads/leads";
 import { FOLLOWUP_AUTOMATICO_LIMITE } from "@/lib/leads/schema";
+import { notificarWhatsappLeadFollowup } from "@/lib/whatsapp/eventos";
 
-// Disparado 1x/dia às 09:00 UTC (ver vercel.json) — CRM Kanban, roadmap item
-// 3. Sem Evolution API ainda: o "follow-up automático" é só um stub
-// (console.log) que registra a intenção e avança o contador; a integração
-// de envio de verdade entra depois, sem precisar mexer nesse fluxo.
+// Disparado 1x/dia às 09:00 UTC (ver vercel.json) — CRM Kanban, roadmap item 3. Follow-up real
+// por WhatsApp (GênZap) desde esta tarefa — antes era só um stub (console.log) que registrava a
+// intenção e avançava o contador. Com o WhatsApp não configurado, enviarWhatsApp() faz esse
+// mesmo "stub silencioso" (nunca lança), então o contador continua avançando normalmente.
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -38,14 +41,14 @@ export async function GET(request: Request) {
   let aguardamAcaoManual = 0;
 
   for (const lead of leadsParaFollowup) {
-    // Stub — Evolution API virá depois. Por enquanto só loga a intenção de
-    // contato automático pra esse lead.
-    console.log(`[followup-leads] Follow-up automático (stub) para lead ${lead.id} (${lead.nome})`);
+    // WhatsApp (GênZap/Evolution API). Sequencial — o delay entre chamadas (anti-banimento) é o
+    // próprio comportamento desejado aqui, não um custo a evitar. Nunca lança.
+    await notificarWhatsappLeadFollowup(lead.id);
 
     const novoCount = lead.followup_count + 1;
     const atingiuLimite = novoCount >= FOLLOWUP_AUTOMATICO_LIMITE;
 
-    let notasAtualizadas = adicionarEntradaNotas(lead.notas, formatarEntradaFollowup("Follow-up automático (stub)"));
+    let notasAtualizadas = adicionarEntradaNotas(lead.notas, formatarEntradaFollowup("Follow-up automático (WhatsApp)"));
     if (atingiuLimite) {
       notasAtualizadas = adicionarEntradaNotas(
         notasAtualizadas,
