@@ -15,7 +15,10 @@ import type { EvolutionInstanceConfig, WhatsappStatus } from "@/lib/whatsapp/con
 // cada endpoint); se a instância real responder diferente, é só ajustar as funções de parsing
 // (parseQrCode/parseStatusInstancia) sem mexer no resto do sistema.
 
-const TIMEOUT_MS = 15_000;
+// conectarInstancia() pode encadear até 3 chamadas (connect -> create -> connect de novo, se a
+// instância ainda não existir) — o timeout de cada uma precisa deixar as 3 caberem dentro do
+// maxDuration da rota (45s em /api/whatsapp/conectar, ver route.ts) com folga.
+const TIMEOUT_MS = 12_000;
 
 export type ResultadoEvolution = { ok: boolean; erro?: string };
 
@@ -27,19 +30,40 @@ function headersPadrao(config: EvolutionInstanceConfig): HeadersInit {
   return { "Content-Type": "application/json", Accept: "application/json", apikey: config.apiKey };
 }
 
+// Primeiros 8 caracteres da apikey, só pra log de diagnóstico — nunca a chave inteira.
+function apikeyParcial(config: EvolutionInstanceConfig): string {
+  return config.apiKey ? `${config.apiKey.slice(0, 8)}…` : "(vazia)";
+}
+
 async function chamar(
   config: EvolutionInstanceConfig,
   metodo: string,
   caminho: string,
   corpo?: unknown,
 ): Promise<{ ok: true; data: unknown } | { ok: false; erro: string; status?: number }> {
+  const url = `${baseUrl(config)}${caminho}`;
+
+  // Log ANTES do fetch (aparece nos logs do Vercel mesmo se a chamada nunca voltar) — mostra
+  // exatamente o que foi enviado à Evolution API, sem a apikey inteira.
+  console.log("[whatsapp:evolution] chamada à API", {
+    metodo,
+    url,
+    headers: { ...headersPadrao(config), apikey: apikeyParcial(config) },
+    corpo,
+  });
+
   try {
-    const resposta = await fetch(`${baseUrl(config)}${caminho}`, {
+    const resposta = await fetch(url, {
       method: metodo,
       headers: headersPadrao(config),
       body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
       // Não segue redirecionamentos (não vaza a API key pra outro host).
       redirect: "manual",
+      // Fica com folga abaixo do maxDuration das rotas que chamam esta function (30s na página
+      // de configuração, ver page.tsx) — sem isso, um fetch travado só terminaria quando a
+      // Vercel matasse a function por estourar o tempo máximo, e a resposta de erro da
+      // PLATAFORMA (não da Server Action) é o que produz "An unexpected response was received
+      // from the server" no cliente, em vez do erro de verdade.
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 

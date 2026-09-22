@@ -140,12 +140,16 @@ const testeSchema = z.object({
 });
 
 export async function enviarTesteWhatsapp(telefone: string, mensagem: string): Promise<{ ok: boolean; erro?: string }> {
+  // requireRole() fica FORA do try/catch de propósito: quando não autenticado ela chama
+  // redirect(), que funciona lançando um valor especial que o Next precisa deixar passar direto
+  // — um catch genérico aqui embaixo o engoliria e quebraria o redirecionamento.
   await requireRole("admin");
 
-  // Blindagem extra: enviarMensagemTexto/carregarConfigWhatsapp já têm try/catch próprios e
-  // nunca lançam, mas uma Server Action que lança vira um erro genérico do Next no client (o
-  // formulário não teria como mostrar o texto real) — aqui garante {ok:false, erro} sempre,
-  // não importa o que aconteça.
+  // Blindagem: enviarMensagemTexto/carregarConfigWhatsapp já têm try/catch próprios e nunca
+  // lançam, mas qualquer exceção que escape de uma Server Action vira, no client, "An unexpected
+  // response was received from the server" (o Next não consegue serializar uma exceção crua como
+  // resposta da action) — em vez do erro de verdade. Este try/catch garante {ok:false, erro}
+  // sempre, com erro SEMPRE como string, não importa o que aconteça.
   try {
     const parsed = testeSchema.safeParse({ telefone, mensagem });
     if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -169,7 +173,9 @@ export async function enviarTesteWhatsapp(telefone: string, mensagem: string): P
     return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Não foi possível enviar a mensagem." };
   } catch (erro) {
     console.error("[whatsapp] Enviar teste — exceção inesperada na Server Action", erro);
-    return { ok: false, erro: erro instanceof Error ? erro.message : "Erro inesperado ao enviar o teste. Veja os logs do servidor." };
+    // String(erro) cobre até o caso raro de algo lançar um valor que não é um Error de verdade
+    // (ex.: `throw "texto"` em código de terceiros) — o retorno precisa ser sempre string.
+    return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) };
   }
 }
 
