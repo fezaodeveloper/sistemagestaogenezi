@@ -142,24 +142,35 @@ const testeSchema = z.object({
 export async function enviarTesteWhatsapp(telefone: string, mensagem: string): Promise<{ ok: boolean; erro?: string }> {
   await requireRole("admin");
 
-  const parsed = testeSchema.safeParse({ telefone, mensagem });
-  if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  // Blindagem extra: enviarMensagemTexto/carregarConfigWhatsapp já têm try/catch próprios e
+  // nunca lançam, mas uma Server Action que lança vira um erro genérico do Next no client (o
+  // formulário não teria como mostrar o texto real) — aqui garante {ok:false, erro} sempre,
+  // não importa o que aconteça.
+  try {
+    const parsed = testeSchema.safeParse({ telefone, mensagem });
+    if (!parsed.success) return { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
-  if (!normalizarTelefone(parsed.data.telefone)) {
-    return { ok: false, erro: "Telefone inválido: informe DDD + número (ex.: 11999999999)." };
+    if (!normalizarTelefone(parsed.data.telefone)) {
+      return { ok: false, erro: "Telefone inválido: informe DDD + número (ex.: 11999999999)." };
+    }
+
+    const config = await carregarConfigWhatsapp();
+    if (!config.evolution) return { ok: false, erro: "Preencha e salve URL, instância e chave da API antes de testar." };
+    if (config.status !== "conectado") return { ok: false, erro: "Conecte o WhatsApp (leia o QR Code) antes de enviar um teste." };
+
+    // Ignora o toggle "Ativo" de propósito (mesmo espírito do "Enviar teste" da IntegraX): o
+    // admin pode testar antes de ativar o envio automático pro resto do sistema. `delay: null`
+    // pula a espera anti-banimento — um clique manual de teste não deve esperar até 30s antes
+    // de sequer tentar enviar (ver o comentário em enviarMensagemTexto).
+    const resultado = await enviarMensagemTexto(config.evolution, parsed.data.telefone, parsed.data.mensagem, null);
+    if (!resultado.ok) {
+      console.error("[whatsapp] Enviar teste falhou", { instancia: config.evolution.instancia, status: config.status, erro: resultado.erro });
+    }
+    return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Não foi possível enviar a mensagem." };
+  } catch (erro) {
+    console.error("[whatsapp] Enviar teste — exceção inesperada na Server Action", erro);
+    return { ok: false, erro: erro instanceof Error ? erro.message : "Erro inesperado ao enviar o teste. Veja os logs do servidor." };
   }
-
-  const config = await carregarConfigWhatsapp();
-  if (!config.evolution) return { ok: false, erro: "Preencha e salve URL, instância e chave da API antes de testar." };
-  if (config.status !== "conectado") return { ok: false, erro: "Conecte o WhatsApp (leia o QR Code) antes de enviar um teste." };
-
-  // Ignora o toggle "Ativo" de propósito (mesmo espírito do "Enviar teste" da IntegraX): o admin
-  // pode testar antes de ativar o envio automático pro resto do sistema.
-  const resultado = await enviarMensagemTexto(config.evolution, parsed.data.telefone, parsed.data.mensagem, {
-    min: config.delayMinSegundos,
-    max: config.delayMaxSegundos,
-  });
-  return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Não foi possível enviar a mensagem." };
 }
 
 // ===== Aba "Templates" =====

@@ -47,6 +47,17 @@ async function chamar(
     const data = corpoResposta ? JSON.parse(corpoResposta) : null;
 
     if (resposta.status >= 200 && resposta.status < 300) return { ok: true, data };
+
+    // Log completo (sem a apikey) pros logs do Vercel — a tela só mostra a versão curta do erro.
+    console.error("[whatsapp:evolution] requisição falhou", {
+      metodo,
+      caminho,
+      instancia: config.instancia,
+      status: resposta.status,
+      statusText: resposta.statusText,
+      corpoResposta: corpoResposta.slice(0, 1000),
+    });
+
     if (resposta.status === 401 || resposta.status === 403) {
       return { ok: false, erro: "A Evolution API recusou a chave (apikey inválida).", status: resposta.status };
     }
@@ -55,6 +66,14 @@ async function chamar(
   } catch (erro) {
     const mensagemErro = erro instanceof Error ? erro.message : "";
     const causa = (erro as { cause?: { code?: string } } | null)?.cause?.code;
+    console.error("[whatsapp:evolution] falha de rede/exceção", {
+      metodo,
+      caminho,
+      instancia: config.instancia,
+      erroNome: erro instanceof Error ? erro.name : typeof erro,
+      erroMensagem: mensagemErro,
+      causa,
+    });
     if (causa === "ENOTFOUND" || causa === "ECONNREFUSED") {
       return { ok: false, erro: "Não foi possível conectar à Evolution API. Confira a URL configurada." };
     }
@@ -157,25 +176,40 @@ function mapStatus(estado: string): WhatsappStatus {
 // resto do projeto), aplica o delay anti-banimento e chama o envio já existente
 // (src/lib/mensagens/evolution.ts) — sem duplicar a montagem do POST /message/sendText. Nunca
 // lança: sempre volta { ok, erro? }.
+//
+// `delay: null` pula a espera — usado só pelo botão "Enviar teste" (src/app/admin/
+// configuracoes/whatsapp/actions.ts::enviarTesteWhatsapp): um clique manual não deve esperar o
+// delay anti-banimento (até 30s, configurável) só pra mandar UMA mensagem de teste. Isso importa
+// de verdade: função da Vercel tem um tempo máximo de execução, e delay (até 30s) + timeout da
+// chamada HTTP (15s) juntos passavam desse limite — a function era encerrada pela plataforma
+// ANTES do try/catch conseguir devolver um erro, e o botão ficava girando pra sempre sem nunca
+// receber resposta (bug relatado). Os envios automáticos de verdade (templates/eventos/fluxos,
+// via enviarWhatsApp em src/lib/whatsapp/enviar.ts) continuam passando o delay normalmente.
 export async function enviarMensagemTexto(
   config: EvolutionInstanceConfig,
   telefone: string,
   mensagem: string,
-  delay: { min: number; max: number },
+  delay: { min: number; max: number } | null,
 ): Promise<ResultadoEvolution> {
   try {
     const numero = normalizarTelefone(telefone);
     if (!numero) return { ok: false, erro: "Telefone inválido: informe DDD + número (ex.: 11999999999)." };
     if (!mensagem.trim()) return { ok: false, erro: "A mensagem está vazia." };
 
-    const minimo = Math.max(0, Math.min(delay.min, delay.max));
-    const maximo = Math.max(minimo, delay.max);
-    const esperaMs = Math.round((minimo + Math.random() * (maximo - minimo)) * 1000);
-    if (esperaMs > 0) await new Promise((resolve) => setTimeout(resolve, esperaMs));
+    if (delay) {
+      const minimo = Math.max(0, Math.min(delay.min, delay.max));
+      const maximo = Math.max(minimo, delay.max);
+      const esperaMs = Math.round((minimo + Math.random() * (maximo - minimo)) * 1000);
+      if (esperaMs > 0) await new Promise((resolve) => setTimeout(resolve, esperaMs));
+    }
 
     const resultado = await postSendText({ url: config.url, instancia: config.instancia, apiKey: config.apiKey }, numero, mensagem);
+    if (!resultado.ok) {
+      console.error("[whatsapp] enviarMensagemTexto falhou", { instancia: config.instancia, numero, erro: resultado.erro });
+    }
     return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro };
   } catch (erro) {
+    console.error("[whatsapp] enviarMensagemTexto — exceção inesperada", { instancia: config.instancia, erro });
     return { ok: false, erro: erro instanceof Error ? erro.message : "Falha ao enviar a mensagem." };
   }
 }

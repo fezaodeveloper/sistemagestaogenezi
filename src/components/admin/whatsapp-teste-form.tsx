@@ -19,8 +19,15 @@ export function WhatsappTesteForm() {
     evento.preventDefault();
     setResultado(null);
     startTransition(async () => {
-      const r = await enviarTesteWhatsapp(telefone, mensagem);
-      setResultado(r);
+      // Server Action já nunca lança (tem try/catch próprio), mas uma falha de REDE ao chamá-la
+      // (ex.: perdeu a conexão no meio) rejeitaria essa promise — sem o catch aqui, o botão
+      // ficaria "carregando" pra sempre, sem nenhum erro na tela.
+      try {
+        const r = await enviarTesteWhatsapp(telefone, mensagem);
+        setResultado(r);
+      } catch (erro) {
+        setResultado({ ok: false, erro: erro instanceof Error ? erro.message : "Não foi possível falar com o servidor. Tente novamente." });
+      }
     });
   }
 
