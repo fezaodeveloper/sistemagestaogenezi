@@ -41,11 +41,12 @@ export async function GET(request: Request) {
   let aguardamAcaoManual = 0;
 
   for (const lead of leadsParaFollowup) {
-    // WhatsApp (GênZap/Evolution API). Sequencial — o delay entre chamadas (anti-banimento) é o
-    // próprio comportamento desejado aqui, não um custo a evitar. Nunca lança.
-    await notificarWhatsappLeadFollowup(lead.id);
-
     const novoCount = lead.followup_count + 1;
+
+    // WhatsApp (GênZap/Evolution API), template lead_followup com {tentativa}. Sequencial — o
+    // delay entre chamadas (anti-banimento) é o próprio comportamento desejado aqui, não um
+    // custo a evitar. Nunca lança.
+    await notificarWhatsappLeadFollowup(lead.id, novoCount);
     const atingiuLimite = novoCount >= FOLLOWUP_AUTOMATICO_LIMITE;
 
     let notasAtualizadas = adicionarEntradaNotas(lead.notas, formatarEntradaFollowup("Follow-up automático (WhatsApp)"));

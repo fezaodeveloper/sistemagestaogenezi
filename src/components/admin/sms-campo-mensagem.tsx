@@ -4,9 +4,14 @@
 
 import { useRef } from "react";
 import { SMS_LIMITE_CARACTERES } from "@/lib/integrax/texto";
-import type { SmsPlaceholder } from "@/lib/integrax/templates";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+// Apesar do nome (nasceu com os templates de SMS), é genérico: usado também pelos templates de
+// WhatsApp (limite de 1000, não 160 — ver `limite`). Mantido neste arquivo/nome pra não mexer
+// nos imports já existentes (IntegraX); qualquer canal com "textarea + contador + placeholders
+// clicáveis" pode reaproveitar.
+type PlaceholderInfo = { chave: string; descricao: string; exemplo: string };
 
 export function SmsCampoMensagem({
   id,
@@ -14,13 +19,18 @@ export function SmsCampoMensagem({
   valor,
   onChange,
   placeholders,
+  limite = SMS_LIMITE_CARACTERES,
+  linhas = 3,
   desabilitado = false,
 }: {
   id: string;
   rotulo: string;
   valor: string;
   onChange: (valor: string) => void;
-  placeholders: SmsPlaceholder[];
+  placeholders: PlaceholderInfo[];
+  // Teto de caracteres do campo (e do contador). Default = limite de um SMS (160).
+  limite?: number;
+  linhas?: number;
   desabilitado?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -32,7 +42,7 @@ export function SmsCampoMensagem({
     const inicio = el?.selectionStart ?? valor.length;
     const fim = el?.selectionEnd ?? valor.length;
     const novo = `${valor.slice(0, inicio)}${token}${valor.slice(fim)}`;
-    if (novo.length > SMS_LIMITE_CARACTERES) return;
+    if (novo.length > limite) return;
     onChange(novo);
     requestAnimationFrame(() => {
       el?.focus();
@@ -41,7 +51,7 @@ export function SmsCampoMensagem({
     });
   }
 
-  const restantes = SMS_LIMITE_CARACTERES - valor.length;
+  const restantes = limite - valor.length;
 
   return (
     <div className="flex flex-col gap-2">
@@ -50,8 +60,8 @@ export function SmsCampoMensagem({
         id={id}
         ref={ref}
         value={valor}
-        rows={3}
-        maxLength={SMS_LIMITE_CARACTERES}
+        rows={linhas}
+        maxLength={limite}
         disabled={desabilitado}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -74,7 +84,7 @@ export function SmsCampoMensagem({
           ))}
         </div>
         <span className={`text-xs tabular-nums ${restantes <= 0 ? "text-destructive font-medium" : restantes <= 20 ? "text-amber-600" : "text-muted-foreground"}`}>
-          {valor.length}/{SMS_LIMITE_CARACTERES}
+          {valor.length}/{limite}
         </span>
       </div>
     </div>

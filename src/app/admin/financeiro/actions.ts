@@ -37,6 +37,7 @@ import {
   notificarSmsCobrancaGerada,
   notificarSmsPagamentoRecebido,
 } from "@/lib/integrax/notificacoes";
+import { notificarWhatsappCobrancaGerada } from "@/lib/whatsapp/eventos";
 import {
   criarClienteAsaas,
   buscarClienteAsaasPorCpf,
@@ -460,6 +461,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
       });
       dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", parcelamento: true });
       notificarSmsCobrancaGerada(parcelaId);
+      notificarWhatsappCobrancaGerada(parcelaId);
       // No parcelamento o link do boleto/fatura é o da 1ª parcela (a fatura do Asaas também aceita PIX).
       notificarEmailCobrancaGerada(parcelaId, { boleto: primeiraParcela?.bankSlipUrl ?? primeiraParcela?.invoiceUrl, pix: primeiraParcela?.invoiceUrl });
 
@@ -496,6 +498,7 @@ export async function gerarCobranca(parcelaId: string): Promise<ParcelaActionRes
     });
     dispararWebhookDeParcela("pedido_pendente", parcelaId, { gateway: "asaas", link_pagamento: cobranca.invoiceUrl });
     notificarSmsCobrancaGerada(parcelaId);
+    notificarWhatsappCobrancaGerada(parcelaId);
     notificarEmailCobrancaGerada(parcelaId, { boleto: cobranca.bankSlipUrl ?? cobranca.invoiceUrl, pix: cobranca.invoiceUrl });
 
     revalidatePath("/admin/financeiro");

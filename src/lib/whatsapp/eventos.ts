@@ -3,14 +3,23 @@ import "server-only";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
+import { renderTemplate } from "@/lib/whatsapp/render";
+// Reaproveitado de propósito (apesar do nome): só busca configuracoes.escola_nome, não tem nada
+// de específico de SMS — evita duplicar essa mesma busca aqui.
+import { nomeEscolaParaSms } from "@/lib/integrax/modelos";
+import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
 
 // Eventos do sistema que disparam WhatsApp via GênZap. Cada função agenda o envio pra DEPOIS da
 // resposta (after) e engole qualquer erro — nunca atrasa nem quebra o fluxo que chamou (mesmo
 // padrão de src/lib/integrax/notificacoes.ts). Com o GênZap desligado/desconectado,
 // enviarWhatsApp() só registra no console o que SERIA enviado.
 //
-// Os outros 3 eventos de mensagem (matrícula criada, lembrete de aula, falta, recontato de lead)
-// já são reais desde a Fase 13 — ver src/lib/mensagens/mensagens.ts — e não são tocados aqui.
+// FORA DESTE ARQUIVO DE PROPÓSITO — matrícula criada, lembrete de aula e falta em aula: já são
+// reais desde a Fase 13 (src/lib/mensagens/mensagens.ts: enviarMensagemMatriculaCriada/
+// LembreteAula/Falta), com log em `mensagens_enviadas`, retry e editor próprio. A Fase 2 migrou
+// o TEXTO desses 3 templates (+ recontato_lead) pra whatsapp_templates (ver a migration) e
+// mensagens.ts passou a ler de lá (ver renderTemplate ali) — mas o CAMINHO de envio continua
+// sendo o mesmo já testado, para não duplicar nem arriscar quebrar 4 eventos que já funcionam.
 
 function emSegundoPlano(tarefa: () => Promise<void>): void {
   const executar = async () => {
@@ -37,13 +46,24 @@ function dataBR(iso: string | null): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+function reais(valor: number): string {
+  return `R$ ${Number(valor).toFixed(2).replace(".", ",")}`;
+}
+
+// getDay() na string "aaaa-mm-dd" pura (sem hora) usaria o fuso do processo — força meio-dia UTC
+// pra nunca virar o dia anterior/seguinte por causa de fuso horário.
+function diaDaSemana(dataISO: string): string {
+  const dia = new Date(`${dataISO.slice(0, 10)}T12:00:00Z`).getUTCDay();
+  return DIA_SEMANA_LABELS[dia]?.toLowerCase() ?? "";
+}
+
 const URL_SITE_PADRAO = "https://sistemagestaogenezi.vercel.app";
 
 function urlPortal(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL || URL_SITE_PADRAO).replace(/\/+$/, "");
 }
 
-// ----- Lembrete D-1 de agendamento (cron lembrete-agendamentos) -----
+// ----- Agendamento: lembrete D-1 (cron lembrete-agendamentos) -----
 
 export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Promise<void> {
   return (async () => {
@@ -56,8 +76,12 @@ export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Pro
       const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string } | null;
       if (!agendamento?.whatsapp) return;
 
-      const nome = primeiroNome(agendamento.nome) || agendamento.nome;
-      const mensagem = `Olá, ${nome}! 👋 Passando para lembrar do seu agendamento amanhã, dia ${dataBR(agendamento.data_agendada)} às ${agendamento.horario}. Até lá!`;
+      const mensagem = await renderTemplate("agendamento_lembrete", {
+        nome: primeiroNome(agendamento.nome) || agendamento.nome,
+        data: dataBR(agendamento.data_agendada),
+        horario: agendamento.horario,
+        dia_semana: diaDaSemana(agendamento.data_agendada),
+      });
       await enviarWhatsApp(agendamento.whatsapp, mensagem);
     } catch (erro) {
       console.error("[whatsapp] falha no lembrete de agendamento", erro);
@@ -65,18 +89,150 @@ export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Pro
   })();
 }
 
-// ----- Follow-up automático de lead (cron followup-leads) -----
+// ----- Agendamento: cancelado / faltou (src/app/admin/comercial/agendamentos/actions.ts) -----
+// Fire-and-forget de propósito: disparadas por uma Server Action de clique do admin, não podem
+// travar a resposta pelo tempo do delay anti-banimento.
 
-export function notificarWhatsappLeadFollowup(leadId: string): Promise<void> {
+export function notificarWhatsappAgendamentoCancelado(agendamentoId: string, motivo?: string): void {
+  emSegundoPlano(async () => {
+    const { data } = await createAdminClient()
+      .from("agendamentos")
+      .select("nome, whatsapp, data_agendada, horario")
+      .eq("id", agendamentoId)
+      .maybeSingle();
+    const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string } | null;
+    if (!agendamento?.whatsapp) return;
+
+    const mensagem = await renderTemplate("agendamento_cancelado", {
+      nome: primeiroNome(agendamento.nome) || agendamento.nome,
+      data: dataBR(agendamento.data_agendada),
+      horario: agendamento.horario,
+      motivo: motivo?.trim() || "",
+    });
+    await enviarWhatsApp(agendamento.whatsapp, mensagem);
+  });
+}
+
+export function notificarWhatsappAgendamentoFalta(agendamentoId: string): void {
+  emSegundoPlano(async () => {
+    const { data } = await createAdminClient()
+      .from("agendamentos")
+      .select("nome, whatsapp, data_agendada, horario")
+      .eq("id", agendamentoId)
+      .maybeSingle();
+    const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string } | null;
+    if (!agendamento?.whatsapp) return;
+
+    const mensagem = await renderTemplate("agendamento_falta", {
+      nome: primeiroNome(agendamento.nome) || agendamento.nome,
+      data: dataBR(agendamento.data_agendada),
+      horario: agendamento.horario,
+    });
+    await enviarWhatsApp(agendamento.whatsapp, mensagem);
+  });
+}
+
+// ----- Cobrança: gerada (src/app/admin/financeiro/actions.ts::gerarCobranca) -----
+// Fire-and-forget: disparada por uma Server Action de clique do admin.
+
+type LinhaParcelaCobranca = {
+  valor: number;
+  numero_parcela: number;
+  data_vencimento: string | null;
+  asaas_invoice_url: string | null;
+  asaas_bank_slip_url: string | null;
+  alunos: { full_name: string | null; telefone: string | null } | null;
+  matriculas: { num_parcelas: number | null; turmas: { cursos: { nome: string } | null } | null } | null;
+};
+
+async function carregarParcelaParaCobranca(parcelaId: string): Promise<LinhaParcelaCobranca | null> {
+  const { data } = await createAdminClient()
+    .from("parcelas")
+    .select(
+      "valor, numero_parcela, data_vencimento, asaas_invoice_url, asaas_bank_slip_url, alunos(full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
+    )
+    .eq("id", parcelaId)
+    .maybeSingle();
+  return data as unknown as LinhaParcelaCobranca | null;
+}
+
+function rotuloParcela(parcela: LinhaParcelaCobranca): string {
+  const total = parcela.matriculas?.num_parcelas;
+  return total && total > 1 ? `${parcela.numero_parcela}/${total}` : String(parcela.numero_parcela);
+}
+
+export function notificarWhatsappCobrancaGerada(parcelaId: string): void {
+  emSegundoPlano(async () => {
+    const parcela = await carregarParcelaParaCobranca(parcelaId);
+    const aluno = parcela?.alunos;
+    if (!parcela || !aluno?.telefone) return;
+
+    const curso = parcela.matriculas?.turmas?.cursos?.nome ?? "seu curso";
+    // Não há um "código Pix copia-e-cola" separado no sistema — o Pix vem embutido na mesma
+    // fatura do boleto (ver notificarEmailCobrancaGerada em src/lib/email/eventos.ts, mesmo
+    // critério). O link serve pros dois.
+    const link = parcela.asaas_bank_slip_url ?? parcela.asaas_invoice_url ?? "";
+    const mensagem = await renderTemplate("cobranca_gerada", {
+      nome: primeiroNome(aluno.full_name) || "aluno(a)",
+      valor: reais(parcela.valor),
+      vencimento: dataBR(parcela.data_vencimento),
+      descricao: `Parcela ${rotuloParcela(parcela)} - ${curso}`,
+      link_boleto: link,
+      codigo_pix: link,
+    });
+    await enviarWhatsApp(aluno.telefone, mensagem);
+  });
+}
+
+// ----- Cobrança: atrasada, por faixa de dias (cron verificar-atrasos) -----
+// Chamada sequencialmente dentro do loop do cron (o delay entre mensagens é o próprio
+// comportamento anti-banimento desejado) — por isso é awaitable, não fire-and-forget.
+
+export function diasParaTemplateAtraso(diasAtraso: number): "cobranca_atrasada_d1" | "cobranca_atrasada_d3" | "cobranca_atrasada_d7" | "cobranca_atrasada_d15" {
+  if (diasAtraso >= 15) return "cobranca_atrasada_d15";
+  if (diasAtraso >= 7) return "cobranca_atrasada_d7";
+  if (diasAtraso >= 3) return "cobranca_atrasada_d3";
+  return "cobranca_atrasada_d1";
+}
+
+export function notificarWhatsappCobrancaAtrasada(parcelaId: string, diasAtraso: number): Promise<void> {
+  return (async () => {
+    try {
+      const parcela = await carregarParcelaParaCobranca(parcelaId);
+      const aluno = parcela?.alunos;
+      if (!parcela || !aluno?.telefone) return;
+
+      const link = parcela.asaas_bank_slip_url ?? parcela.asaas_invoice_url ?? "";
+      const mensagem = await renderTemplate(diasParaTemplateAtraso(diasAtraso), {
+        nome: primeiroNome(aluno.full_name) || "aluno(a)",
+        valor: reais(parcela.valor),
+        vencimento: dataBR(parcela.data_vencimento),
+        dias_atraso: String(diasAtraso),
+        link_boleto: link,
+      });
+      await enviarWhatsApp(aluno.telefone, mensagem);
+    } catch (erro) {
+      console.error("[whatsapp] falha na cobrança atrasada", erro);
+    }
+  })();
+}
+
+// ----- Lead: follow-up automático (cron followup-leads) -----
+// Awaitable e chamada sequencialmente no loop do cron (mesmo motivo do item anterior).
+
+export function notificarWhatsappLeadFollowup(leadId: string, tentativa: number): Promise<void> {
   return (async () => {
     try {
       const { data } = await createAdminClient().from("leads").select("nome, telefone, cursos(nome)").eq("id", leadId).maybeSingle();
       const lead = data as unknown as { nome: string; telefone: string; cursos: { nome: string } | null } | null;
       if (!lead?.telefone) return;
 
-      const nome = primeiroNome(lead.nome) || lead.nome;
-      const curso = lead.cursos?.nome ?? "nossos cursos";
-      const mensagem = `Olá, ${nome}! 😊 Vimos seu interesse em ${curso} e queremos te ajudar a dar o próximo passo. Podemos conversar?`;
+      const mensagem = await renderTemplate("lead_followup", {
+        nome: primeiroNome(lead.nome) || lead.nome,
+        curso_interesse: lead.cursos?.nome ?? "nossos cursos",
+        nome_escola: await nomeEscolaParaSms(),
+        tentativa: String(tentativa),
+      });
       await enviarWhatsApp(lead.telefone, mensagem);
     } catch (erro) {
       console.error("[whatsapp] falha no follow-up de lead", erro);
@@ -85,8 +241,9 @@ export function notificarWhatsappLeadFollowup(leadId: string): Promise<void> {
 }
 
 // ----- Dados de acesso da matrícula (botão manual "📱 Dados de acesso") -----
-// Fire-and-forget de propósito (emSegundoPlano/after): disparado por um clique do admin numa
-// Server Action, não pode travar a resposta pelo tempo do delay anti-banimento.
+// Continua com mensagem própria (não usa a tabela de templates): é um botão manual e pontual,
+// distinto do template "matricula_criada" (que já é o envio AUTOMÁTICO real de
+// src/lib/mensagens — ver nota no topo do arquivo). Fire-and-forget de propósito.
 
 export function notificarWhatsappDadosAcesso(matriculaId: string): void {
   emSegundoPlano(async () => {

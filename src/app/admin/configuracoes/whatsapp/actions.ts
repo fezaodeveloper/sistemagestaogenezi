@@ -9,6 +9,7 @@ import { ChaveCriptografiaAusenteError, criptografar } from "@/lib/gateways/cryp
 import { carregarConfigWhatsapp } from "@/lib/whatsapp/config";
 import { desconectarInstancia, enviarMensagemTexto } from "@/lib/whatsapp/evolution";
 import { normalizarTelefone } from "@/lib/mensagens/texto";
+import { isWhatsappTemplateId, placeholdersDesconhecidos, WHATSAPP_TEMPLATES } from "@/lib/whatsapp/templates";
 
 type Resultado = { success: true } | { error: string };
 
@@ -159,4 +160,42 @@ export async function enviarTesteWhatsapp(telefone: string, mensagem: string): P
     max: config.delayMaxSegundos,
   });
   return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Não foi possível enviar a mensagem." };
+}
+
+// ===== Aba "Templates" =====
+
+const templateSchema = z.object({
+  id: z.string().refine(isWhatsappTemplateId, { error: "Template inválido." }),
+  mensagem: z
+    .string()
+    .trim()
+    .min(1, { error: "Escreva a mensagem." })
+    .max(1000, { error: "A mensagem pode ter no máximo 1000 caracteres." }),
+  ativo: z.boolean(),
+});
+
+// Salva (ou atualiza) um template. `ativo` desligado = o sistema usa a mensagem padrão do
+// código (o envio continua acontecendo — ver renderTemplate).
+export async function salvarTemplateWhatsapp(dados: { id: string; mensagem: string; ativo: boolean }): Promise<Resultado> {
+  await requireRole("admin");
+
+  const parsed = templateSchema.safeParse(dados);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  const { id, mensagem, ativo } = parsed.data;
+
+  const definicao = WHATSAPP_TEMPLATES[id];
+  const chaves = definicao.placeholders.map((p) => p.chave);
+  const desconhecidos = placeholdersDesconhecidos(mensagem, chaves);
+  if (desconhecidos.length > 0) {
+    return { error: `Placeholder desconhecido: ${desconhecidos.map((c) => `{${c}}`).join(", ")}. Use só os da lista.` };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("whatsapp_templates")
+    .upsert({ id, nome: definicao.nome, mensagem, ativo, variaveis: chaves }, { onConflict: "id" });
+  if (error) return { error: "Não foi possível salvar o template. Confira se a migration whatsapp_templates foi aplicada." };
+
+  revalidar();
+  return { success: true };
 }

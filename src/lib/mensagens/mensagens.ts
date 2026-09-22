@@ -2,8 +2,9 @@ import "server-only";
 
 import { MessageCircleWarning } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { substituirVariaveis } from "@/lib/certificados/texto";
 import { descriptografar } from "@/lib/gateways/crypto";
+import { renderTemplate } from "@/lib/whatsapp/render";
+import type { WhatsappTemplateId } from "@/lib/whatsapp/templates";
 import { enviarWhatsapp } from "./evolution";
 import { normalizarTelefone } from "./texto";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
@@ -25,6 +26,16 @@ type ContextoAluno = {
   alunos: { telefone: string; profiles: { full_name: string | null } | null } | null;
 };
 
+// GênZap Fase 2: o TEXTO dos 4 templates migrou de colunas de whatsapp_config pra
+// whatsapp_templates (ver a migration) — mapeia o tipo antigo pro id novo. As variáveis
+// continuam as mesmas de sempre (nome_aluno, nome_curso, ...), só a origem do texto mudou.
+const TEMPLATE_ID_POR_TIPO: Record<MensagemTipo, WhatsappTemplateId> = {
+  matricula_criada: "matricula_criada",
+  lembrete_aula: "lembrete_aula",
+  falta: "falta_aula",
+  lead_recontato: "recontato_lead",
+};
+
 // Núcleo do envio: monta o texto a partir do template configurado, valida
 // telefone/config, chama a Evolution API e sempre grava uma linha no log —
 // nunca lança exceção (política "loga o erro e segue", ver CLAUDE.md/plano
@@ -43,22 +54,16 @@ async function enviarMensagem(params: {
 
     const { data: config } = await admin
       .from("whatsapp_config")
-      .select(
-        "ativo, evolution_api_url, evolution_instance_name, evolution_api_key, template_matricula_criada, template_lembrete_aula, template_falta, template_lead_recontato",
-      )
+      .select("ativo, evolution_api_url, evolution_instance_name, evolution_api_key")
       .eq("id", true)
       .single();
 
     // ativo=false é pausa deliberada do admin — não é falha, não loga nada.
     if (!config || !config.ativo) return;
 
-    const template = {
-      matricula_criada: config.template_matricula_criada,
-      lembrete_aula: config.template_lembrete_aula,
-      falta: config.template_falta,
-      lead_recontato: config.template_lead_recontato,
-    }[params.tipo];
-    const mensagemTexto = substituirVariaveis(template, params.variaveis);
+    // Texto do template: whatsapp_templates (GênZap Fase 2) — ativo lá, senão o padrão do
+    // código; nunca lança (ver renderTemplate).
+    const mensagemTexto = await renderTemplate(TEMPLATE_ID_POR_TIPO[params.tipo], params.variaveis);
 
     const registrar = (status: MensagemStatus, telefoneDestino: string, erroDetalhe: string | null) =>
       admin.from("mensagens_enviadas").insert({

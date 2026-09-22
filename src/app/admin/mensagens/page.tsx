@@ -21,7 +21,7 @@ export default async function MensagensPage() {
             Histórico dos últimos 200 envios (matrícula criada, lembrete de aula, sentimos sua falta).
           </p>
         </div>
-        <Button variant="outline" nativeButton={false} render={<Link href="/admin/mensagens/configuracao" />}>
+        <Button variant="outline" nativeButton={false} render={<Link href="/admin/configuracoes/whatsapp?aba=templates" />}>
           Configuração
         </Button>
       </div>

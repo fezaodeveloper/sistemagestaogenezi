@@ -4,8 +4,13 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarLeadsSemContato } from "@/lib/leads/leads";
+import { notificarWhatsappCobrancaAtrasada } from "@/lib/whatsapp/eventos";
 
 const DIAS_CONTRATO_PENDENTE = 3;
+// Faixas de cobrança atrasada por WhatsApp (ver src/lib/whatsapp/templates.ts): a "borda"
+// exatamente onde cada faixa começa. Rodando 1x/dia, cada parcela em atraso contínuo passa por
+// cada borda em exatamente um dia — sem precisar de tabela de log pra deduplicar.
+const FAIXAS_COBRANCA_ATRASADA = [3, 7, 15];
 
 // Disparado 1x/dia às 11:00 UTC (08:00 BRT) pelo Vercel Cron (ver
 // vercel.json) — varre parcelas pendentes vencidas, marca como atrasadas e
@@ -14,7 +19,11 @@ const DIAS_CONTRATO_PENDENTE = 3;
 // aproveita a mesma execução diária pra três outras verificações "de
 // pendência" (TAREFA 9B): parcelas vencendo amanhã, contratos parados há
 // dias e leads sem contato — todas idempotentes via idempotency_key datada,
-// então não reenviam a mesma notificação em execuções seguintes.
+// então não reenviam a mesma notificação em execuções seguintes. Desde a Fase 2 do GênZap,
+// também dispara WhatsApp de cobrança atrasada por faixa de dias (1, 3, 7, 15+) — sequencial,
+// por isso maxDuration mais generoso.
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -56,8 +65,33 @@ export async function GET(request: Request) {
         },
         `pagamento-atrasado-${parcela.id}-${hoje}`,
       );
+
+      // WhatsApp — 1º aviso de atraso (template cobranca_atrasada_d1, ou uma faixa mais urgente
+      // se o cron ficou parado por alguns dias e a parcela já nasce com mais atraso que isso).
+      // Sequencial: o delay entre mensagens é o próprio comportamento anti-banimento desejado.
+      const diasAtraso = Math.round((Date.parse(hoje) - Date.parse(parcela.data_vencimento)) / 86400000);
+      await notificarWhatsappCobrancaAtrasada(parcela.id, diasAtraso);
     }
     atualizadas = parcelasVencidas.length;
+  }
+
+  // WhatsApp — faixas seguintes (3, 7 e 15 dias): parcelas que JÁ estavam atrasadas em execuções
+  // anteriores (por isso não aparecem em parcelasVencidas acima) e completam hoje exatamente uma
+  // dessas faixas.
+  for (const diasAtraso of FAIXAS_COBRANCA_ATRASADA) {
+    const dataLimite = new Date(hoje);
+    dataLimite.setDate(dataLimite.getDate() - diasAtraso);
+    const dataLimiteStr = dataLimite.toISOString().slice(0, 10);
+
+    const { data: parcelasNaFaixa } = await admin
+      .from("parcelas")
+      .select("id")
+      .eq("status", "atrasado")
+      .eq("data_vencimento", dataLimiteStr);
+
+    for (const parcela of (parcelasNaFaixa ?? []) as { id: string }[]) {
+      await notificarWhatsappCobrancaAtrasada(parcela.id, diasAtraso);
+    }
   }
 
   // Parcelas vencendo amanhã.

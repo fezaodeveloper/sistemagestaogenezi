@@ -2,15 +2,59 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getChaveEvolutionConfigurada, isWhatsappStatus } from "@/lib/whatsapp/config";
+import { WHATSAPP_TEMPLATE_IDS, WHATSAPP_TEMPLATES, isWhatsappTemplateId } from "@/lib/whatsapp/templates";
 import { WhatsappAntibanimentoForm } from "@/components/admin/whatsapp-antibanimento-form";
 import { WhatsappConexaoForm } from "@/components/admin/whatsapp-conexao-form";
 import { WhatsappStatusCard } from "@/components/admin/whatsapp-status-card";
+import { WhatsappTemplatesLista, type TemplateEdicao } from "@/components/admin/whatsapp-templates";
 import { WhatsappTesteForm } from "@/components/admin/whatsapp-teste-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default async function WhatsappPage() {
+const ABAS = [
+  { id: "conexao", rotulo: "Conexão" },
+  { id: "templates", rotulo: "Templates" },
+] as const;
+type AbaId = (typeof ABAS)[number]["id"];
+
+function hrefAba(id: AbaId): string {
+  return id === "conexao" ? "/admin/configuracoes/whatsapp" : `/admin/configuracoes/whatsapp?aba=${id}`;
+}
+
+export default async function WhatsappPage({ searchParams }: { searchParams: Promise<{ aba?: string }> }) {
   await requireRole("admin");
 
+  const { aba: abaParam } = await searchParams;
+  const aba: AbaId = ABAS.some((a) => a.id === abaParam) ? (abaParam as AbaId) : "conexao";
+
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-semibold">GênZap — WhatsApp</h1>
+        <p className="text-muted-foreground text-sm">Conexão com o WhatsApp via Evolution API, número pareado e mensagens automáticas.</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Seções do WhatsApp">
+        {ABAS.map((a) => (
+          <Link
+            key={a.id}
+            href={hrefAba(a.id)}
+            role="tab"
+            aria-selected={a.id === aba}
+            className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+              a.id === aba ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent/50"
+            }`}
+          >
+            {a.rotulo}
+          </Link>
+        ))}
+      </div>
+
+      {aba === "conexao" ? <AbaConexao /> : <AbaTemplates />}
+    </div>
+  );
+}
+
+async function AbaConexao() {
   const supabase = await createClient();
   const [{ data, error }, chaveConfigurada] = await Promise.all([
     supabase
@@ -28,12 +72,7 @@ export default async function WhatsappPage() {
   const conexaoConfigurada = !!url && !!instancia && chaveConfigurada;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">GênZap — WhatsApp</h1>
-        <p className="text-muted-foreground text-sm">Conexão com o WhatsApp via Evolution API, número pareado e envio automático.</p>
-      </div>
-
+    <>
       {error && (
         <p className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
           Não foi possível ler a configuração (a migration <code>whatsapp_genzap</code> já foi aplicada?).
@@ -70,14 +109,32 @@ export default async function WhatsappPage() {
           <WhatsappTesteForm />
         </CardContent>
       </Card>
-
-      <p className="text-muted-foreground text-xs">
-        Os modelos de mensagem automática (matrícula, lembrete de aula, falta, recontato de lead) continuam em{" "}
-        <Link href="/admin/mensagens/configuracao" className="underline underline-offset-2">
-          Mensagens &gt; Configuração
-        </Link>
-        .
-      </p>
-    </div>
+    </>
   );
+}
+
+async function AbaTemplates() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("whatsapp_templates").select("id, mensagem, ativo");
+
+  if (error) {
+    return (
+      <p className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+        Não foi possível ler os templates (a migration <code>whatsapp_templates</code> já foi aplicada?).
+      </p>
+    );
+  }
+
+  // O banco manda; qualquer id que falte (linha ausente) cai no padrão do código.
+  const doBanco = new Map(
+    ((data ?? []) as { id: string; mensagem: string; ativo: boolean }[])
+      .filter((t) => isWhatsappTemplateId(t.id))
+      .map((t) => [t.id, t]),
+  );
+  const templates: TemplateEdicao[] = WHATSAPP_TEMPLATE_IDS.map((id) => {
+    const salvo = doBanco.get(id);
+    return { id, mensagem: salvo?.mensagem ?? WHATSAPP_TEMPLATES[id].padrao, ativo: salvo?.ativo ?? true };
+  });
+
+  return <WhatsappTemplatesLista templates={templates} />;
 }

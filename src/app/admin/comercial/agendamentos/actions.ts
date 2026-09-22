@@ -21,6 +21,7 @@ import {
   type AgendamentoStatus,
 } from "@/lib/agendamentos/schema";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
+import { notificarWhatsappAgendamentoCancelado, notificarWhatsappAgendamentoFalta } from "@/lib/whatsapp/eventos";
 
 const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const HORARIO_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -164,7 +165,7 @@ export async function getAgendamentos(
   return getAgendamentosLib(supabase, paginaId, filtros);
 }
 
-export async function atualizarStatusAgendamento(id: string, status: string): Promise<{ error?: string }> {
+export async function atualizarStatusAgendamento(id: string, status: string, motivo?: string): Promise<{ error?: string }> {
   await requireRole("admin");
 
   if (!AGENDAMENTO_STATUSES.includes(status as AgendamentoStatus)) {
@@ -172,10 +173,20 @@ export async function atualizarStatusAgendamento(id: string, status: string): Pr
   }
 
   const supabase = await createClient();
+  const { data: antes } = await supabase.from("agendamentos").select("status").eq("id", id).maybeSingle();
+
   const { error } = await supabase.from("agendamentos").update({ status }).eq("id", id);
 
   if (error) {
     return { error: "Não foi possível atualizar o status." };
+  }
+
+  // WhatsApp (GênZap/Evolution API) — só quando o status realmente MUDOU pra cancelado/faltou
+  // agora (evita reenviar se o admin clicar duas vezes no mesmo status). Fire-and-forget: a
+  // Server Action não espera o delay anti-banimento pra responder.
+  if (antes && antes.status !== status) {
+    if (status === "cancelado") notificarWhatsappAgendamentoCancelado(id, motivo);
+    else if (status === "faltou") notificarWhatsappAgendamentoFalta(id);
   }
 
   revalidarAgendamentos();
