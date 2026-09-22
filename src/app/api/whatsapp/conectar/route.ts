@@ -6,6 +6,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { carregarConfigWhatsapp } from "@/lib/whatsapp/config";
 import { conectarInstancia, statusInstancia } from "@/lib/whatsapp/evolution";
 
+// Sobe o tempo máximo de execução — conectarInstancia() pode encadear até 3 chamadas à Evolution
+// API (connect -> create -> connect de novo, 12s de timeout cada — ver src/lib/whatsapp/
+// evolution.ts), então precisa de mais margem que as outras rotas.
+export const maxDuration = 45;
+
 // Gera (ou renova) o QR Code — chamado ao clicar "Conectar / Gerar QR Code" e de novo a cada 30s
 // enquanto a tela aguarda a leitura (o QR da Evolution API expira). Só admin autenticado.
 export async function POST() {
