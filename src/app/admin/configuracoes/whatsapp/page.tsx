@@ -10,6 +10,13 @@ import { WhatsappTemplatesLista, type TemplateEdicao } from "@/components/admin/
 import { WhatsappTesteForm } from "@/components/admin/whatsapp-teste-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+// Server Actions não podem exportar `maxDuration` de dentro de um arquivo "use server" (quebra o
+// build — só funções são aceitas nesses módulos); o lugar certo é a página, e vale pra todas as
+// actions usadas nela (ver node_modules/next/dist/docs/.../maxDuration.md). Sobe de 10s (padrão)
+// pra cobrir a chamada HTTP à Evolution API (timeout de 15s) sem a function ser encerrada no meio
+// — era a causa do botão "Enviar teste" ficar girando pra sempre sem erro.
+export const maxDuration = 30;
+
 const ABAS = [
   { id: "conexao", rotulo: "Conexão" },
   { id: "templates", rotulo: "Templates" },

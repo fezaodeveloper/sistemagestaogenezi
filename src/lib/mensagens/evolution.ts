@@ -24,6 +24,16 @@ export async function enviarWhatsapp(
 
     if (!response.ok) {
       const corpo = await response.text().catch(() => "");
+      // Log completo pros logs do Vercel — a tela só mostra uma versão curta do erro (abaixo).
+      // apikey nunca entra no log (nem mascarada): não é preciso pra diagnosticar, e vaza no
+      // console em texto puro se entrar.
+      console.error("[whatsapp:evolution] sendText falhou", {
+        endpoint,
+        instancia: config.instancia,
+        status: response.status,
+        statusText: response.statusText,
+        corpo: corpo.slice(0, 1000),
+      });
       return {
         ok: false,
         erro: `Evolution API respondeu ${response.status}${corpo ? `: ${corpo.slice(0, 300)}` : ""}`,
@@ -32,6 +42,11 @@ export async function enviarWhatsapp(
 
     return { ok: true };
   } catch (err) {
+    console.error("[whatsapp:evolution] sendText — falha de rede/exceção", {
+      endpoint,
+      instancia: config.instancia,
+      erro: err instanceof Error ? { nome: err.name, mensagem: err.message } : err,
+    });
     return {
       ok: false,
       erro: err instanceof Error ? err.message : "Falha de rede ao chamar a Evolution API.",
