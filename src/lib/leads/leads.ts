@@ -4,6 +4,7 @@ import { UserPlus } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefone } from "@/lib/mensagens/texto";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
+import { notificarSmsLeadConfirmacao } from "@/lib/integrax/notificacoes";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
 import { KANBAN_COLUNAS_PADRAO, type KanbanColuna, type KanbanColunaConfig, type Lead, type LeadFormValues, type Temperatura } from "./schema";
@@ -233,6 +234,9 @@ export async function criarOuAtualizarLeadPublico(
       origem: input.origem,
       campanha_origem: extras?.campanha_origem ?? null,
     });
+    // SMS de confirmação (template "lead_confirmacao" da IntegraX). Só lead NOVO; roda depois da
+    // resposta e nunca lança. Com a integração desligada só registra no console (stub).
+    notificarSmsLeadConfirmacao(novo.id);
   }
 
   return {};

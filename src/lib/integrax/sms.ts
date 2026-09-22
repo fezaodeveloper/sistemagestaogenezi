@@ -1,6 +1,7 @@
 import "server-only";
 
 import { carregarConfigSms } from "@/lib/integrax/config";
+import { normalizarTextoSms, SMS_LIMITE_CARACTERES } from "@/lib/integrax/texto";
 
 // Envio de SMS pela IntegraX.
 //
@@ -14,7 +15,9 @@ import { carregarConfigSms } from "@/lib/integrax/config";
 const INTEGRAX_URL_PADRAO = "https://api.integrax.com.br/sms";
 const TIMEOUT_MS = 15_000;
 
-export const SMS_LIMITE_CARACTERES = 160;
+// Definidos em texto.ts (sem "server-only", usados também pela tela de templates) e
+// re-exportados aqui: os imports existentes (`from "@/lib/integrax/sms"`) continuam valendo.
+export { normalizarTextoSms, SMS_LIMITE_CARACTERES };
 
 export type ResultadoSms = {
   ok: boolean;
@@ -23,19 +26,6 @@ export type ResultadoSms = {
   enviado: boolean;
   erro?: string;
 };
-
-// Só GSM-7 cabe em 160 caracteres por SMS; um único "ã" ou "ê" muda o SMS pra
-// UCS-2 (70 por parte). Tira acentos e troca aspas/travessões "inteligentes".
-export function normalizarTextoSms(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[–—]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 // Só números, DDD + número (10 ou 11 dígitos). Aceita "+55 (11) 99999-9999".
 export function normalizarTelefoneSms(telefone: string): string | null {

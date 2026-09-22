@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dataComDiaSemana } from "@/lib/datas/util";
+import { notificarSmsAgendamentoLembrete } from "@/lib/integrax/notificacoes";
 import { escapeHtml, sendTelegram } from "@/lib/telegram";
 
 type AgendamentoLembrete = {
@@ -69,6 +70,10 @@ export async function GET(request: Request) {
         `📋 Página: ${escapeHtml(agendamento.agendamento_paginas?.titulo ?? "—")}`,
       ].join("\n"),
     );
+
+    // SMS do lembrete (template "agendamento_lembrete" da IntegraX). Roda depois da resposta,
+    // nunca lança; com a integração desligada só registra no console (stub).
+    notificarSmsAgendamentoLembrete(agendamento.id);
 
     await admin.from("agendamentos").update({ lembrete_enviado: true }).eq("id", agendamento.id);
   }
