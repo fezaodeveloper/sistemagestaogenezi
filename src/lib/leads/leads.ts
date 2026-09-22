@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizarTelefone } from "@/lib/mensagens/texto";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
 import { notificarSmsLeadConfirmacao } from "@/lib/integrax/notificacoes";
+import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
 import { KANBAN_COLUNAS_PADRAO, type KanbanColuna, type KanbanColunaConfig, type Lead, type LeadFormValues, type Temperatura } from "./schema";
@@ -237,6 +238,22 @@ export async function criarOuAtualizarLeadPublico(
     // SMS de confirmação (template "lead_confirmacao" da IntegraX). Só lead NOVO; roda depois da
     // resposta e nunca lança. Com a integração desligada só registra no console (stub).
     notificarSmsLeadConfirmacao(novo.id);
+
+    // GênZap Fase 3 — fluxos personalizados com gatilho "lead_criado" (não há template
+    // automático de WhatsApp pra este evento hoje, só o de SMS acima — os fluxos são
+    // independentes disso). Nunca lança.
+    admin
+      .from("cursos")
+      .select("nome")
+      .eq("id", input.curso_id)
+      .maybeSingle()
+      .then(({ data: curso }) =>
+        dispararFluxosPorGatilho(
+          "lead_criado",
+          { telefone: input.telefone, nome: input.nome, curso: curso?.nome ?? "" },
+          { tipo: "lead", id: novo.id },
+        ),
+      );
   }
 
   return {};

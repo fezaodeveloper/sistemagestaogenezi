@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 import { renderTemplate } from "@/lib/whatsapp/render";
+import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 // Reaproveitado de propósito (apesar do nome): só busca configuracoes.escola_nome, não tem nada
 // de específico de SMS — evita duplicar essa mesma busca aqui.
 import { nomeEscolaParaSms } from "@/lib/integrax/modelos";
@@ -20,6 +21,16 @@ import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
 // o TEXTO desses 3 templates (+ recontato_lead) pra whatsapp_templates (ver a migration) e
 // mensagens.ts passou a ler de lá (ver renderTemplate ali) — mas o CAMINHO de envio continua
 // sendo o mesmo já testado, para não duplicar nem arriscar quebrar 4 eventos que já funcionam.
+//
+// GênZap Fase 3 — fluxos personalizados (src/lib/whatsapp/fluxos.ts): dispararFluxosPorGatilho()
+// é chamada APÓS o envio automático de cada evento que tem um gatilho de fluxo correspondente.
+// Os 6 gatilhos de fluxo (matricula_criada, agendamento_criado, lead_criado, pagamento_recebido,
+// cobranca_atrasada, manual) são um vocabulário MENOR e não coincidem 1:1 com os 13 templates —
+// só "cobranca_atrasada" tem uma função só dela aqui embaixo; os outros 4 automáticos
+// (matrícula criada, agendamento criado, lead criado, pagamento recebido) já disparam WhatsApp
+// em pontos FORA deste arquivo (lib/mensagens/mensagens.ts, lib/leads/leads.ts,
+// lib/gateways/parcelas.ts, webhooks/asaas, agendar/[slug]/actions.ts) — a chamada de
+// dispararFluxosPorGatilho pra esses 4 fica lá, no ponto real do evento, pelo mesmo motivo.
 
 function emSegundoPlano(tarefa: () => Promise<void>): void {
   const executar = async () => {
@@ -141,7 +152,7 @@ type LinhaParcelaCobranca = {
   data_vencimento: string | null;
   asaas_invoice_url: string | null;
   asaas_bank_slip_url: string | null;
-  alunos: { full_name: string | null; telefone: string | null } | null;
+  alunos: { id: string; full_name: string | null; telefone: string | null } | null;
   matriculas: { num_parcelas: number | null; turmas: { cursos: { nome: string } | null } | null } | null;
 };
 
@@ -149,7 +160,7 @@ async function carregarParcelaParaCobranca(parcelaId: string): Promise<LinhaParc
   const { data } = await createAdminClient()
     .from("parcelas")
     .select(
-      "valor, numero_parcela, data_vencimento, asaas_invoice_url, asaas_bank_slip_url, alunos(full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
+      "valor, numero_parcela, data_vencimento, asaas_invoice_url, asaas_bank_slip_url, alunos(id, full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
     )
     .eq("id", parcelaId)
     .maybeSingle();
@@ -203,14 +214,22 @@ export function notificarWhatsappCobrancaAtrasada(parcelaId: string, diasAtraso:
       if (!parcela || !aluno?.telefone) return;
 
       const link = parcela.asaas_bank_slip_url ?? parcela.asaas_invoice_url ?? "";
+      const nome = primeiroNome(aluno.full_name) || "aluno(a)";
       const mensagem = await renderTemplate(diasParaTemplateAtraso(diasAtraso), {
-        nome: primeiroNome(aluno.full_name) || "aluno(a)",
+        nome,
         valor: reais(parcela.valor),
         vencimento: dataBR(parcela.data_vencimento),
         dias_atraso: String(diasAtraso),
         link_boleto: link,
       });
       await enviarWhatsApp(aluno.telefone, mensagem);
+
+      // Fluxos personalizados (Fase 3) com gatilho "cobranca_atrasada", além do template acima.
+      await dispararFluxosPorGatilho(
+        "cobranca_atrasada",
+        { telefone: aluno.telefone, nome, valor: reais(parcela.valor), vencimento: dataBR(parcela.data_vencimento), dias_atraso: String(diasAtraso) },
+        { tipo: "aluno", id: aluno.id },
+      );
     } catch (erro) {
       console.error("[whatsapp] falha na cobrança atrasada", erro);
     }

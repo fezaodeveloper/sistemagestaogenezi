@@ -3,6 +3,7 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import { notificarSmsPagamentoRecebido } from "@/lib/integrax/notificacoes";
 import { emitirNotaAutomatica } from "@/lib/spedy/nfe";
+import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 
@@ -76,7 +77,7 @@ async function processarEvento(
           const { data: parcela } = await supabase
             .from("parcelas")
             .select(
-              "valor, numero_parcela, matriculas(num_parcelas, alunos(full_name), turmas(cursos(nome)))",
+              "valor, numero_parcela, matriculas(num_parcelas, aluno_id, alunos(full_name, telefone), turmas(cursos(nome)))",
             )
             .eq("asaas_payment_id", paymentId)
             .single();
@@ -86,7 +87,8 @@ async function processarEvento(
             numero_parcela: number;
             matriculas: {
               num_parcelas: number | null;
-              alunos: { full_name: string | null } | null;
+              aluno_id: string | null;
+              alunos: { full_name: string | null; telefone: string | null } | null;
               turmas: { cursos: { nome: string } | null } | null;
             } | null;
           } | null;
@@ -103,6 +105,21 @@ async function processarEvento(
               },
               `pagamento-recebido-${paymentId}`,
             );
+
+            // GênZap Fase 3 — fluxos personalizados com gatilho "pagamento_recebido".
+            const telefone = detalhes.matriculas?.alunos?.telefone;
+            if (telefone && detalhes.matriculas?.aluno_id) {
+              await dispararFluxosPorGatilho(
+                "pagamento_recebido",
+                {
+                  telefone,
+                  nome: detalhes.matriculas.alunos?.full_name ?? "aluno(a)",
+                  valor: `R$ ${Number(detalhes.valor).toFixed(2).replace(".", ",")}`,
+                  curso: detalhes.matriculas?.turmas?.cursos?.nome ?? "",
+                },
+                { tipo: "aluno", id: detalhes.matriculas.aluno_id },
+              );
+            }
           }
         } catch {
           // Notificação é secundária — a atualização da parcela já

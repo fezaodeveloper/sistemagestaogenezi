@@ -4,6 +4,7 @@ import { MessageCircleWarning } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { descriptografar } from "@/lib/gateways/crypto";
 import { renderTemplate } from "@/lib/whatsapp/render";
+import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 import type { WhatsappTemplateId } from "@/lib/whatsapp/templates";
 import { enviarWhatsapp } from "./evolution";
 import { normalizarTelefone } from "./texto";
@@ -125,15 +126,16 @@ export async function enviarMensagemMatriculaCriada(
 
     const { data } = await admin
       .from("matriculas")
-      .select("turma_id, alunos(telefone, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))")
+      .select("turma_id, alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))")
       .eq("id", matriculaId)
       .single();
 
     const matricula = data as unknown as
-      | (ContextoAluno & {
+      | {
           turma_id: string;
+          alunos: { id: string; telefone: string; profiles: { full_name: string | null } | null } | null;
           turmas: { nome: string; horario_aula: string | null; cursos: { nome: string } | null } | null;
-        })
+        }
       | null;
 
     if (!matricula?.alunos || !matricula.turmas) return;
@@ -160,6 +162,20 @@ export async function enviarMensagemMatriculaCriada(
         horario_aula: matricula.turmas.horario_aula ? formatarHorario(matricula.turmas.horario_aula) : "a definir",
       },
     });
+
+    // GênZap Fase 3 — fluxos personalizados com gatilho "matricula_criada", além do template
+    // acima. Este é o ponto REAL de "matrícula criada" no sistema (o único em eventos.ts é um
+    // botão manual de reenvio — ver a nota lá), por isso o disparo entra aqui.
+    await dispararFluxosPorGatilho(
+      "matricula_criada",
+      {
+        telefone: matricula.alunos.telefone,
+        nome: matricula.alunos.profiles?.full_name ?? "aluno(a)",
+        curso: matricula.turmas.cursos?.nome ?? "",
+        turma: matricula.turmas.nome,
+      },
+      { tipo: "aluno", id: matricula.alunos.id },
+    );
   } catch {
     // idem: matrícula já foi criada com sucesso antes desta chamada.
   }

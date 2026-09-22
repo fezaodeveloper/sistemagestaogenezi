@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
 import { notificarEmailAgendamento } from "@/lib/email/eventos";
+import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 import {
   contarVagasOcupadasNoSlot,
   getAgendamentoPaginaPublica,
@@ -87,10 +88,24 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     return { error: "Não foi possível confirmar o agendamento. Tente novamente." };
   }
 
-  // Stub — Evolution API virá depois.
+  // Stub — confirmação automática de agendamento por WhatsApp ainda não tem template próprio
+  // (não é um dos 13 templates da Fase 2). Fluxos personalizados (Fase 3), sim: gatilho
+  // "agendamento_criado" abaixo já funciona independente desse stub.
   console.log(
     `[agendamentos] Enviaria confirmação por WhatsApp para ${parsed.data.nome} (${parsed.data.whatsapp}): ` +
       `agendado para ${parsed.data.data_agendada} às ${parsed.data.horario}`,
+  );
+
+  dispararFluxosPorGatilho(
+    "agendamento_criado",
+    {
+      telefone: parsed.data.whatsapp,
+      nome: parsed.data.nome,
+      data: parsed.data.data_agendada,
+      horario: parsed.data.horario,
+      titulo_pagina: pagina.titulo,
+    },
+    { tipo: "agendamento", id: agendamento.id },
   );
 
   try {

@@ -7,6 +7,7 @@ import type { MetodoPagamento } from "@/lib/gateways/types";
 import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import { notificarSmsPagamentoRecebido } from "@/lib/integrax/notificacoes";
 import { emitirNotaAutomatica } from "@/lib/spedy/nfe";
+import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 
 // Atualizações de `parcelas` disparadas pelos webhooks dos gateways (Stripe,
 // Pagar.me). Espelham o que o webhook do Asaas faz, mas achando a parcela pelo id
@@ -66,7 +67,7 @@ export async function baixarParcelaPaga(
   try {
     const { data: parcela } = await supabase
       .from("parcelas")
-      .select("valor, numero_parcela, matriculas(num_parcelas, alunos(full_name), turmas(cursos(nome)))")
+      .select("valor, numero_parcela, matriculas(num_parcelas, aluno_id, alunos(full_name, telefone), turmas(cursos(nome)))")
       .eq("id", parcelaId)
       .single();
 
@@ -75,7 +76,8 @@ export async function baixarParcelaPaga(
       numero_parcela: number;
       matriculas: {
         num_parcelas: number | null;
-        alunos: { full_name: string | null } | null;
+        aluno_id: string | null;
+        alunos: { full_name: string | null; telefone: string | null } | null;
         turmas: { cursos: { nome: string } | null } | null;
       } | null;
     } | null;
@@ -92,6 +94,22 @@ export async function baixarParcelaPaga(
         },
         `pagamento-recebido-${opcoes.idNotificacao}`,
       );
+
+      // GênZap Fase 3 — fluxos personalizados com gatilho "pagamento_recebido" (não há template
+      // automático de WhatsApp pra este evento hoje, só o de SMS — os fluxos são independentes).
+      const telefone = detalhes.matriculas?.alunos?.telefone;
+      if (telefone && detalhes.matriculas?.aluno_id) {
+        await dispararFluxosPorGatilho(
+          "pagamento_recebido",
+          {
+            telefone,
+            nome: detalhes.matriculas.alunos?.full_name ?? "aluno(a)",
+            valor: `R$ ${Number(detalhes.valor).toFixed(2).replace(".", ",")}`,
+            curso: detalhes.matriculas?.turmas?.cursos?.nome ?? "",
+          },
+          { tipo: "aluno", id: detalhes.matriculas.aluno_id },
+        );
+      }
     }
   } catch {
     // Ver comentário acima.

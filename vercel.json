@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/sms-recuperacao",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/whatsapp-fluxos",
+      "schedule": "0 15 * * *"
     }
   ]
 }
