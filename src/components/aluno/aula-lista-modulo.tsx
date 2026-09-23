@@ -27,7 +27,7 @@ export function AulaListaModulo({
   const concluidas = aulas.filter((aula) => aula.concluida).length;
 
   return (
-    <div className="border-l-4 border-orange-500 bg-card overflow-hidden rounded-lg border">
+    <div className="border-l-4 border-blue-500 bg-card overflow-hidden rounded-lg border">
       <div className="flex items-center justify-between gap-2 border-b p-4">
         <h2 className="text-sm font-semibold">Aulas do módulo</h2>
         <Badge variant="secondary">

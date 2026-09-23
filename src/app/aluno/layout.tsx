@@ -8,6 +8,7 @@ import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
 import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
 import { getConfigComunidade } from "@/lib/comunidade/config";
 import { getConquistasAtivo } from "@/lib/conquistas/config";
+import { escolherLogo, getLogosEscola } from "@/lib/personalizacao/logos";
 import { ConquistasPersonalizadasProvider } from "@/components/aluno/conquistas-personalizadas-provider";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
@@ -53,9 +54,10 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
     { count: parcelasAtrasadas },
     { count: contratosPendentes },
     conectaHabilitado,
-    { data: pushConfig },
+    { data: configData },
     configComunidade,
     conquistasHabilitadas,
+    logos,
   ] = await Promise.all([
       getConversaPorAluno(supabase, user.id),
       supabase
@@ -69,11 +71,13 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
         .eq("aluno_id", user.id)
         .eq("status", "pendente"),
       getConectaHabilitado(supabase),
-      supabase.from("configuracoes").select("push_vapid_public_key").eq("id", true).maybeSingle(),
+      supabase.from("configuracoes").select("push_vapid_public_key, escola_nome").eq("id", true).maybeSingle(),
       // Nunca lança: erro/migration pendente = comunidade desligada (menu escondido).
       getConfigComunidade(supabase),
       // Idem: erro/migration pendente = conquistas desligadas.
       getConquistasAtivo(supabase),
+      // Idem: erro/migration pendente = sidebar cai no nome da escola (sem logo).
+      getLogosEscola(supabase),
     ]);
   const mensagensNaoLidas = conversa
     ? await getContagemNaoLidasAluno(supabase, conversa.id, user.id)
@@ -95,7 +99,9 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           conectaHabilitado={conectaHabilitado}
           comunidadeHabilitada={configComunidade.ativo}
           conquistasHabilitadas={conquistasHabilitadas}
-          vapidPublicKey={pushConfig?.push_vapid_public_key ?? null}
+          nomeEscola={configData?.escola_nome?.trim() || "GÊNEZI Educação"}
+          logoUrl={escolherLogo(logos.claro, logos.escuro, "escuro")}
+          vapidPublicKey={configData?.push_vapid_public_key ?? null}
         />
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
