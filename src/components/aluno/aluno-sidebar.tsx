@@ -22,6 +22,27 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
+// Cabeçalho da sidebar: logo da escola (versão tema escuro — a área do aluno é sempre escura,
+// ver layout.tsx) se cadastrada, senão o nome da escola. Mesmo critério do cabeçalho da sidebar
+// do admin (src/components/admin/admin-sidebar.tsx), simplificado — a sidebar do aluno não tem
+// modo "recolhida em ícones" (só offcanvas), então não precisa de uma variante de logo pequena.
+function CabecalhoSidebar({ logoUrl, nomeEscola }: { logoUrl: string | null; nomeEscola: string }) {
+  if (logoUrl) {
+    return (
+      <div className="flex items-center px-2 py-1.5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- logo vem do Storage do próprio projeto */}
+        <img src={logoUrl} alt={`Logo de ${nomeEscola}`} className="h-9 max-w-full object-contain object-left" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col px-2 py-1">
+      <span className="truncate text-sm font-semibold">{nomeEscola}</span>
+      <span className="text-sidebar-foreground/60 text-[10.5px]">Área do Aluno</span>
+    </div>
+  );
+}
+
 export function AlunoSidebar({
   user,
   conversaId,
@@ -32,6 +53,8 @@ export function AlunoSidebar({
   conectaHabilitado,
   comunidadeHabilitada,
   conquistasHabilitadas,
+  nomeEscola,
+  logoUrl,
   vapidPublicKey,
 }: {
   user: CurrentUser;
@@ -43,12 +66,14 @@ export function AlunoSidebar({
   conectaHabilitado: boolean;
   comunidadeHabilitada: boolean;
   conquistasHabilitadas: boolean;
+  nomeEscola: string;
+  logoUrl: string | null;
   vapidPublicKey: string | null;
 }) {
   return (
     <Sidebar>
       <SidebarHeader>
-        <span className="px-2 py-1 text-sm font-semibold">Área do Aluno</span>
+        <CabecalhoSidebar logoUrl={logoUrl} nomeEscola={nomeEscola} />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

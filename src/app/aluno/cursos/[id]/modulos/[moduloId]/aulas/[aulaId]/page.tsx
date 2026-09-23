@@ -13,9 +13,11 @@ import { getAulasConcluidasIds } from "@/lib/aulas-concluidas/progresso";
 import { extractYoutubeVideoId } from "@/lib/materiais/youtube";
 import { getMeusPontos } from "@/lib/gamificacao/ranking";
 import { getRecursosHabilitadosAluno } from "@/lib/configuracoes/recursos";
+import { escolherLogo, getLogosEscola } from "@/lib/personalizacao/logos";
 import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
 import { AulaListaModulo } from "@/components/aluno/aula-lista-modulo";
 import { AulaComentarios } from "@/components/aluno/aula-comentarios";
+import { YoutubePlayer } from "@/components/aluno/youtube-player";
 import { getSecaoComentarios } from "@/lib/comentarios/aula";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -283,6 +285,7 @@ export default async function AulaConteudoPage({
     pontos,
     { data: ofensivaData },
     secaoComentarios,
+    logos,
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -312,6 +315,8 @@ export default async function AulaConteudoPage({
       .maybeSingle(),
     // null = comentários desativados (ou migration ainda não aplicada): a seção some.
     getSecaoComentarios(supabase, aulaId, user.id),
+    // Idem sidebar (layout.tsx): cache() por request, sem query duplicada.
+    getLogosEscola(supabase),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
@@ -320,6 +325,10 @@ export default async function AulaConteudoPage({
   const isModuloCompleto =
     aulasDoModulo.length > 0 && aulasDoModulo.every((a) => aulasConcluidasIds.has(a.id));
   const ofensivaAtual = (ofensivaData?.ofensiva_atual as number | undefined) ?? 0;
+  const logoUrl = escolherLogo(logos.claro, logos.escuro, "escuro");
+  const proximaAulaHref = nextAula
+    ? `/aluno/cursos/${cursoId}/modulos/${nextAula.moduloId}/aulas/${nextAula.aulaId}`
+    : null;
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -356,15 +365,12 @@ export default async function AulaConteudoPage({
               </CardContent>
             </Card>
           ) : videoId ? (
-            <div className="aspect-video w-full overflow-hidden rounded-xl">
-              <iframe
-                className="h-full w-full"
-                src={`https://www.youtube-nocookie.com/embed/${videoId}?modestbranding=1&rel=0&iv_load_policy=3`}
-                title={`Vídeo da aula: ${aula.titulo}`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-            </div>
+            <YoutubePlayer
+              videoId={videoId}
+              titulo={aula.titulo}
+              logoUrl={logoUrl}
+              proximaAulaHref={proximaAulaHref}
+            />
           ) : (
             <Card>
               <CardContent className="py-10 text-center">
