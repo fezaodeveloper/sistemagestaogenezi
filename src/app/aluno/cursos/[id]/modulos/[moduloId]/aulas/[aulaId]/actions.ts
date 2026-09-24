@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -130,5 +131,46 @@ export async function toggleAulaConcluida(
   revalidatePath(`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}`);
   revalidatePath(`/aluno/cursos/${cursoId}`);
   revalidatePath("/aluno");
+  return {};
+}
+
+const avaliacaoSchema = z.object({
+  nota: z.number().int().min(1).max(5),
+  // string vazia normaliza pra null lá embaixo — o form manda "" quando o
+  // textarea está em branco, não quer dizer "não mudou".
+  comentario: z.string().trim().max(500).optional(),
+});
+
+// Upsert único pra estrela (clique = salva na hora) e pro comentário (botão
+// "Enviar comentário") — o componente sempre manda o par (nota, comentario)
+// completo com o estado atual dos dois campos, nunca só o que mudou, senão
+// salvar só a nota apagaria um comentário já existente (e vice-versa).
+// RLS (aula_avaliacoes) já garante aluno_id = auth.uid() e acesso à aula.
+export async function salvarAvaliacaoAula(
+  aulaId: string,
+  input: { nota: number; comentario: string },
+): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  const parsed = avaliacaoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: "Avaliação inválida." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("aula_avaliacoes").upsert(
+    {
+      aula_id: aulaId,
+      aluno_id: user.id,
+      nota: parsed.data.nota,
+      comentario: parsed.data.comentario ? parsed.data.comentario : null,
+    },
+    { onConflict: "aula_id,aluno_id" },
+  );
+
+  if (error) {
+    return { error: "Não foi possível salvar sua avaliação. Tente novamente." };
+  }
+
   return {};
 }

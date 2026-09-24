@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Users, GraduationCap, School } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -35,8 +36,11 @@ function StatTile({
     violet: "#A78BFA",
   };
   return (
-    <Card className={`gz-kpi gz-kpi-${cor}`}>
-      <CardContent className="flex flex-col gap-1.5 py-4">
+    // --card-spacing controla o padding do Card inteiro (ver src/components/ui/card.tsx) — setar
+    // pra 1.5rem (p-6 pedido) é mais confiável que sobrescrever px-4/py-4 via className, que
+    // brigaria com o valor herdado da variável CSS em vez de substituí-lo de fato.
+    <Card className={`gz-kpi gz-kpi-${cor}`} style={{ "--card-spacing": "1.5rem" } as CSSProperties}>
+      <CardContent className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
             {label}

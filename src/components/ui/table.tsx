@@ -58,7 +58,10 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        // px-4 py-3 (não h-10 px-2): densidade mínima pedida pra toda tabela do painel — como é
+        // o primitivo compartilhado por TODAS as tabelas (admin e aluno), o ajuste aqui corrige
+        // de uma vez só, em vez de sobrescrever caso a caso em cada tabela.
+        "text-foreground px-4 py-3 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className,
       )}
       {...props}
@@ -70,7 +73,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn("p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0", className)}
+      className={cn("px-4 py-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0", className)}
       {...props}
     />
   );

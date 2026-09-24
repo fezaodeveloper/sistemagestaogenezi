@@ -461,7 +461,7 @@ export function AlunosTable({
         </Select>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="filtro_data_de" className="text-muted-foreground text-xs">
+          <Label htmlFor="filtro_data_de" className="text-muted-foreground text-sm">
             De:
           </Label>
           <Input
@@ -473,7 +473,7 @@ export function AlunosTable({
           />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="filtro_data_ate" className="text-muted-foreground text-xs">
+          <Label htmlFor="filtro_data_ate" className="text-muted-foreground text-sm">
             Até:
           </Label>
           <Input
@@ -486,7 +486,7 @@ export function AlunosTable({
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label className="text-muted-foreground text-xs">Ordenar por</Label>
+          <Label className="text-muted-foreground text-sm">Ordenar por</Label>
           <Select
             items={ORDER_BY_ITEMS}
             value={orderBy}
@@ -506,7 +506,7 @@ export function AlunosTable({
         </div>
       </div>
 
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground text-sm">
         Filtros aplicados apenas na página atual. Use a busca para encontrar registros específicos.
       </p>
 
