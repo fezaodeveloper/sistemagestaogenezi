@@ -34,11 +34,15 @@ interface YTPlayerInstance {
   unMute(): void;
   isMuted(): boolean;
   setPlaybackRate(taxa: number): void;
+  getAvailableQualityLevels(): string[];
+  getPlaybackQuality(): string;
+  setPlaybackQuality(qualidade: string): void;
   getIframe(): HTMLIFrameElement;
   destroy(): void;
 }
 
 type YTPlayerEvento = { target: YTPlayerInstance; data?: YTPlayerState };
+type YTPlayerEventoQualidade = { target: YTPlayerInstance; data: string };
 
 interface YTNamespace {
   Player: new (
@@ -53,6 +57,7 @@ interface YTNamespace {
       events: {
         onReady: (evento: YTPlayerEvento) => void;
         onStateChange: (evento: YTPlayerEvento) => void;
+        onPlaybackQualityChange: (evento: YTPlayerEventoQualidade) => void;
         onError: (evento: { data: number }) => void;
       };
     },
@@ -112,6 +117,42 @@ function salvarVelocidade(valor: number): void {
   }
 }
 
+// Rótulos na ordem em que a API costuma retornar getAvailableQualityLevels() (da maior pra
+// menor) — "highres"/"hd2160"/"hd1440" só aparecem se o vídeo de fato tiver essas resoluções.
+// A partir de ~2018 o YouTube ignora setPlaybackQuality() na maioria dos vídeos (ele mesmo decide
+// pela largura de banda), mas o método continua existindo e não lança — a troca ainda funciona
+// pra parte dos vídeos/contas, e o pedido foi implementar o seletor de qualquer forma.
+const QUALIDADE_LABELS: Record<string, string> = {
+  highres: "Máxima",
+  hd2160: "2160p (4K)",
+  hd1440: "1440p (2K)",
+  hd1080: "1080p",
+  hd720: "720p",
+  large: "480p",
+  medium: "360p",
+  small: "240p",
+  tiny: "144p",
+  auto: "Automática",
+};
+
+const CHAVE_QUALIDADE = "genezi-video-qualidade";
+
+function lerQualidadeSalva(): string | null {
+  try {
+    return localStorage.getItem(CHAVE_QUALIDADE);
+  } catch {
+    return null;
+  }
+}
+
+function salvarQualidade(valor: string): void {
+  try {
+    localStorage.setItem(CHAVE_QUALIDADE, valor);
+  } catch {
+    // Modo privado/storage bloqueado: só não lembra da próxima vez, sem quebrar o player.
+  }
+}
+
 function formatarTempo(segundosTotais: number): string {
   if (!Number.isFinite(segundosTotais) || segundosTotais < 0) return "0:00";
   const h = Math.floor(segundosTotais / 3600);
@@ -152,6 +193,8 @@ export function YoutubePlayer({
   const [mudo, setMudo] = useState(false);
   const [velocidade, setVelocidade] = useState(1);
   const [menuAberto, setMenuAberto] = useState(false);
+  const [qualidadesDisponiveis, setQualidadesDisponiveis] = useState<string[]>([]);
+  const [qualidadeAtual, setQualidadeAtual] = useState<string | null>(null);
   const [controlesVisiveis, setControlesVisiveis] = useState(true);
   const [emTelaCheia, setEmTelaCheia] = useState(false);
 
@@ -211,7 +254,11 @@ export function YoutubePlayer({
             iv_load_policy: 3,
             disablekb: 1,
             playsinline: 1,
-            // Dentro de useEffect: só roda no client, window sempre existe aqui.
+            // Dentro de useEffect: só roda no client, window sempre existe aqui. Já era
+            // dinâmico (nunca hardcoded) — o erro "target origin ... does not match" que ainda
+            // aparece no console mesmo com origin correto é um warning conhecido e inofensivo do
+            // próprio IFrame API do YouTube (troca de postMessage interna da API antes do handshake
+            // terminar), não afeta a reprodução; não há como suprimir isso do lado do embedder.
             origin: window.location.origin,
           },
           events: {
@@ -233,6 +280,22 @@ export function YoutubePlayer({
               const salva = lerVelocidadeSalva();
               evento.target.setPlaybackRate(salva);
               setVelocidade(salva);
+
+              const disponiveis = evento.target.getAvailableQualityLevels();
+              setQualidadesDisponiveis(disponiveis);
+              const qualidadeSalva = lerQualidadeSalva();
+              if (qualidadeSalva && disponiveis.includes(qualidadeSalva)) {
+                evento.target.setPlaybackQuality(qualidadeSalva);
+                setQualidadeAtual(qualidadeSalva);
+              } else {
+                setQualidadeAtual(evento.target.getPlaybackQuality());
+              }
+            },
+            onPlaybackQualityChange: (evento) => {
+              if (cancelado) return;
+              // O YouTube pode ajustar a qualidade sozinho (rede/buffer) mesmo depois de
+              // setPlaybackQuality — mantém o menu refletindo a qualidade real em uso.
+              setQualidadeAtual(evento.data);
             },
             onStateChange: (evento) => {
               if (cancelado || !window.YT) return;
@@ -334,6 +397,13 @@ export function YoutubePlayer({
     setMenuAberto(false);
   }
 
+  function escolherQualidade(valor: string) {
+    playerRef.current?.setPlaybackQuality(valor);
+    setQualidadeAtual(valor);
+    salvarQualidade(valor);
+    setMenuAberto(false);
+  }
+
   async function alternarTelaCheia() {
     const container = containerRef.current;
     if (!container) return;
@@ -410,7 +480,7 @@ export function YoutubePlayer({
               <Settings className={cn(tocando && !controlesVisiveis && "opacity-0 transition-opacity", "size-4")} />
             </Button>
             {menuAberto && (
-              <div className="bg-popover text-popover-foreground ring-foreground/10 absolute top-full right-0 mt-1 w-32 rounded-lg p-1 text-sm shadow-md ring-1">
+              <div className="bg-popover text-popover-foreground ring-foreground/10 absolute top-full right-0 mt-1 w-40 rounded-lg p-1 text-sm shadow-md ring-1">
                 <p className="text-muted-foreground px-2 py-1 text-xs">Velocidade</p>
                 {VELOCIDADES.map((v) => (
                   <button
@@ -425,6 +495,25 @@ export function YoutubePlayer({
                     {v}x
                   </button>
                 ))}
+
+                {qualidadesDisponiveis.length > 0 && (
+                  <>
+                    <p className="text-muted-foreground mt-1 border-t px-2 pt-2 pb-1 text-xs">Qualidade</p>
+                    {qualidadesDisponiveis.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => escolherQualidade(q)}
+                        className={cn(
+                          "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
+                          q === qualidadeAtual && "font-semibold text-primary",
+                        )}
+                      >
+                        {QUALIDADE_LABELS[q] ?? q}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>

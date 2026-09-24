@@ -141,6 +141,24 @@ const avaliacaoSchema = z.object({
   comentario: z.string().trim().max(500).optional(),
 });
 
+// Códigos de erro do Postgres/PostgREST que indicam "a tabela (ou função que a policy usa) ainda
+// não existe" — a migration de aula_avaliacoes (20260924100000) não foi aplicada, ou foi aplicada
+// fora de ordem antes de aluno_acessa_aula() existir (ver hardening em
+// 20260924200000_fix_aula_avaliacoes_insert_policy.sql). Mensagem clara em vez da genérica, pra
+// não confundir "migration pendente" com um erro de validação/rede qualquer.
+const CODIGOS_TABELA_OU_FUNCAO_AUSENTE = new Set([
+  "42P01", // Postgres: undefined_table
+  "42883", // Postgres: undefined_function
+  "PGRST202", // PostgREST: function not found no schema cache
+  "PGRST205", // PostgREST: table not found no schema cache
+]);
+
+function pareceMigrationPendente(error: { code?: string; message?: string }): boolean {
+  if (error.code && CODIGOS_TABELA_OU_FUNCAO_AUSENTE.has(error.code)) return true;
+  const msg = error.message?.toLowerCase() ?? "";
+  return msg.includes("does not exist") || msg.includes("schema cache");
+}
+
 // Upsert único pra estrela (clique = salva na hora) e pro comentário (botão
 // "Enviar comentário") — o componente sempre manda o par (nota, comentario)
 // completo com o estado atual dos dois campos, nunca só o que mudou, senão
@@ -150,27 +168,48 @@ export async function salvarAvaliacaoAula(
   aulaId: string,
   input: { nota: number; comentario: string },
 ): Promise<{ error?: string }> {
-  const user = await requireRole("aluno");
+  try {
+    const user = await requireRole("aluno");
 
-  const parsed = avaliacaoSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: "Avaliação inválida." };
-  }
+    const parsed = avaliacaoSchema.safeParse(input);
+    if (!parsed.success) {
+      return { error: "Avaliação inválida." };
+    }
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("aula_avaliacoes").upsert(
-    {
-      aula_id: aulaId,
-      aluno_id: user.id,
-      nota: parsed.data.nota,
-      comentario: parsed.data.comentario ? parsed.data.comentario : null,
-    },
-    { onConflict: "aula_id,aluno_id" },
-  );
+    const supabase = await createClient();
+    // created_by NÃO entra aqui de propósito: tem default auth.uid() no banco e nem está no
+    // grant de insert (só aula_id, aluno_id, nota, comentario) — mandar explicitamente violaria
+    // o grant e falharia com "permission denied for column created_by".
+    const { error } = await supabase.from("aula_avaliacoes").upsert(
+      {
+        aula_id: aulaId,
+        aluno_id: user.id,
+        nota: parsed.data.nota,
+        comentario: parsed.data.comentario ? parsed.data.comentario : null,
+      },
+      { onConflict: "aula_id,aluno_id" },
+    );
 
-  if (error) {
+    if (error) {
+      // Sempre loga o erro completo do Supabase — a mensagem genérica que volta pro aluno não
+      // pode ser a única pista na hora de debugar (era exatamente isso que escondia a causa
+      // real deste bug).
+      console.error("[salvarAvaliacaoAula] erro do Supabase:", error);
+
+      if (pareceMigrationPendente(error)) {
+        return { error: "Avaliação de aulas ainda não está disponível (migration pendente)." };
+      }
+      if (error.code === "42501") {
+        // Postgres insufficient_privilege: RLS negou o insert/update (ex.: aluno sem acesso à
+        // aula, ou tentando avaliar em nome de outro aluno_id).
+        return { error: "Você não tem permissão para avaliar esta aula." };
+      }
+      return { error: "Não foi possível salvar sua avaliação. Tente novamente." };
+    }
+
+    return {};
+  } catch (erro) {
+    console.error("[salvarAvaliacaoAula] exceção inesperada:", erro);
     return { error: "Não foi possível salvar sua avaliação. Tente novamente." };
   }
-
-  return {};
 }
