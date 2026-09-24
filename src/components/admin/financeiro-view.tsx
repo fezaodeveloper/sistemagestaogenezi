@@ -340,7 +340,7 @@ function RelatorioMeiButton({ ano, mes }: { ano: number; mes: number }) {
         <FileText />
         {gerando ? "Gerando..." : "Relatório MEI"}
       </Button>
-      {error && <span className="text-destructive text-xs">{error}</span>}
+      {error && <span className="text-destructive text-sm">{error}</span>}
     </div>
   );
 }
@@ -473,7 +473,7 @@ function NotaFiscalControl({
           onCheckedChange={(checked) => handleToggle(checked === true)}
           disabled={isPending}
         />
-        <Label htmlFor={`nf_emitida_${parcela.id}`} className="text-xs font-normal">
+        <Label htmlFor={`nf_emitida_${parcela.id}`} className="text-sm font-normal">
           NF emitida
         </Label>
 
@@ -505,7 +505,7 @@ function NotaFiscalControl({
           </>
         )}
       </div>
-      {error && <span className="text-destructive text-xs">{error}</span>}
+      {error && <span className="text-destructive text-sm">{error}</span>}
     </div>
   );
 }
@@ -776,7 +776,7 @@ function AcoesParcela({
           onAtualizada={onAtualizada}
         />
       )}
-      {error && !pagamentoDialogOpen && <span className="text-destructive text-xs">{error}</span>}
+      {error && !pagamentoDialogOpen && <span className="text-destructive text-sm">{error}</span>}
     </div>
   );
 }
@@ -1019,7 +1019,7 @@ export function FinanceiroView({
           ) : (
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-1">
-                <Label htmlFor="periodo_inicio" className="text-xs">
+                <Label htmlFor="periodo_inicio" className="text-sm">
                   De:
                 </Label>
                 <Input
@@ -1031,7 +1031,7 @@ export function FinanceiroView({
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <Label htmlFor="periodo_fim" className="text-xs">
+                <Label htmlFor="periodo_fim" className="text-sm">
                   Até:
                 </Label>
                 <Input
@@ -1125,7 +1125,7 @@ export function FinanceiroView({
               {selecionadas.size > 1 ? "s" : ""}
             </span>
             {quantidadeSemFatura > 0 && (
-              <span className="text-muted-foreground text-xs">
+              <span className="text-muted-foreground text-sm">
                 {quantidadeSemFatura} parcela{quantidadeSemFatura > 1 ? "s" : ""} não{" "}
                 {quantidadeSemFatura > 1 ? "têm" : "tem"} cobrança gerada no Asaas e não{" "}
                 {quantidadeSemFatura > 1 ? "serão incluídas" : "será incluída"} no carnê.

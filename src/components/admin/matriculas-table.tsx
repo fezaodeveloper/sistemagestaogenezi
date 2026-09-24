@@ -132,7 +132,7 @@ function ContratoButton({ matricula }: { matricula: MatriculaListItem }) {
       >
         {baixando ? "Baixando..." : config.label}
       </Button>
-      {erro && <span className="text-destructive text-xs">{erro}</span>}
+      {erro && <span className="text-destructive text-sm">{erro}</span>}
     </div>
   );
 }
@@ -693,7 +693,7 @@ export function MatriculasTable({
         searchParams={q ? { q } : {}}
       />
       {buscaTruncada && (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-muted-foreground text-sm">
           A busca encontrou muitos alunos/cursos — refine o termo para ver todos os resultados.
         </p>
       )}

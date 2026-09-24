@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -17,6 +17,7 @@ import { escolherLogo, getLogosEscola } from "@/lib/personalizacao/logos";
 import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
 import { AulaListaModulo } from "@/components/aluno/aula-lista-modulo";
 import { AulaComentarios } from "@/components/aluno/aula-comentarios";
+import { AulaAvaliacao } from "@/components/aluno/aula-avaliacao";
 import { YoutubePlayer } from "@/components/aluno/youtube-player";
 import { getSecaoComentarios } from "@/lib/comentarios/aula";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +119,28 @@ async function getProvaResumo(
     tentativasUsadas: tentativas?.length ?? 0,
     ultimaNota: tentativas?.[0]?.nota ?? null,
   };
+}
+
+type AvaliacaoAluno = { nota: number; comentario: string | null } | null;
+
+// Nunca lança: se a migration de aula_avaliacoes ainda não foi aplicada a tabela não existe e a
+// consulta falha — trata como "ainda não avaliou" (mesmo padrão de getLogosEscola/getConquistasAtivo).
+async function getAvaliacaoAluno(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  aulaId: string,
+  alunoId: string,
+): Promise<AvaliacaoAluno> {
+  try {
+    const { data } = await supabase
+      .from("aula_avaliacoes")
+      .select("nota, comentario")
+      .eq("aula_id", aulaId)
+      .eq("aluno_id", alunoId)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Sem tabela de progresso ainda — a "próxima aula" é puramente sequencial
@@ -286,6 +309,7 @@ export default async function AulaConteudoPage({
     { data: ofensivaData },
     secaoComentarios,
     logos,
+    avaliacaoAluno,
   ] = await Promise.all([
     supabase
       .from("materiais")
@@ -317,6 +341,7 @@ export default async function AulaConteudoPage({
     getSecaoComentarios(supabase, aulaId, user.id),
     // Idem sidebar (layout.tsx): cache() por request, sem query duplicada.
     getLogosEscola(supabase),
+    getAvaliacaoAluno(supabase, aulaId, user.id),
   ]);
 
   const videoMaterial = materiaisData?.[0] ?? null;
@@ -392,23 +417,14 @@ export default async function AulaConteudoPage({
             provaResumo={isModuloCompleto ? provaResumo : null}
             provaHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/prova`}
             concluidaInicial={concluidaInicial}
+            proximaAulaHref={proximaAulaHref}
           />
 
-          {nextAula && (
-            <div className="flex justify-end">
-              <Button
-                render={
-                  <Link
-                    href={`/aluno/cursos/${cursoId}/modulos/${nextAula.moduloId}/aulas/${nextAula.aulaId}`}
-                  />
-                }
-                nativeButton={false}
-              >
-                Próxima aula
-                <ArrowRight />
-              </Button>
-            </div>
-          )}
+          <AulaAvaliacao
+            aulaId={aulaId}
+            avaliacaoInicial={avaliacaoAluno}
+            concluidaInicial={concluidaInicial}
+          />
 
           {secaoComentarios && (
             <AulaComentarios

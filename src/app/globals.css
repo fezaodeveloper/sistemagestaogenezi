@@ -198,6 +198,20 @@
 .admin-dark .gz-tag-violet { background: rgb(167 139 250 / 0.12); color: #A78BFA; }
 .admin-dark .gz-tag-neutral { background: rgb(255 255 255 / 0.05); color: var(--muted-foreground); }
 
+/* Densidade dos formulários do admin: o preset shadcn "nova" define Input/Select em h-8 (32px)
+   de propósito — mais compacto que o h-10 padrão do shadcn genérico. Como o componente é
+   compartilhado com o portal do aluno (não incluído nesta correção), o ajuste fica escopado só
+   à árvore .admin-dark via seletor de atributo, em vez de editar src/components/ui/input.tsx e
+   select.tsx direto — tem especificidade maior que a classe utilitária h-8/h-7 do Tailwind
+   (2 seletores vs. 1), então sobrescreve sem precisar de !important. Não inclui o Select "sm"
+   (usado em UI compacta como o seletor de itens-por-página da paginação, fora de formulário) nem
+   o Textarea (não tem uma altura fixa equivalente a "h-10" — ver aula-avaliacao.tsx/textarea.tsx).
+*/
+.admin-dark [data-slot="input"],
+.admin-dark [data-slot="select-trigger"][data-size="default"] {
+  height: 2.5rem;
+}
+
 /* Animação de conquista (ConquistaModal) — CSS puro, sem biblioteca. */
 @keyframes conquista-pop {
   0% { transform: scale(0); opacity: 0; }

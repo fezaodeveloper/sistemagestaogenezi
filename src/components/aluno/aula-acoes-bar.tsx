@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, HelpCircle } from "lucide-react";
+import { ArrowRight, GraduationCap, HelpCircle } from "lucide-react";
 import { PdfViewerButton } from "@/components/aluno/pdf-viewer-button";
 import { MateriaisListButton } from "@/components/aluno/materiais-list-button";
 import { ToggleAulaConcluidaButton } from "@/components/aluno/toggle-aula-concluida-button";
@@ -23,6 +23,7 @@ export function AulaAcoesBar({
   provaResumo,
   provaHref,
   concluidaInicial,
+  proximaAulaHref,
 }: {
   cursoId: string;
   moduloId: string;
@@ -34,6 +35,8 @@ export function AulaAcoesBar({
   provaResumo: Resumo;
   provaHref: string;
   concluidaInicial: boolean;
+  // Ausente/null = aula é a última do curso, o botão some.
+  proximaAulaHref?: string | null;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -70,6 +73,15 @@ export function AulaAcoesBar({
         aulaId={aulaId}
         concluidaInicial={concluidaInicial}
       />
+
+      {/* Mesma linha do "Aula concluída" (row acima é flex-wrap com gap) — ver CLAUDE.md/pedido:
+          [Aula concluída ✓] [Próxima aula →] lado a lado. */}
+      {proximaAulaHref && (
+        <Button render={<Link href={proximaAulaHref} />} nativeButton={false}>
+          Próxima aula
+          <ArrowRight />
+        </Button>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { startTransition, useEffect, useState } from "react";
 import {
   AlertTriangle, Award, CreditCard, LayoutGrid, Mail, Banknote, BarChart2, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
   LayoutDashboard, Lock, MapPin, Megaphone, MessageCircle, MessagesSquare, Monitor, Package, Palette, PlayCircle, PlusCircle, Presentation, Receipt,
-  Settings, Shield, Tags, Target, TrendingDown, Truck, UserPlus, Users, Workflow, Wrench, Zap,
+  Settings, Shield, Star, Tags, Target, TrendingDown, Truck, UserPlus, Users, Workflow, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
 
@@ -31,6 +31,7 @@ const GROUPS: NavGroup[] = [
   { id: "academico", label: "Acadêmico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
     { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
+    { href: "/admin/academico/avaliacoes", label: "Avaliações", icon: Star },
     { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
     { href: "/admin/cronograma", label: "Cronograma", icon: CalendarRange },
     { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },
@@ -168,13 +169,13 @@ export function AdminNavGroups({
                       <Link
                         href={item.href}
                         className={
-                          "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors " +
+                          "flex min-h-10 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors " +
                           (active
                             ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                             : "text-sidebar-foreground hover:bg-white/[0.03] hover:text-foreground")
                         }
                       >
-                        <ItemIcon className="size-4 shrink-0" />
+                        <ItemIcon className="size-5 shrink-0" />
                         <span className="truncate">{item.label}</span>
                       </Link>
                       {item.badge === "chat" && (
