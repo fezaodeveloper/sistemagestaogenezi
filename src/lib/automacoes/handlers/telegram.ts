@@ -11,6 +11,9 @@ const LINK_ALUNOS = "https://sistemagestaogenezi.vercel.app/admin/alunos";
 const LINK_CONTRATOS = "https://sistemagestaogenezi.vercel.app/admin/contratos";
 const LINK_RESGATES = "https://sistemagestaogenezi.vercel.app/admin/resgates";
 const LINK_MATRICULAS = "https://sistemagestaogenezi.vercel.app/admin/matriculas";
+const LINK_TURMAS = "https://sistemagestaogenezi.vercel.app/admin/turmas";
+const LINK_CONECTA = "https://sistemagestaogenezi.vercel.app/admin/conecta";
+const LINK_CONECTA_VAGAS = "https://sistemagestaogenezi.vercel.app/admin/conecta/vagas";
 
 function formatarReais(valor: unknown): string {
   const numero = typeof valor === "number" ? valor : Number(valor ?? 0);
@@ -23,8 +26,13 @@ function formatarData(data: unknown): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+// parse_mode das mensagens é HTML (ver enviarAlertaTelegram/enviarMensagemTelegram): um nome de
+// aluno/curso/turma/prêmio/empresa com "<", ">" ou "&" (ex.: "Inglês <Avançado>") faz o Telegram
+// recusar a mensagem INTEIRA com 400 — e como o envio é best-effort (nunca lança), isso falhava
+// em silêncio, sem nenhum aviso. Era o único ponto em todo este arquivo que não escapava valor
+// vindo do banco antes de interpolar (ver o mesmo aviso em src/lib/telegram.ts, escapeHtml).
 function texto(valor: unknown): string {
-  return typeof valor === "string" && valor.length > 0 ? valor : "—";
+  return typeof valor === "string" && valor.length > 0 ? escapeHtml(valor) : "—";
 }
 
 export async function notificarPagamentoRecebido(payload: Record<string, unknown>): Promise<boolean> {
@@ -141,7 +149,11 @@ export async function notificarCursoConcluido(payload: Record<string, unknown>):
 }
 
 export async function notificarEvasaoRisco(payload: Record<string, unknown>): Promise<boolean> {
-  const motivos = Array.isArray(payload.motivos) ? payload.motivos.join(", ") : texto(payload.motivos);
+  // Array não passa por texto() (só usado no branch else) — escapa cada item manualmente, mesmo
+  // motivo do comentário em texto() acima.
+  const motivos = Array.isArray(payload.motivos)
+    ? payload.motivos.map((m) => escapeHtml(m)).join(", ")
+    : texto(payload.motivos);
   const resultado = await enviarAlertaTelegram(
     "RISCO DE EVASÃO",
     [
@@ -177,8 +189,11 @@ export async function notificarBaixaFrequencia(payload: Record<string, unknown>)
   const alunosAbaixo = Array.isArray(payload.alunos_abaixo) ? payload.alunos_abaixo : [];
   const linhasAlunos = alunosAbaixo.map((item) => {
     const aluno = item as { nome: string; percentual: number };
-    return `- ${aluno.nome}: ${aluno.percentual}%`;
+    // Array não passa por texto() — escapa o nome manualmente, mesmo motivo do comentário lá.
+    return `- ${escapeHtml(aluno.nome)}: ${aluno.percentual}%`;
   });
+  // turma_id já vinha no payload (ver verificarFrequenciaTurmas) mas a mensagem não linkava pra
+  // turma — sem isso o admin lia o alerta e precisava procurar a turma manualmente pelo nome.
   return enviarAlertaTelegram(
     "Baixa Frequência",
     [
@@ -186,6 +201,7 @@ export async function notificarBaixaFrequencia(payload: Record<string, unknown>)
       `📊 Média da turma: ${texto(payload.percentual)}%`,
       `👥 Alunos abaixo de 75%:`,
       ...linhasAlunos,
+      `🔗 Ver turma: ${LINK_TURMAS}/${texto(payload.turma_id)}`,
     ],
     "⚠️",
   );
@@ -289,6 +305,8 @@ export async function notificarTermoAceito(payload: Record<string, unknown>): Pr
 }
 
 export async function notificarEmpresaCadastro(payload: Record<string, unknown>): Promise<boolean> {
+  // "Aguardando aprovação" sem link nenhum obrigava o admin a procurar a empresa manualmente em
+  // /admin/conecta pra aprovar — a mensagem é uma ação pendente, precisa do atalho direto.
   return enviarAlertaTelegram(
     "CONECTA — Nova Empresa",
     [
@@ -297,6 +315,7 @@ export async function notificarEmpresaCadastro(payload: Record<string, unknown>)
       `📞 WhatsApp: ${texto(payload.whatsapp)}`,
       `🏙️ Cidade: ${texto(payload.cidade)}/${texto(payload.estado)}`,
       `⏳ Aguardando aprovação`,
+      `🔗 Aprovar: ${LINK_CONECTA}`,
     ],
     "🏢",
   );
@@ -317,13 +336,16 @@ export async function notificarConectaPagamentoConfirmado(
 }
 
 export async function notificarNovaVagaConecta(payload: Record<string, unknown>): Promise<boolean> {
+  // Sem link nenhum (e "🔗" indevidamente usado pra rotular Modalidade, não um link de verdade —
+  // corrigido pro emoji de trabalho/modalidade e um 🔗 real apontando pra moderação de vagas).
   return enviarAlertaTelegram(
     "GÊNEZI CONECTA — Nova Vaga",
     [
       `🏢 Empresa: ${texto(payload.nome_empresa)}`,
       `💼 Vaga: ${texto(payload.titulo)}`,
       `📍 Local: ${texto(payload.cidade)}/${texto(payload.estado)}`,
-      `🔗 Modalidade: ${texto(payload.modalidade)}`,
+      `🏷️ Modalidade: ${texto(payload.modalidade)}`,
+      `🔗 Ver vaga: ${LINK_CONECTA_VAGAS}`,
     ],
     "💼",
   );
@@ -418,18 +440,18 @@ export async function notificarLembretesAgendamentosResumo(payload: Record<strin
 
 // ===== Aviso de presença (cron aviso-presenca) =====
 
-const LINK_TURMAS = "https://sistemagestaogenezi.vercel.app/admin/turmas";
-
 // Uma hora depois do início da aula, avisa que a presença ainda precisa ser
 // marcada. Lança se o Telegram recusar a mensagem — o motor registra o evento
 // como falho no log de automações (senão a falha ficaria invisível).
 export async function notificarAvisoPresenca(payload: Record<string, unknown>): Promise<boolean> {
+  // texto() já escapa (ver comentário na própria função) — envolvê-la em escapeHtml de novo
+  // escaparia duas vezes (ex.: "&" virava "&amp;amp;" em vez de "&amp;").
   const mensagem = [
     "⚠️ <b>Marcar presença:</b>",
-    `📚 Turma: ${escapeHtml(texto(payload.turma_nome))}`,
-    `🕐 Aula iniciou às: ${escapeHtml(texto(payload.horario_inicio))}`,
+    `📚 Turma: ${texto(payload.turma_nome)}`,
+    `🕐 Aula iniciou às: ${texto(payload.horario_inicio)}`,
     `👥 Alunos: ${escapeHtml(payload.alunos_ativos ?? "—")}`,
-    `🔗 Acesse: ${LINK_TURMAS}/${escapeHtml(texto(payload.turma_id))}`,
+    `🔗 Acesse: ${LINK_TURMAS}/${texto(payload.turma_id)}`,
   ].join("\n");
 
   const enviada = await sendTelegram(mensagem);
