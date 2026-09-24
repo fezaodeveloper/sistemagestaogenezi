@@ -28,7 +28,10 @@ function extrairInteresse(campos: Record<string, string> | null): string {
   return interesse ? interesse[1] : "—";
 }
 
-// Disparado 1x/dia às 18:00 UTC (ver vercel.json) — roadmap item 2. Lembrete real por WhatsApp
+// Disparado 1x/dia às 21:00 UTC (18:00 BRT) pelo Vercel Cron (ver vercel.json) — comentário
+// anterior dizia "18:00 UTC", desatualizado desde que o horário do cron foi corrigido pra bater
+// com 18h de Brasília (vercel.json já estava certo, só o comentário ficou defasado). Roadmap item
+// 2. Lembrete real por WhatsApp
 // (GênZap) desde esta tarefa — antes era só um stub (console.log). Segue marcando
 // lembrete_enviado, pra não reenviar em execuções seguintes, mesmo se o WhatsApp não estiver
 // configurado (o "stub silencioso" de enviarWhatsApp já cobre esse caso).

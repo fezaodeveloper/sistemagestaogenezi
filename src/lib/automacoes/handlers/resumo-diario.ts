@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarMensagemTelegram } from "@/lib/telegram/client";
 import { calcularFrequenciaPorTurma } from "@/lib/automacoes/handlers/frequencia-turmas";
 import { FREQUENCIA_MINIMA_PERCENTUAL } from "@/lib/presencas/schema";
+import { escapeHtml } from "@/lib/telegram";
 
 function somarValores(rows: { valor: number }[] | null): number {
   return (rows ?? []).reduce((total, row) => total + Number(row.valor), 0);
@@ -119,7 +120,12 @@ export async function gerarResumoDiario(): Promise<boolean> {
     linhas.push(
       "",
       `🎁 Prêmios com estoque baixo: ${premiosEstoqueBaixo.length}`,
-      ...premiosEstoqueBaixo.map((premio) => `• ${premio.nome}: ${premio.estoque} unidades restantes`),
+      // parse_mode é HTML (ver enviarMensagemTelegram) — nome de prêmio cadastrado pelo admin
+      // pode conter "<"/">"/"&" e derrubar a mensagem inteira sem escapar (mesmo bug corrigido em
+      // src/lib/automacoes/handlers/telegram.ts::texto()).
+      ...premiosEstoqueBaixo.map(
+        (premio) => `• ${escapeHtml(premio.nome)}: ${premio.estoque} unidades restantes`,
+      ),
     );
   }
 

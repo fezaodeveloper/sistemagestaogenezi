@@ -7,7 +7,8 @@ import { adicionarEntradaNotas, formatarEntradaFollowup } from "@/lib/leads/lead
 import { FOLLOWUP_AUTOMATICO_LIMITE } from "@/lib/leads/schema";
 import { notificarWhatsappLeadFollowup } from "@/lib/whatsapp/eventos";
 
-// Disparado 1x/dia às 09:00 UTC (ver vercel.json) — CRM Kanban, roadmap item 3. Follow-up real
+// Disparado 1x/dia às 12:00 UTC (09:00 BRT) pelo Vercel Cron (ver vercel.json) — CRM Kanban,
+// roadmap item 3. Follow-up real
 // por WhatsApp (GênZap) desde esta tarefa — antes era só um stub (console.log) que registrava a
 // intenção e avançava o contador. Com o WhatsApp não configurado, enviarWhatsApp() faz esse
 // mesmo "stub silencioso" (nunca lança), então o contador continua avançando normalmente.

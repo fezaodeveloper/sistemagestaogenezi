@@ -34,6 +34,7 @@ interface YTPlayerInstance {
   unMute(): void;
   isMuted(): boolean;
   setPlaybackRate(taxa: number): void;
+  getIframe(): HTMLIFrameElement;
   destroy(): void;
 }
 
@@ -43,6 +44,10 @@ interface YTNamespace {
   Player: new (
     elementId: string,
     opcoes: {
+      // Sem isso a API cria o iframe com o tamanho fixo padrão (640x390px) — ver comentário
+      // onde o player é instanciado, mais abaixo.
+      width: string;
+      height: string;
       videoId: string;
       playerVars: Record<string, number | string>;
       events: {
@@ -186,7 +191,14 @@ export function YoutubePlayer({
     carregarYoutubeApi()
       .then((YT) => {
         if (cancelado) return;
+        // A API substitui a div (#elementoId) por um <iframe> NOVO — nossas classes CSS na div
+        // (absolute inset-0) somem junto. Sem width/height "100%" aqui, o iframe nasce com o
+        // tamanho fixo padrão da API (640x390px), sobrando fora do container ou espremido no
+        // canto — daí o "reforço" logo abaixo, aplicando o mesmo absolute inset-0 diretamente
+        // no iframe real via getIframe().
         playerRef.current = new YT.Player(elementoId, {
+          width: "100%",
+          height: "100%",
           videoId,
           playerVars: {
             controls: 0,
@@ -205,6 +217,16 @@ export function YoutubePlayer({
           events: {
             onReady: (evento) => {
               if (cancelado) return;
+              // Reforço: garante que o <iframe> de verdade preencha o container mesmo se a API
+              // ignorar width/height "100%" (varia por navegador/versão) — sem isso o vídeo fica
+              // pequeno, no canto superior esquerdo, do tamanho padrão 640x390px da API.
+              const iframe = evento.target.getIframe();
+              if (iframe) {
+                iframe.style.position = "absolute";
+                iframe.style.inset = "0";
+                iframe.style.width = "100%";
+                iframe.style.height = "100%";
+              }
               setPronto(true);
               setDuracao(evento.target.getDuration());
               setVolume(evento.target.getVolume());
