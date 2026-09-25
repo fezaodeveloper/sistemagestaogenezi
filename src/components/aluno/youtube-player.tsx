@@ -7,7 +7,6 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   FastForward,
-  Keyboard,
   Maximize,
   Minimize,
   Pause,
@@ -229,6 +228,12 @@ export function YoutubePlayer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const miniSlotRef = useRef<HTMLDivElement | null>(null);
   const ultimoSalvamentoPosicaoRef = useRef(0);
+  // getAvailableQualityLevels() costuma voltar [] em onReady — a API só expõe as qualidades de
+  // verdade depois que o vídeo começa a bufferizar. Esse ref garante que a qualidade salva do
+  // aluno (localStorage) só é aplicada UMA vez (no primeiro onReady OU no primeiro PLAYING, o que
+  // vier com uma lista não-vazia primeiro), sem reaplicar a cada play/pause subsequente e brigar
+  // com uma troca manual que o aluno já tenha feito no menu.
+  const qualidadeAplicadaRef = useRef(false);
 
   const [pronto, setPronto] = useState(false);
   const [erroApi, setErroApi] = useState(false);
@@ -284,6 +289,35 @@ export function YoutubePlayer({
   // pra não acumular instâncias/áudio tocando em segundo plano ao navegar entre aulas.
   useEffect(() => {
     let cancelado = false;
+    // Novo videoId = novo player = a qualidade salva precisa ser reaplicada do zero (o ref é por
+    // instância de player, não pode sobreviver à troca de aula).
+    qualidadeAplicadaRef.current = false;
+
+    // getAvailableQualityLevels() costuma retornar [] quando chamado em onReady — a API só
+    // preenche a lista de qualidades depois que o vídeo realmente começa a bufferizar. Por isso
+    // este helper é chamado tanto em onReady (funciona pra parte dos vídeos) quanto no primeiro
+    // onStateChange PLAYING (funciona pros que só expõem a lista aí) — o `if (disponiveis.length
+    // === 0) return` faz o menu de Qualidade continuar escondido em vez de "travar" com uma
+    // lista vazia até a próxima chamada.
+    function atualizarQualidades(target: YTPlayerInstance) {
+      const disponiveis = target.getAvailableQualityLevels();
+      // Debug temporário pedido pra investigar o menu de qualidade vazio — remover depois de
+      // confirmar em produção que a lista chega populada.
+      console.log("[player] qualidades disponíveis:", disponiveis);
+      if (disponiveis.length === 0) return;
+
+      setQualidadesDisponiveis(disponiveis);
+      if (!qualidadeAplicadaRef.current) {
+        qualidadeAplicadaRef.current = true;
+        const qualidadeSalva = lerQualidadeSalva();
+        if (qualidadeSalva && disponiveis.includes(qualidadeSalva)) {
+          target.setPlaybackQuality(qualidadeSalva);
+          setQualidadeAtual(qualidadeSalva);
+        } else {
+          setQualidadeAtual(target.getPlaybackQuality());
+        }
+      }
+    }
 
     carregarYoutubeApi()
       .then((YT) => {
@@ -335,15 +369,7 @@ export function YoutubePlayer({
               evento.target.setPlaybackRate(salva);
               setVelocidade(salva);
 
-              const disponiveis = evento.target.getAvailableQualityLevels();
-              setQualidadesDisponiveis(disponiveis);
-              const qualidadeSalva = lerQualidadeSalva();
-              if (qualidadeSalva && disponiveis.includes(qualidadeSalva)) {
-                evento.target.setPlaybackQuality(qualidadeSalva);
-                setQualidadeAtual(qualidadeSalva);
-              } else {
-                setQualidadeAtual(evento.target.getPlaybackQuality());
-              }
+              atualizarQualidades(evento.target);
 
               iframeRef.current = iframe;
 
@@ -373,6 +399,10 @@ export function YoutubePlayer({
                 setTocando(true);
                 setTerminado(false);
                 mostrarControlesTemporariamente(true);
+                // Cobre o caso do vídeo só expor getAvailableQualityLevels() depois que começa a
+                // tocar de verdade (onReady sozinho às vezes vê a lista vazia) — atualizarQualidades
+                // já ignora chamadas com lista vazia e só aplica a qualidade salva uma vez.
+                atualizarQualidades(evento.target);
               } else if (evento.data === window.YT.PlayerState.PAUSED) {
                 setTocando(false);
                 mostrarControlesTemporariamente(false);
@@ -734,14 +764,6 @@ export function YoutubePlayer({
                 )}
               </div>
             )}
-          </div>
-
-          {/* Discreto de propósito: canto oposto ao menu de velocidade/qualidade, só aparece no
-              hover do player inteiro (group/player), some sozinho o resto do tempo. */}
-          <div className="pointer-events-none absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-md bg-black/60 px-2.5 py-1 text-[11px] whitespace-nowrap text-white opacity-0 transition-opacity group-hover/player:opacity-100">
-            <span className="inline-flex items-center gap-1">
-              <Keyboard className="size-3" /> Espaço play/pause · ←/→ 10s · ↑/↓ volume · M mudo · F tela cheia · 0-9 ir para %
-            </span>
           </div>
 
           {posicaoSalva !== null && !terminado && (
