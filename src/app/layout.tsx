@@ -9,11 +9,18 @@ const figtree = Figtree({
   variable: "--font-geist-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
+  // display: "swap" evita texto invisível (FOIT) enquanto a fonte carrega — boa prática de
+  // next/font que não tínhamos. Efeito colateral útil aqui: o nome do módulo CSS gerado pela
+  // fonte é um hash da config inteira (o "figtree_<hash>.module.css" do erro de build na Vercel);
+  // mudar a config garante um hash novo, que não pode colidir com uma entrada de cache stale da
+  // Vercel apontando pro hash antigo (ver comentário no next.config.ts).
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 // Favicon, ícone do iOS, nome do app e theme-color vêm de Configurações > Personalização
