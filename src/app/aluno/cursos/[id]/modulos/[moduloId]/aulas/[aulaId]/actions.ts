@@ -9,6 +9,7 @@ import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 import { verificarEmissaoAutomaticaEad } from "@/lib/certificados/emitir";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { verificarConquistasPersonalizadas } from "@/lib/conquistas/verificar";
+import { escapeHtml, sendTelegram } from "@/lib/telegram";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -141,24 +142,6 @@ const avaliacaoSchema = z.object({
   comentario: z.string().trim().max(500).optional(),
 });
 
-// Códigos de erro do Postgres/PostgREST que indicam "a tabela (ou função que a policy usa) ainda
-// não existe" — a migration de aula_avaliacoes (20260924100000) não foi aplicada, ou foi aplicada
-// fora de ordem antes de aluno_acessa_aula() existir (ver hardening em
-// 20260924200000_fix_aula_avaliacoes_insert_policy.sql). Mensagem clara em vez da genérica, pra
-// não confundir "migration pendente" com um erro de validação/rede qualquer.
-const CODIGOS_TABELA_OU_FUNCAO_AUSENTE = new Set([
-  "42P01", // Postgres: undefined_table
-  "42883", // Postgres: undefined_function
-  "PGRST202", // PostgREST: function not found no schema cache
-  "PGRST205", // PostgREST: table not found no schema cache
-]);
-
-function pareceMigrationPendente(error: { code?: string; message?: string }): boolean {
-  if (error.code && CODIGOS_TABELA_OU_FUNCAO_AUSENTE.has(error.code)) return true;
-  const msg = error.message?.toLowerCase() ?? "";
-  return msg.includes("does not exist") || msg.includes("schema cache");
-}
-
 // Upsert único pra estrela (clique = salva na hora) e pro comentário (botão
 // "Enviar comentário") — o componente sempre manda o par (nota, comentario)
 // completo com o estado atual dos dois campos, nunca só o que mudou, senão
@@ -191,25 +174,50 @@ export async function salvarAvaliacaoAula(
     );
 
     if (error) {
-      // Sempre loga o erro completo do Supabase — a mensagem genérica que volta pro aluno não
-      // pode ser a única pista na hora de debugar (era exatamente isso que escondia a causa
-      // real deste bug).
-      console.error("[salvarAvaliacaoAula] erro do Supabase:", error);
+      console.error("[salvarAvaliacaoAula] erro Supabase:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      return { error: `Erro ao salvar: ${error.message} (${error.code})` };
+    }
 
-      if (pareceMigrationPendente(error)) {
-        return { error: "Avaliação de aulas ainda não está disponível (migration pendente)." };
-      }
-      if (error.code === "42501") {
-        // Postgres insufficient_privilege: RLS negou o insert/update (ex.: aluno sem acesso à
-        // aula, ou tentando avaliar em nome de outro aluno_id).
-        return { error: "Você não tem permissão para avaliar esta aula." };
-      }
-      return { error: "Não foi possível salvar sua avaliação. Tente novamente." };
+    // Notificação no Telegram pro admin — best-effort de verdade: um erro aqui (buscar o
+    // título da aula, montar a mensagem, o fetch em si) NUNCA pode virar erro pro aluno, porque
+    // a avaliação já foi salva com sucesso acima. Por isso um try/catch próprio, separado do
+    // catch externo da function. O envio em si é fire-and-forget (void + .catch) — é uma
+    // notificação puramente informativa pro admin, não faz sentido o aluno esperar esse fetch.
+    try {
+      const { data: aula } = await supabase.from("aulas").select("titulo").eq("id", aulaId).maybeSingle();
+      const estrelas = "★".repeat(parsed.data.nota) + "☆".repeat(5 - parsed.data.nota);
+      const dataHoraBrasilia = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date());
+
+      const mensagem = [
+        "⭐ Nova avaliação de aula",
+        "",
+        `📚 Aula: ${escapeHtml(aula?.titulo ?? "—")}`,
+        `👤 Aluno: ${escapeHtml(user.full_name || user.email || "Aluno")}`,
+        `🌟 Nota: ${estrelas}`,
+        `💬 Comentário: ${escapeHtml(parsed.data.comentario || "Sem comentário")}`,
+        `📅 Data: ${dataHoraBrasilia}`,
+      ].join("\n");
+
+      void sendTelegram(mensagem).catch(() => {});
+    } catch {
+      // Nunca deve impedir o retorno de sucesso ao aluno — a avaliação já foi salva.
     }
 
     return {};
-  } catch (erro) {
-    console.error("[salvarAvaliacaoAula] exceção inesperada:", erro);
-    return { error: "Não foi possível salvar sua avaliação. Tente novamente." };
+  } catch (e) {
+    console.error("[salvarAvaliacaoAula] exceção:", e);
+    return { error: `Erro inesperado: ${String(e)}` };
   }
 }
