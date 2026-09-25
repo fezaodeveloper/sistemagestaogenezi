@@ -9,6 +9,7 @@ import { getLiberacaoAulasCurso } from "@/lib/cronograma/liberacao";
 import { verificarEmissaoAutomaticaEad } from "@/lib/certificados/emitir";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
 import { verificarConquistasPersonalizadas } from "@/lib/conquistas/verificar";
+import { escapeHtml, sendTelegram } from "@/lib/telegram";
 
 const PDF_SIGNED_URL_EXPIRES_IN = 600; // 10 minutos
 
@@ -177,6 +178,38 @@ export async function salvarAvaliacaoAula(
         hint: error.hint,
       });
       return { error: `Erro ao salvar: ${error.message} (${error.code})` };
+    }
+
+    // Notificação no Telegram pro admin — best-effort de verdade: um erro aqui (buscar o
+    // título da aula, montar a mensagem, o fetch em si) NUNCA pode virar erro pro aluno, porque
+    // a avaliação já foi salva com sucesso acima. Por isso um try/catch próprio, separado do
+    // catch externo da function. O envio em si é fire-and-forget (void + .catch) — é uma
+    // notificação puramente informativa pro admin, não faz sentido o aluno esperar esse fetch.
+    try {
+      const { data: aula } = await supabase.from("aulas").select("titulo").eq("id", aulaId).maybeSingle();
+      const estrelas = "★".repeat(parsed.data.nota) + "☆".repeat(5 - parsed.data.nota);
+      const dataHoraBrasilia = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date());
+
+      const mensagem = [
+        "⭐ Nova avaliação de aula",
+        "",
+        `📚 Aula: ${escapeHtml(aula?.titulo ?? "—")}`,
+        `👤 Aluno: ${escapeHtml(user.full_name || user.email || "Aluno")}`,
+        `🌟 Nota: ${estrelas}`,
+        `💬 Comentário: ${escapeHtml(parsed.data.comentario || "Sem comentário")}`,
+        `📅 Data: ${dataHoraBrasilia}`,
+      ].join("\n");
+
+      void sendTelegram(mensagem).catch(() => {});
+    } catch {
+      // Nunca deve impedir o retorno de sucesso ao aluno — a avaliação já foi salva.
     }
 
     return {};
