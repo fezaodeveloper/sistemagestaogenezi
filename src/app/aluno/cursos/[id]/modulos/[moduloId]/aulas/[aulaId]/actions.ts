@@ -150,27 +150,38 @@ export async function salvarAvaliacaoAula(
   aulaId: string,
   input: { nota: number; comentario: string },
 ): Promise<{ error?: string }> {
-  const user = await requireRole("aluno");
+  try {
+    const user = await requireRole("aluno");
 
-  const parsed = avaliacaoSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: "Avaliação inválida." };
+    const parsed = avaliacaoSchema.safeParse(input);
+    if (!parsed.success) {
+      return { error: "Avaliação inválida." };
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("aula_avaliacoes").upsert(
+      {
+        aula_id: aulaId,
+        aluno_id: user.id,
+        nota: parsed.data.nota,
+        comentario: parsed.data.comentario ? parsed.data.comentario : null,
+      },
+      { onConflict: "aula_id,aluno_id" },
+    );
+
+    if (error) {
+      console.error("[salvarAvaliacaoAula] erro Supabase:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      return { error: `Erro ao salvar: ${error.message} (${error.code})` };
+    }
+
+    return {};
+  } catch (e) {
+    console.error("[salvarAvaliacaoAula] exceção:", e);
+    return { error: `Erro inesperado: ${String(e)}` };
   }
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("aula_avaliacoes").upsert(
-    {
-      aula_id: aulaId,
-      aluno_id: user.id,
-      nota: parsed.data.nota,
-      comentario: parsed.data.comentario ? parsed.data.comentario : null,
-    },
-    { onConflict: "aula_id,aluno_id" },
-  );
-
-  if (error) {
-    return { error: "Não foi possível salvar sua avaliação. Tente novamente." };
-  }
-
-  return {};
 }
