@@ -296,14 +296,11 @@ export function YoutubePlayer({
     // getAvailableQualityLevels() costuma retornar [] quando chamado em onReady — a API só
     // preenche a lista de qualidades depois que o vídeo realmente começa a bufferizar. Por isso
     // este helper é chamado tanto em onReady (funciona pra parte dos vídeos) quanto no primeiro
-    // onStateChange PLAYING (funciona pros que só expõem a lista aí) — o `if (disponiveis.length
-    // === 0) return` faz o menu de Qualidade continuar escondido em vez de "travar" com uma
-    // lista vazia até a próxima chamada.
+    // onStateChange PLAYING (funciona pros que só expõem a lista aí). Lista ainda vazia nos dois
+    // momentos = o próprio YouTube não expõe seletor de qualidade pra este vídeo (bem comum) — o
+    // menu mostra "Automática" sem opções nesse caso, ver JSX mais abaixo.
     function atualizarQualidades(target: YTPlayerInstance) {
       const disponiveis = target.getAvailableQualityLevels();
-      // Debug temporário pedido pra investigar o menu de qualidade vazio — remover depois de
-      // confirmar em produção que a lista chega populada.
-      console.log("[player] qualidades disponíveis:", disponiveis);
       if (disponiveis.length === 0) return;
 
       setQualidadesDisponiveis(disponiveis);
@@ -744,23 +741,26 @@ export function YoutubePlayer({
                   </button>
                 ))}
 
-                {qualidadesDisponiveis.length > 0 && (
-                  <>
-                    <p className="text-muted-foreground mt-1 border-t px-2 pt-2 pb-1 text-xs">Qualidade</p>
-                    {qualidadesDisponiveis.map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => escolherQualidade(q)}
-                        className={cn(
-                          "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
-                          q === qualidadeAtual && "font-semibold text-primary",
-                        )}
-                      >
-                        {QUALIDADE_LABELS[q] ?? q}
-                      </button>
-                    ))}
-                  </>
+                <p className="text-muted-foreground mt-1 border-t px-2 pt-2 pb-1 text-xs">Qualidade</p>
+                {qualidadesDisponiveis.length > 0 ? (
+                  qualidadesDisponiveis.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => escolherQualidade(q)}
+                      className={cn(
+                        "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
+                        q === qualidadeAtual && "font-semibold text-primary",
+                      )}
+                    >
+                      {QUALIDADE_LABELS[q] ?? q}
+                    </button>
+                  ))
+                ) : (
+                  // Este vídeo não expõe seletor de qualidade (YouTube decide sozinho pela banda
+                  // disponível) — sem opção nenhuma pra clicar, só avisa em vez de sumir com a
+                  // seção inteira (que pareceria um bug de menu incompleto).
+                  <p className="text-muted-foreground px-2 py-1">Automática (controlada pelo YouTube)</p>
                 )}
               </div>
             )}
