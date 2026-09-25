@@ -6,16 +6,21 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  FastForward,
+  Keyboard,
   Maximize,
   Minimize,
   Pause,
   Play,
+  Rewind,
   Settings,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { EVENTO_AULA_CONCLUIDA_ALTERADA } from "@/components/aluno/toggle-aula-concluida-button";
 
 // ===== Tipos mínimos da YouTube IFrame API (sem @types/youtube — o projeto evita dependências
 // novas pra pouca coisa; só o que este componente usa). =====
@@ -153,6 +158,42 @@ function salvarQualidade(valor: string): void {
   }
 }
 
+// Uma chave por vídeo (não por aula) — "genezi-video-pos-{videoId}" — combinada com "só oferece
+// retomar se sobrar mais de 10s de vídeo" evita o prompt bobo de "continuar do início" ou
+// "continuar faltando 2s" logo depois que o aluno já quase terminou.
+const PREFIXO_CHAVE_POSICAO = "genezi-video-pos-";
+const POSICAO_MINIMA_PARA_RETOMAR = 10; // segundos já assistidos
+
+function chavePosicao(videoId: string): string {
+  return `${PREFIXO_CHAVE_POSICAO}${videoId}`;
+}
+
+function lerPosicaoSalva(videoId: string): number | null {
+  try {
+    const bruto = localStorage.getItem(chavePosicao(videoId));
+    const valor = bruto ? Number(bruto) : NaN;
+    return Number.isFinite(valor) && valor > 0 ? valor : null;
+  } catch {
+    return null;
+  }
+}
+
+function salvarPosicao(videoId: string, segundos: number): void {
+  try {
+    localStorage.setItem(chavePosicao(videoId), String(Math.floor(segundos)));
+  } catch {
+    // Modo privado/storage bloqueado: só não lembra a posição, sem quebrar o player.
+  }
+}
+
+function limparPosicaoSalva(videoId: string): void {
+  try {
+    localStorage.removeItem(chavePosicao(videoId));
+  } catch {
+    // Idem acima.
+  }
+}
+
 function formatarTempo(segundosTotais: number): string {
   if (!Number.isFinite(segundosTotais) || segundosTotais < 0) return "0:00";
   const h = Math.floor(segundosTotais / 3600);
@@ -182,6 +223,12 @@ export function YoutubePlayer({
   const barraRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const esconderControlesRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // getIframe() (mesmo elemento usado no reforço de tamanho, ver onReady) — guardado à parte pra
+  // poder MOVER esse mesmo iframe pro miniplayer flutuante e de volta, sem criar uma segunda
+  // instância do player (que tocaria o vídeo duas vezes/travaria o layout).
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const miniSlotRef = useRef<HTMLDivElement | null>(null);
+  const ultimoSalvamentoPosicaoRef = useRef(0);
 
   const [pronto, setPronto] = useState(false);
   const [erroApi, setErroApi] = useState(false);
@@ -197,6 +244,11 @@ export function YoutubePlayer({
   const [qualidadeAtual, setQualidadeAtual] = useState<string | null>(null);
   const [controlesVisiveis, setControlesVisiveis] = useState(true);
   const [emTelaCheia, setEmTelaCheia] = useState(false);
+  // Prompt "Continuar de MM:SS?" — null = não tem posição salva ou já resolveu (Sim/Não).
+  const [posicaoSalva, setPosicaoSalva] = useState<number | null>(null);
+  const [foraDaTela, setForaDaTela] = useState(false);
+  const [miniplayerFechado, setMiniplayerFechado] = useState(false);
+  const mostrarMiniplayer = foraDaTela && pronto && !terminado && !miniplayerFechado;
 
   // Troca de aula (videoId muda) com o mesmo componente montado (navegação client-side não
   // desmonta a página) precisa resetar o estado do player anterior. Ajuste durante a
@@ -210,6 +262,8 @@ export function YoutubePlayer({
     setErroApi(false);
     setTerminado(false);
     setTocando(false);
+    setPosicaoSalva(null);
+    setMiniplayerFechado(false);
   }
 
   // Some com a barra de controles depois de 3s tocando sem interação; qualquer movimento do
@@ -290,6 +344,22 @@ export function YoutubePlayer({
               } else {
                 setQualidadeAtual(evento.target.getPlaybackQuality());
               }
+
+              iframeRef.current = iframe;
+
+              // Retomar de onde parou: só oferece se sobra vídeo suficiente pra valer a pena
+              // (não é "continuar" se faltam só alguns segundos).
+              const posicaoSalvaDetectada = lerPosicaoSalva(videoId);
+              const duracaoVideo = evento.target.getDuration();
+              if (
+                posicaoSalvaDetectada &&
+                posicaoSalvaDetectada >= POSICAO_MINIMA_PARA_RETOMAR &&
+                posicaoSalvaDetectada < duracaoVideo - 5
+              ) {
+                setPosicaoSalva(posicaoSalvaDetectada);
+              } else if (posicaoSalvaDetectada) {
+                limparPosicaoSalva(videoId);
+              }
             },
             onPlaybackQualityChange: (evento) => {
               if (cancelado) return;
@@ -306,9 +376,11 @@ export function YoutubePlayer({
               } else if (evento.data === window.YT.PlayerState.PAUSED) {
                 setTocando(false);
                 mostrarControlesTemporariamente(false);
+                salvarPosicao(videoId, evento.target.getCurrentTime());
               } else if (evento.data === window.YT.PlayerState.ENDED) {
                 setTocando(false);
                 setTerminado(true);
+                limparPosicaoSalva(videoId);
               }
             },
             onError: () => {
@@ -329,16 +401,25 @@ export function YoutubePlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- elementoId é estável (useId); só o videoId deve recriar o player
   }, [videoId]);
 
-  // Atualiza o tempo atual enquanto toca (a API não emite evento contínuo de progresso).
+  // Atualiza o tempo atual enquanto toca (a API não emite evento contínuo de progresso). Também
+  // salva a posição a cada 5s tocando (retomar de onde parou) — reaproveita este mesmo intervalo
+  // em vez de criar um segundo setInterval só pra isso.
   useEffect(() => {
     if (!tocando) return;
     const id = setInterval(() => {
       const player = playerRef.current;
       if (!player) return;
-      setTempoAtual(player.getCurrentTime());
+      const atual = player.getCurrentTime();
+      setTempoAtual(atual);
+
+      const agora = Date.now();
+      if (agora - ultimoSalvamentoPosicaoRef.current >= 5000) {
+        ultimoSalvamentoPosicaoRef.current = agora;
+        salvarPosicao(videoId, atual);
+      }
     }, 250);
     return () => clearInterval(id);
-  }, [tocando]);
+  }, [tocando, videoId]);
 
   useEffect(() => {
     function aoMudarTelaCheia() {
@@ -347,6 +428,20 @@ export function YoutubePlayer({
     document.addEventListener("fullscreenchange", aoMudarTelaCheia);
     return () => document.removeEventListener("fullscreenchange", aoMudarTelaCheia);
   }, []);
+
+  // ToggleAulaConcluidaButton (irmão na barra de ações) dispara isto ao marcar a aula como
+  // concluída — não faz sentido oferecer "continuar de onde parou" numa aula já concluída.
+  useEffect(() => {
+    function aoAlterarConclusao(evento: Event) {
+      const { concluida } = (evento as CustomEvent<{ concluida: boolean }>).detail;
+      if (concluida) {
+        limparPosicaoSalva(videoId);
+        setPosicaoSalva(null);
+      }
+    }
+    window.addEventListener(EVENTO_AULA_CONCLUIDA_ALTERADA, aoAlterarConclusao);
+    return () => window.removeEventListener(EVENTO_AULA_CONCLUIDA_ALTERADA, aoAlterarConclusao);
+  }, [videoId]);
 
   function alternarPlayPause() {
     const player = playerRef.current;
@@ -404,6 +499,24 @@ export function YoutubePlayer({
     setMenuAberto(false);
   }
 
+  // Compartilhado pelos botões ⏪/⏩ da barra de controles e pelas setas do teclado.
+  function pular(delta: number) {
+    const player = playerRef.current;
+    if (!player) return;
+    const novo = Math.min(duracao, Math.max(0, player.getCurrentTime() + delta));
+    player.seekTo(novo, true);
+    setTempoAtual(novo);
+  }
+
+  function continuarDePosicaoSalva() {
+    const player = playerRef.current;
+    if (player && posicaoSalva !== null) {
+      player.seekTo(posicaoSalva, true);
+      player.playVideo();
+    }
+    setPosicaoSalva(null);
+  }
+
   async function alternarTelaCheia() {
     const container = containerRef.current;
     if (!container) return;
@@ -423,9 +536,114 @@ export function YoutubePlayer({
     player.playVideo();
   }
 
+  // Atalhos de teclado — globais na página (não só quando o player está focado), pra funcionar
+  // assim que a aula abre sem precisar clicar no vídeo antes. Por isso o guard logo no início:
+  // ignora a tecla se o foco está num campo de formulário da MESMA página (textarea de
+  // comentário/avaliação da aula, um input de busca etc.) — senão, por exemplo, apertar espaço
+  // pra digitar um comentário pausaria o vídeo sem querer.
+  useEffect(() => {
+    function aoTeclar(evento: KeyboardEvent) {
+      const alvo = evento.target as HTMLElement | null;
+      if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.tagName === "SELECT" || alvo.isContentEditable)) {
+        return;
+      }
+      const player = playerRef.current;
+      if (!player || !pronto) return;
+
+      if (evento.key === " " || evento.code === "Space") {
+        evento.preventDefault();
+        if (tocando) player.pauseVideo();
+        else player.playVideo();
+      } else if (evento.key === "ArrowRight") {
+        evento.preventDefault();
+        pular(10);
+      } else if (evento.key === "ArrowLeft") {
+        evento.preventDefault();
+        pular(-10);
+      } else if (evento.key === "ArrowUp") {
+        evento.preventDefault();
+        const novoVolume = Math.min(100, (mudo ? 0 : volume) + 10);
+        player.setVolume(novoVolume);
+        setVolume(novoVolume);
+        if (mudo) {
+          player.unMute();
+          setMudo(false);
+        }
+      } else if (evento.key === "ArrowDown") {
+        evento.preventDefault();
+        const novoVolume = Math.max(0, (mudo ? 0 : volume) - 10);
+        player.setVolume(novoVolume);
+        setVolume(novoVolume);
+      } else if (evento.key === "m" || evento.key === "M") {
+        alternarMudo();
+      } else if (evento.key === "f" || evento.key === "F") {
+        void alternarTelaCheia();
+      } else if (/^[0-9]$/.test(evento.key)) {
+        // 0-9 = 0%-90% do vídeo (padrão de player de vídeo consagrado — YouTube.com faz o mesmo).
+        evento.preventDefault();
+        const novo = (Number(evento.key) / 10) * duracao;
+        player.seekTo(novo, true);
+        setTempoAtual(novo);
+      } else {
+        return;
+      }
+      mostrarControlesTemporariamente(tocando);
+    }
+
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pular/alternarMudo/alternarTelaCheia não são memoizadas; listadas via closure, reinscrever a cada render é barato (só um listener)
+  }, [pronto, tocando, volume, mudo, duracao, mostrarControlesTemporariamente]);
+
+  // Miniplayer flutuante: quando o player principal sai da viewport (aluno rolou a página),
+  // marca foraDaTela — o efeito seguinte (que reage a essa mudança) MOVE o <iframe> de verdade
+  // pro miniplayer, em vez de criar uma segunda instância do player (tocaria o vídeo em
+  // duplicado). threshold 0 = já considera "fora" assim que nenhum pixel do player está visível.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver(
+      ([entrada]) => {
+        setForaDaTela(!entrada.isIntersecting);
+        if (entrada.isIntersecting) setMiniplayerFechado(false);
+      },
+      { threshold: 0 },
+    );
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  // Move o <iframe> real entre o slot principal (dentro de containerRef) e o slot do miniplayer
+  // conforme mostrarMiniplayer muda — appendChild/prepend em nó já existente no documento não
+  // recarrega o iframe (diferente de trocar innerHTML ou o atributo src).
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    const container = containerRef.current;
+    if (!iframe || !container) return;
+
+    if (mostrarMiniplayer && miniSlotRef.current) {
+      miniSlotRef.current.appendChild(iframe);
+    } else if (!mostrarMiniplayer && iframe.parentElement !== container) {
+      // prepend (não appendChild): o iframe precisa voltar a ser o PRIMEIRO filho do container,
+      // senão fica por cima da barra de controles/overlays (que não têm z-index maior que "auto"
+      // + ordem no DOM decide o empate de camadas).
+      container.prepend(iframe);
+    }
+  }, [mostrarMiniplayer]);
+
+  function fecharMiniplayer(evento: React.MouseEvent) {
+    evento.stopPropagation();
+    setMiniplayerFechado(true);
+  }
+
+  function irParaPlayerPrincipal() {
+    containerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   const progressoPct = duracao > 0 ? Math.min(100, (tempoAtual / duracao) * 100) : 0;
 
   return (
+    <>
     <div
       ref={containerRef}
       className="group/player relative aspect-video w-full overflow-hidden rounded-xl bg-black select-none"
@@ -518,6 +736,32 @@ export function YoutubePlayer({
             )}
           </div>
 
+          {/* Discreto de propósito: canto oposto ao menu de velocidade/qualidade, só aparece no
+              hover do player inteiro (group/player), some sozinho o resto do tempo. */}
+          <div className="pointer-events-none absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-md bg-black/60 px-2.5 py-1 text-[11px] whitespace-nowrap text-white opacity-0 transition-opacity group-hover/player:opacity-100">
+            <span className="inline-flex items-center gap-1">
+              <Keyboard className="size-3" /> Espaço play/pause · ←/→ 10s · ↑/↓ volume · M mudo · F tela cheia · 0-9 ir para %
+            </span>
+          </div>
+
+          {posicaoSalva !== null && !terminado && (
+            <div className="absolute top-14 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-black/80 px-3 py-2 text-sm text-white shadow-md">
+              <span>Continuar de {formatarTempo(posicaoSalva)}?</span>
+              <Button type="button" size="sm" onClick={continuarDePosicaoSalva}>
+                Sim
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-white hover:bg-white/10 hover:text-white"
+                onClick={() => setPosicaoSalva(null)}
+              >
+                Não
+              </Button>
+            </div>
+          )}
+
           {terminado && (
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/90 p-6 text-center">
               <p className="text-xl font-semibold text-white">Aula concluída! ✓</p>
@@ -561,8 +805,16 @@ export function YoutubePlayer({
             </div>
 
             <div className="flex items-center gap-3 text-white">
+              <button type="button" aria-label="Voltar 10 segundos" onClick={() => pular(-10)} className="shrink-0">
+                <Rewind className="size-4 fill-current" />
+              </button>
+
               <button type="button" aria-label={tocando ? "Pausar" : "Reproduzir"} onClick={alternarPlayPause} className="shrink-0">
                 {tocando ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
+              </button>
+
+              <button type="button" aria-label="Avançar 10 segundos" onClick={() => pular(10)} className="shrink-0">
+                <FastForward className="size-4 fill-current" />
               </button>
 
               <span className="text-xs tabular-nums whitespace-nowrap">
@@ -602,5 +854,38 @@ export function YoutubePlayer({
           antiga) — leitores de tela ainda precisam saber qual vídeo é este. */}
       <span className="sr-only">Vídeo da aula: {titulo}</span>
     </div>
+
+    {/* Miniplayer flutuante: position fixed relativo à viewport (não a containerRef), por isso é
+        renderizado fora dele, como irmão. Mesmo <iframe> do player principal — reparentado pelos
+        efeitos acima, nunca duplicado. */}
+    {mostrarMiniplayer && (
+      <div
+        className="fixed right-4 bottom-4 z-50 w-70 cursor-pointer overflow-hidden rounded-lg bg-black shadow-2xl ring-1 ring-white/10"
+        onClick={irParaPlayerPrincipal}
+        role="button"
+        tabIndex={0}
+        aria-label="Voltar ao player"
+      >
+        <div ref={miniSlotRef} className="relative aspect-video w-full" />
+
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/70 px-2 py-1">
+          <button
+            type="button"
+            aria-label={tocando ? "Pausar" : "Reproduzir"}
+            onClick={(evento) => {
+              evento.stopPropagation();
+              alternarPlayPause();
+            }}
+            className="text-white"
+          >
+            {tocando ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
+          </button>
+          <button type="button" aria-label="Fechar miniplayer" onClick={fecharMiniplayer} className="text-white">
+            <X className="size-4" />
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
