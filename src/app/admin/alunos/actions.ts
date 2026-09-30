@@ -321,24 +321,51 @@ export async function updateAluno(
     };
   }
 
-  const { error: alunoError } = await supabase
+  const dadosAluno = {
+    cpf: data.cpf,
+    telefone: data.telefone,
+    endereco: data.endereco ?? null,
+    data_nascimento: data.data_nascimento,
+    full_name: data.full_name,
+    cep: data.cep ?? null,
+    numero: data.numero ?? null,
+    complemento: data.complemento ?? null,
+    bairro: data.bairro ?? null,
+    cidade: data.cidade ?? null,
+    estado: data.estado ?? null,
+    observacoes: data.observacoes ?? null,
+    status_aluno: data.status_aluno,
+  };
+  // Debug temporário — investigar "salva sem erro mas não persiste". id vai junto: se o filtro
+  // .eq("id", id) estiver com o valor errado, o UPDATE não erra, só não afeta linha nenhuma (RLS
+  // funciona do mesmo jeito: se a policy não bater pra aquela linha, ela é excluída do UPDATE em
+  // silêncio, sem lançar 42501 — diferente de faltar GRANT na coluna, que aí sim erra).
+  console.log("[updateAluno] payload:", JSON.stringify(dadosAluno), "| id:", id);
+
+  // .select() é necessário pra saber quantas linhas o UPDATE realmente afetou — sem ele o
+  // Supabase JS não devolve as linhas atualizadas (data viria sempre null, mesmo com sucesso).
+  const { error: alunoError, data: alunoUpdateData } = await supabase
     .from("alunos")
-    .update({
-      cpf: data.cpf,
-      telefone: data.telefone,
-      endereco: data.endereco ?? null,
-      data_nascimento: data.data_nascimento,
-      full_name: data.full_name,
-      cep: data.cep ?? null,
-      numero: data.numero ?? null,
-      complemento: data.complemento ?? null,
-      bairro: data.bairro ?? null,
-      cidade: data.cidade ?? null,
-      estado: data.estado ?? null,
-      observacoes: data.observacoes ?? null,
-      status_aluno: data.status_aluno,
-    })
-    .eq("id", id);
+    .update(dadosAluno)
+    .eq("id", id)
+    .select();
+
+  console.log("[updateAluno] resultado:", {
+    error: alunoError,
+    data: alunoUpdateData,
+    linhasAfetadas: alunoUpdateData?.length ?? 0,
+  });
+
+  if (alunoUpdateData && alunoUpdateData.length === 0 && !alunoError) {
+    // UPDATE "teve sucesso" mas não tocou nenhuma linha — id errado ou RLS filtrando a linha em
+    // silêncio (sem GRANT faltando isso daria 42501, não isso aqui). Reporta como erro de
+    // verdade em vez de deixar a tela seguir como se tivesse salvo.
+    console.error("[updateAluno] UPDATE afetou 0 linhas — id inexistente ou RLS bloqueando:", id);
+    return {
+      error: "Não foi possível salvar: nenhum registro foi alterado (verifique o ID do aluno ou permissões).",
+      values: echoedValues,
+    };
+  }
 
   if (alunoError) {
     // Loga o erro completo do Supabase — a mensagem genérica que voltava pro admin escondia a
