@@ -16,6 +16,8 @@ import { dispararWebhook } from "@/lib/webhooks/disparar";
 import { lerConfigSenhaPortal } from "@/lib/portal-login/config";
 import { enviarEmail } from "@/lib/email/provedor";
 import { renderizarTemplate } from "@/lib/email/templates";
+import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
+import { emSegundoPlano } from "@/lib/whatsapp/eventos";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -307,8 +309,14 @@ export async function updateAluno(
     .eq("id", id);
 
   if (profileError) {
+    console.error("[updateAluno] erro Supabase (profiles):", {
+      code: profileError.code,
+      message: profileError.message,
+      details: profileError.details,
+      hint: profileError.hint,
+    });
     return {
-      error: "Não foi possível salvar o nome do aluno. Tente novamente.",
+      error: `Não foi possível salvar o nome do aluno: ${profileError.message} (${profileError.code})`,
       values: echoedValues,
     };
   }
@@ -333,10 +341,18 @@ export async function updateAluno(
     .eq("id", id);
 
   if (alunoError) {
+    // Loga o erro completo do Supabase — a mensagem genérica que voltava pro admin escondia a
+    // causa real (ex.: 42501 permission denied numa coluna sem grant de update).
+    console.error("[updateAluno] erro Supabase (alunos):", {
+      code: alunoError.code,
+      message: alunoError.message,
+      details: alunoError.details,
+      hint: alunoError.hint,
+    });
     const message =
       alunoError.code === "23505"
         ? "Já existe um aluno cadastrado com esse CPF."
-        : "Não foi possível salvar as alterações. Tente novamente.";
+        : `Não foi possível salvar as alterações: ${alunoError.message} (${alunoError.code})`;
     return { error: message, values: echoedValues };
   }
 
@@ -550,8 +566,24 @@ export async function trocarEmailAluno(
   alunoId: string,
   novoEmail: string,
 ): Promise<{ success: true; email: string } | { error: string }> {
+  // requireRole fica FORA do try/catch abaixo: ela usa redirect() quando o papel não bate, e
+  // redirect() funciona lançando uma exceção especial que o Next intercepta rio acima — um
+  // catch genérico ali dentro a engoliria e devolveria {error} em vez de redirecionar.
   const usuario = await requireRole("admin");
 
+  try {
+    return await trocarEmailAlunoInterno(alunoId, novoEmail, usuario.id);
+  } catch (erro) {
+    console.error("[trocarEmailAluno] exceção inesperada:", erro);
+    return { error: `Erro inesperado: ${String(erro)}` };
+  }
+}
+
+async function trocarEmailAlunoInterno(
+  alunoId: string,
+  novoEmail: string,
+  usuarioId: string,
+): Promise<{ success: true; email: string } | { error: string }> {
   const parsed = z.email({ error: "Informe um e-mail válido." }).safeParse(novoEmail.trim().toLowerCase());
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "E-mail inválido." };
   const email = parsed.data;
@@ -563,19 +595,30 @@ export async function trocarEmailAluno(
 
   const { error: authError } = await admin.auth.admin.updateUserById(alunoId, { email, email_confirm: true });
   if (authError) {
+    console.error("[trocarEmailAluno] erro do Supabase Auth:", {
+      code: authError.code,
+      message: authError.message,
+      status: authError.status,
+    });
     return {
       error:
         authError.code === "email_exists"
           ? "Já existe uma conta com esse e-mail."
-          : "Não foi possível alterar o e-mail. Tente novamente.",
+          : `Não foi possível alterar o e-mail: ${authError.message}${authError.code ? ` (${authError.code})` : ""}`,
     };
   }
 
   const { error: alunoError } = await admin.from("alunos").update({ email }).eq("id", alunoId);
   if (alunoError) {
+    console.error("[trocarEmailAluno] erro Supabase (alunos) — desfazendo troca no Auth:", {
+      code: alunoError.code,
+      message: alunoError.message,
+      details: alunoError.details,
+      hint: alunoError.hint,
+    });
     // Desfaz a troca no Auth pra não deixar login e cadastro divergentes.
     await admin.auth.admin.updateUserById(alunoId, { email: aluno.email, email_confirm: true });
-    return { error: "Não foi possível alterar o e-mail. Tente novamente." };
+    return { error: `Não foi possível alterar o e-mail: ${alunoError.message} (${alunoError.code})` };
   }
 
   await registrarAlteracao({
@@ -584,7 +627,7 @@ export async function trocarEmailAluno(
     campo: "email",
     valorAnterior: aluno.email,
     valorNovo: email,
-    alteradoPor: usuario.id,
+    alteradoPor: usuarioId,
   });
 
   revalidatePath(`/admin/alunos/${alunoId}/editar`);
@@ -615,8 +658,14 @@ export async function gerarNovaSenhaAluno(alunoId: string): Promise<{ success: t
   return { success: true, senha };
 }
 
-// Stub — a integração com a Evolution API (WhatsApp) virá depois; por ora só
-// monta a mensagem e registra no log do servidor.
+// Envio real via GênZap (Evolution API) — antes era um stub que só logava a mensagem no
+// console. Igual aos eventos automáticos deste projeto, dispara em segundo plano via after()
+// (emSegundoPlano) em vez de esperar o resultado: enviarWhatsApp() tem um delay anti-banimento
+// de alguns segundos (config do admin, 3-8s por padrão) somado ao tempo de rede até a Evolution
+// API — esperar isso aqui reproduziria o mesmo bug de timeout já corrigido no botão "Enviar
+// teste" de Configurações > WhatsApp. Por isso o retorno não confirma entrega, só que o envio
+// foi agendado; falha real (WhatsApp desconectado, número inválido etc.) só aparece no log do
+// servidor, nunca trava o clique do admin.
 export async function enviarSenhaAlunoWhatsApp(
   alunoId: string,
   senha: string,
@@ -626,7 +675,9 @@ export async function enviarSenhaAlunoWhatsApp(
   const admin = createAdminClient();
   const { data: aluno } = await admin.from("alunos").select("full_name, telefone, email").eq("id", alunoId).maybeSingle();
   if (!aluno) return { error: "Aluno não encontrado." };
+  if (!aluno.telefone) return { error: "Este aluno não tem telefone cadastrado." };
 
+  const linkAcesso = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/entrar`;
   const mensagem = [
     `Olá, ${aluno.full_name}!`,
     "",
@@ -634,9 +685,20 @@ export async function enviarSenhaAlunoWhatsApp(
     `E-mail: ${aluno.email}`,
     `Senha: ${senha}`,
     "",
+    `Acesse em: ${linkAcesso}`,
+    "",
     "Por segurança, altere a senha no seu primeiro acesso.",
   ].join("\n");
-  console.log(`[whatsapp:stub] Enviaria para ${aluno.telefone}:\n${mensagem}`);
+
+  const telefone = aluno.telefone;
+  emSegundoPlano(async () => {
+    const resultado = await enviarWhatsApp(telefone, mensagem);
+    if (!resultado.ok) {
+      console.error("[enviarSenhaAlunoWhatsApp] falha ao enviar:", resultado.erro);
+    } else if (!resultado.enviado) {
+      console.log("[enviarSenhaAlunoWhatsApp] WhatsApp desligado/desconectado — mensagem não enviada (stub silencioso).");
+    }
+  });
 
   // Webhook de saída. Nunca inclui a senha — só avisa que o acesso foi enviado.
   dispararWebhook("acesso_enviado", {

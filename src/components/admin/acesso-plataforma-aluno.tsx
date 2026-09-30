@@ -86,7 +86,7 @@ export function AcessoPlataformaAluno({ alunoId, emailAtual }: { alunoId: string
       setAvisoWhatsApp(
         "error" in resultado
           ? resultado.error
-          : "Mensagem preparada. O envio por WhatsApp ainda não está integrado — por ora ela apenas foi registrada no log do servidor.",
+          : "Envio por WhatsApp iniciado. Se o número estiver certo e o GênZap estiver conectado, a mensagem chega em alguns segundos.",
       );
     });
   }

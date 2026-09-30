@@ -180,12 +180,16 @@ export function SinoNotificacoes({ grupos }: { grupos: NotificacaoSinoGrupo[] })
                         </ul>
                       )}
                     </Link>
-                    <div className="flex shrink-0 flex-col">
+                    {/* Row (não coluna): com flex-col o botão de excluir "pulava" de posição
+                        conforme "Marcar como lida" aparecia ou não (item lido = 1 botão só,
+                        não lido = 2 empilhados) — mesmo padrão de botão-ícone do resto do
+                        sistema (size="icon"), lado a lado. */}
+                    <div className="flex shrink-0 items-center gap-1">
                       {naoLida && (
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon-xs"
+                          size="icon"
                           aria-label="Marcar como lida"
                           title="Marcar como lida"
                           onClick={() => atualizar([grupo], "lida")}
@@ -196,7 +200,7 @@ export function SinoNotificacoes({ grupos }: { grupos: NotificacaoSinoGrupo[] })
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon-xs"
+                        size="icon"
                         className="text-destructive"
                         aria-label="Excluir notificação"
                         title="Excluir"

@@ -32,7 +32,10 @@ import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
 // lib/gateways/parcelas.ts, webhooks/asaas, agendar/[slug]/actions.ts) — a chamada de
 // dispararFluxosPorGatilho pra esses 4 fica lá, no ponto real do evento, pelo mesmo motivo.
 
-function emSegundoPlano(tarefa: () => Promise<void>): void {
+// Exportada pra ser reaproveitada fora dos eventos automáticos deste arquivo — ex.:
+// enviarSenhaAlunoWhatsApp (src/app/admin/alunos/actions.ts), disparada por um clique de botão
+// e sujeita ao mesmo delay anti-banimento de enviarWhatsApp().
+export function emSegundoPlano(tarefa: () => Promise<void>): void {
   const executar = async () => {
     try {
       await tarefa();
