@@ -48,7 +48,14 @@ export function CpfInput({ value, onValueChange, placeholder = "000.000.000-00",
       inputMode="numeric"
       placeholder={placeholder}
       value={maskCpf(value)}
-      onChange={(evento) => onValueChange(maskCpf(evento.target.value))}
+      onChange={(evento) => {
+        const mascarado = maskCpf(evento.target.value);
+        // Mesmo caso do TelefoneInput (src/components/ui/telefone-input.tsx): quando o dígito
+        // extra é descartado e o valor mascarado repete o anterior, React não re-renderiza e o
+        // DOM ficaria com o caractere a mais já inserido pelo navegador. Força de volta aqui.
+        evento.target.value = mascarado;
+        onValueChange(mascarado);
+      }}
     />
   );
 }

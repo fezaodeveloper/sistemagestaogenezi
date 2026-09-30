@@ -464,8 +464,10 @@ export async function updateAluno(
   // já tendo sido confirmado no banco (ver salvarFotoAluno/removerFotoAluno logo abaixo, que já
   // seguiam o padrão certo). Não existe uma página de "detalhes" separada de /editar neste app —
   // por isso só estas duas rotas.
-  revalidatePath("/admin/alunos");
-  revalidatePath(`/admin/alunos/${id}/editar`);
+  // 'layout' em /admin/alunos invalida também as rotas dinâmicas abaixo dela (ex.: a própria
+  // /admin/alunos/[id]/editar) — o tipo default ('page') só invalidaria o path exato informado.
+  revalidatePath("/admin/alunos", "layout");
+  revalidatePath(`/admin/alunos/${id}/editar`, "page");
   redirect("/admin/alunos");
 }
 

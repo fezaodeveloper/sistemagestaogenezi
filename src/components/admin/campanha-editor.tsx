@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RotateCcw, Upload, X } from "lucide-react";
+import { Plus, RotateCcw, Trash2, Upload, X } from "lucide-react";
 import { atualizarCampanhaPagina, criarCampanhaPagina } from "@/app/admin/comercial/paginas-campanha/actions";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -48,6 +48,16 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const TEMA_LABELS: Record<CampanhaTema, string> = { escuro: "Escuro", claro: "Claro" };
 
@@ -380,6 +390,10 @@ export function CampanhaEditor({
   const [enviandoImagemTopo, setEnviandoImagemTopo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const imagemTopoInputRef = useRef<HTMLInputElement>(null);
+  // Qual imagem está com o confirm de remoção aberto ("logo" | "banner") — null = fechado. Só
+  // limpa o estado local (mesmo padrão de todo outro campo deste editor): o valor vazio vira
+  // null de verdade quando o admin clicar em "Salvar" (ver criarCampanhaPagina/atualizarCampanhaPagina).
+  const [confirmandoRemocao, setConfirmandoRemocao] = useState<"logo" | "banner" | null>(null);
 
   const [etapas, setEtapas] = useState<Etapa[]>(() => normalizarEtapas(pagina?.etapas));
   const [cardsDestaque, setCardsDestaque] = useState<CardDestaque[]>(pagina?.cards_destaque ?? []);
@@ -474,6 +488,12 @@ export function CampanhaEditor({
         },
       ];
     });
+  }
+
+  function confirmarRemocaoImagem() {
+    if (confirmandoRemocao === "logo") setLogoUrl("");
+    else if (confirmandoRemocao === "banner") setImagemTopoUrl("");
+    setConfirmandoRemocao(null);
   }
 
   function atualizarCard(index: number, dados: Partial<CardDestaque>) {
@@ -893,6 +913,18 @@ export function CampanhaEditor({
                           <Upload className="size-3.5" />
                           {enviandoImagemTopo ? "Enviando..." : imagemTopoUrl ? "Trocar" : "Enviar"}
                         </Button>
+                        {imagemTopoUrl && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={enviandoImagemTopo}
+                            onClick={() => setConfirmandoRemocao("banner")}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Remover
+                          </Button>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -909,6 +941,18 @@ export function CampanhaEditor({
                           <Upload className="size-3.5" />
                           {enviandoLogo ? "Enviando..." : logoUrl ? "Trocar" : "Enviar"}
                         </Button>
+                        {logoUrl && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={enviandoLogo}
+                            onClick={() => setConfirmandoRemocao("logo")}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Remover
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -1106,6 +1150,24 @@ export function CampanhaEditor({
             </p>
           </div>
       </div>
+
+      <AlertDialog open={confirmandoRemocao !== null} onOpenChange={(aberto) => !aberto && setConfirmandoRemocao(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover esta imagem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A {confirmandoRemocao === "logo" ? "logo" : "imagem de topo (banner)"} deixa de aparecer na página
+              pública assim que a campanha for salva.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmarRemocaoImagem}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

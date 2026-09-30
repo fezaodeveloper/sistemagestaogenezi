@@ -43,7 +43,15 @@ export function TelefoneInput({ value, onValueChange, placeholder = "(00) 90000-
       inputMode="numeric"
       placeholder={placeholder}
       value={maskTelefone(value)}
-      onChange={(evento) => onValueChange(maskTelefone(evento.target.value))}
+      onChange={(evento) => {
+        const mascarado = maskTelefone(evento.target.value);
+        // Quando o dígito extra é descartado, o valor mascarado pode ficar igual ao anterior —
+        // React então não re-renderiza (state igual por valor) e o <input> ficaria com o
+        // caractere a mais que o navegador já tinha inserido no DOM antes deste handler rodar.
+        // Força o DOM de volta aqui, sem depender do próximo render.
+        evento.target.value = mascarado;
+        onValueChange(mascarado);
+      }}
     />
   );
 }

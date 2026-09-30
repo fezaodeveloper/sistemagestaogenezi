@@ -13,6 +13,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AlunoWithRelations, Responsavel } from "@/lib/alunos/schema";
 import type { MatriculaWithTurma } from "@/lib/matriculas/schema";
 
+// Força renderização dinâmica: mesmo com requireRole()/cookies() já tornando a rota dinâmica na
+// prática, o Full Route Cache do Next podia servir uma versão em cache dessa página ao navegar de
+// volta pra cá logo depois de um updateAluno (bairro salvo no banco, mas tela mostrando o valor
+// antigo até um hard refresh).
+export const dynamic = "force-dynamic";
+
 type MatriculaComCurso = MatriculaWithTurma & {
   turmas: { nome: string; curso_id: string; cursos: { nome: string } | null } | null;
 };

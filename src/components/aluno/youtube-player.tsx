@@ -307,7 +307,9 @@ export function YoutubePlayer({
       if (!qualidadeAplicadaRef.current) {
         qualidadeAplicadaRef.current = true;
         const qualidadeSalva = lerQualidadeSalva();
-        if (qualidadeSalva && disponiveis.includes(qualidadeSalva)) {
+        if (qualidadeSalva === "auto") {
+          setQualidadeAtual(null);
+        } else if (qualidadeSalva && disponiveis.includes(qualidadeSalva)) {
           target.setPlaybackQuality(qualidadeSalva);
           setQualidadeAtual(qualidadeSalva);
         } else {
@@ -526,6 +528,16 @@ export function YoutubePlayer({
     setMenuAberto(false);
   }
 
+  // "default" é o valor real aceito pela API do YouTube pra devolver a escolha de qualidade pra
+  // ela mesma decidir (documentação oficial da IFrame API) — qualidadeAtual vira null pra marcar
+  // esta opção como selecionada no menu.
+  function escolherQualidadeAutomatica() {
+    playerRef.current?.setPlaybackQuality("default");
+    setQualidadeAtual(null);
+    salvarQualidade("auto");
+    setMenuAberto(false);
+  }
+
   // Compartilhado pelos botões ⏪/⏩ da barra de controles e pelas setas do teclado.
   function pular(delta: number) {
     const player = playerRef.current;
@@ -724,46 +736,6 @@ export function YoutubePlayer({
             >
               <Settings className={cn(tocando && !controlesVisiveis && "opacity-0 transition-opacity", "size-4")} />
             </Button>
-            {menuAberto && (
-              <div className="bg-popover text-popover-foreground ring-foreground/10 absolute top-full right-0 mt-1 w-40 rounded-lg p-1 text-sm shadow-md ring-1">
-                <p className="text-muted-foreground px-2 py-1 text-xs">Velocidade</p>
-                {VELOCIDADES.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => escolherVelocidade(v)}
-                    className={cn(
-                      "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
-                      v === velocidade && "font-semibold text-primary",
-                    )}
-                  >
-                    {v}x
-                  </button>
-                ))}
-
-                <p className="text-muted-foreground mt-1 border-t px-2 pt-2 pb-1 text-xs">Qualidade</p>
-                {qualidadesDisponiveis.length > 0 ? (
-                  qualidadesDisponiveis.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => escolherQualidade(q)}
-                      className={cn(
-                        "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
-                        q === qualidadeAtual && "font-semibold text-primary",
-                      )}
-                    >
-                      {QUALIDADE_LABELS[q] ?? q}
-                    </button>
-                  ))
-                ) : (
-                  // Este vídeo não expõe seletor de qualidade (YouTube decide sozinho pela banda
-                  // disponível) — sem opção nenhuma pra clicar, só avisa em vez de sumir com a
-                  // seção inteira (que pareceria um bug de menu incompleto).
-                  <p className="text-muted-foreground px-2 py-1">Automática (controlada pelo YouTube)</p>
-                )}
-              </div>
-            )}
           </div>
 
           {posicaoSalva !== null && !terminado && (
@@ -808,6 +780,64 @@ export function YoutubePlayer({
               controlesVisiveis || !tocando ? "opacity-100" : "pointer-events-none opacity-0",
             )}
           >
+            {/* Ancorado à própria barra de controles (bottom-full = abre pra CIMA, a partir do
+                topo dela) — nunca cresce por baixo, onde ficaria clipado pelo overflow-hidden do
+                container do player ou escondido atrás da própria barra em players pequenos.
+                max-h + overflow-y-auto garante que também não ultrapasse o topo do player quando a
+                lista de qualidades for longa. */}
+            {menuAberto && (
+              <div className="bg-popover text-popover-foreground ring-foreground/10 absolute right-3 bottom-full mb-2 max-h-64 w-40 overflow-y-auto rounded-lg p-1 text-sm shadow-md ring-1">
+                <p className="text-muted-foreground px-2 py-1 text-xs">Velocidade</p>
+                {VELOCIDADES.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => escolherVelocidade(v)}
+                    className={cn(
+                      "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
+                      v === velocidade && "font-semibold text-primary",
+                    )}
+                  >
+                    {v}x
+                  </button>
+                ))}
+
+                <p className="text-muted-foreground mt-1 border-t px-2 pt-2 pb-1 text-xs">Qualidade</p>
+                {/* "Automática" sempre primeiro e sempre disponível (mesmo quando a API não lista
+                    "auto" entre as qualidades do vídeo — o que é o caso mais comum) — chama
+                    setPlaybackQuality("default"), o valor real da API pra devolver o controle ao
+                    YouTube. */}
+                <button
+                  type="button"
+                  onClick={escolherQualidadeAutomatica}
+                  className={cn(
+                    "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
+                    qualidadeAtual === null && "font-semibold text-primary",
+                  )}
+                >
+                  Automática
+                </button>
+                {qualidadesDisponiveis.length > 0 ? (
+                  qualidadesDisponiveis.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => escolherQualidade(q)}
+                      className={cn(
+                        "flex w-full items-center rounded-md px-2 py-1 text-left hover:bg-accent",
+                        q === qualidadeAtual && "font-semibold text-primary",
+                      )}
+                    >
+                      {QUALIDADE_LABELS[q] ?? q}
+                    </button>
+                  ))
+                ) : (
+                  // Este vídeo não expõe seletor de qualidade (YouTube decide sozinho pela banda
+                  // disponível) — sem opção nenhuma além de "Automática" pra clicar.
+                  <p className="text-muted-foreground px-2 py-1">Sem outras opções pra este vídeo.</p>
+                )}
+              </div>
+            )}
             <div
               ref={barraRef}
               onClick={buscarPosicao}
