@@ -458,7 +458,14 @@ export async function updateAluno(
     ]);
   }
 
+  // Faltava revalidar a própria página de edição — só a lista era invalidada. Sem isso, o Router
+  // Cache do Next podia continuar servindo a versão pré-edição de /admin/alunos/[id]/editar numa
+  // navegação client-side de volta pra cá (ex.: clicar "Editar" de novo no aluno), mesmo o UPDATE
+  // já tendo sido confirmado no banco (ver salvarFotoAluno/removerFotoAluno logo abaixo, que já
+  // seguiam o padrão certo). Não existe uma página de "detalhes" separada de /editar neste app —
+  // por isso só estas duas rotas.
   revalidatePath("/admin/alunos");
+  revalidatePath(`/admin/alunos/${id}/editar`);
   redirect("/admin/alunos");
 }
 
