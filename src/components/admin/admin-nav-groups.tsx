@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
   AlertTriangle, Award, CreditCard, LayoutGrid, Mail, Banknote, BarChart2, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
-  LayoutDashboard, Lock, MapPin, Megaphone, MessageCircle, MessagesSquare, Monitor, Package, Palette, PlayCircle, PlusCircle, Presentation, Receipt,
+  LayoutDashboard, ListChecks, Lock, MapPin, Megaphone, MessageCircle, MessagesSquare, Monitor, Package, Palette, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Shield, Star, Tags, Target, TrendingDown, Truck, UserPlus, Users, Workflow, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -32,6 +32,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
     { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
     { href: "/admin/academico/avaliacoes", label: "Avaliações", icon: Star },
+    { href: "/admin/academico/resultados", label: "Resultados", icon: ListChecks },
     { href: "/admin/calendario", label: "Calendário", icon: CalendarDays },
     { href: "/admin/cronograma", label: "Cronograma", icon: CalendarRange },
     { href: "/admin/professor", label: "Painel do Professor", icon: Presentation },

@@ -10,7 +10,6 @@ import {
   uploadCurriculoConecta,
 } from "@/app/aluno/conecta/actions";
 import { createClient } from "@/lib/supabase/client";
-import { formatTelefone } from "@/lib/alunos/schema";
 import {
   CURRICULO_CONECTA_BUCKET,
   CURRICULO_CONECTA_MAX_BYTES,
@@ -38,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -320,13 +320,7 @@ export function ConectaPerfilForm({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="whatsapp">WhatsApp</Label>
-                <Input
-                  id="whatsapp"
-                  name="whatsapp"
-                  placeholder="(00) 00000-0000"
-                  value={whatsapp}
-                  onChange={(e) => setWhatsapp(formatTelefone(e.target.value))}
-                />
+                <TelefoneInput id="whatsapp" name="whatsapp" value={whatsapp} onValueChange={setWhatsapp} />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="cidade">Cidade</Label>

@@ -145,8 +145,10 @@ export const agendamentoPublicoSchema = z.object({
     .trim()
     .min(8, { error: "Informe um WhatsApp válido." })
     .max(30)
-    // DDD + número: pelo menos 10 dígitos (mesma regra do formulário).
-    .refine((valor) => valor.replace(/\D/g, "").length >= 10, { error: "Informe um WhatsApp válido, com DDD." }),
+    // DDD + celular: exatamente 11 dígitos (TelefoneInput, src/components/ui/telefone-input.tsx,
+    // só produz esse formato — mesma regra do formulário, reforçada aqui pra quem submeter
+    // direto por POST sem passar pela UI).
+    .refine((valor) => valor.replace(/\D/g, "").length === 11, { error: "Informe um WhatsApp válido, com DDD e 9 dígitos." }),
   data_agendada: z.string({ error: "Selecione uma data." }).trim().min(1, { error: "Selecione uma data." }),
   horario: z.string({ error: "Selecione um horário." }).trim().min(1, { error: "Selecione um horário." }),
   campos_extras: z.record(z.string(), z.string()).optional(),

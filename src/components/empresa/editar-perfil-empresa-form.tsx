@@ -8,6 +8,7 @@ import { SETORES_CONECTA, type EmpresaConecta } from "@/lib/conecta/schema";
 import { LogoEmpresaUpload } from "@/components/empresa/logo-empresa-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -86,13 +87,7 @@ export function EditarPerfilEmpresaForm({ empresa }: { empresa: EmpresaConecta }
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="whatsapp">WhatsApp</Label>
-          <Input
-            id="whatsapp"
-            name="whatsapp"
-            value={whatsapp}
-            onChange={(e) => setWhatsapp(formatTelefone(e.target.value))}
-            required
-          />
+          <TelefoneInput id="whatsapp" name="whatsapp" value={whatsapp} onValueChange={setWhatsapp} required />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="telefone">Telefone</Label>

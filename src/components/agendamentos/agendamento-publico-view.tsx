@@ -9,6 +9,7 @@ import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,15 +30,6 @@ function diasDoMes(mes: Date): (Date | null)[] {
   for (let i = 0; i < primeiroDia.getDay(); i++) dias.push(null);
   for (let d = 1; d <= ultimoDia.getDate(); d++) dias.push(new Date(ano, mesIndex, d));
   return dias;
-}
-
-// "(11) 99999-9999" enquanto digita (10 ou 11 dígitos).
-function formatarTelefone(valor: string): string {
-  const d = valor.replace(/\D/g, "").slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
 function nomeDoMes(mes: Date): string {
@@ -190,7 +182,8 @@ export function AgendamentoPublicoView({
   // atualizada ao vivo enquanto a pessoa corrige).
   const errosPasso2 = {
     nome: nome.trim().length < 2 ? "Informe seu nome completo." : null,
-    whatsapp: whatsapp.replace(/\D/g, "").length < 10 ? "Informe um WhatsApp válido, com DDD." : null,
+    // TelefoneInput só produz 0-11 dígitos no formato celular — 11 é o único tamanho "completo".
+    whatsapp: whatsapp.replace(/\D/g, "").length !== 11 ? "Informe um WhatsApp válido, com DDD e 9 dígitos." : null,
     aceite: !aceite ? "É preciso concordar para continuar." : null,
   };
 
@@ -471,14 +464,11 @@ export function AgendamentoPublicoView({
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="whatsapp">WhatsApp</Label>
-              <Input
+              <TelefoneInput
                 id="whatsapp"
-                type="tel"
-                inputMode="tel"
                 autoComplete="tel"
-                placeholder="(11) 99999-9999"
                 value={whatsapp}
-                onChange={(event) => setWhatsapp(formatarTelefone(event.target.value))}
+                onValueChange={setWhatsapp}
                 aria-invalid={tentouAvancar && !!errosPasso2.whatsapp}
                 aria-describedby={tentouAvancar && errosPasso2.whatsapp ? "erro-whatsapp" : undefined}
               />

@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -50,6 +51,7 @@ export function LeadForm({
   const [state, formAction] = useActionState<LeadFormState, FormData>(action, undefined);
   const values = state?.values ?? defaultValues;
   const cursoItems = Object.fromEntries(cursos.map((curso) => [curso.id, curso.nome]));
+  const [telefone, setTelefone] = useState(values?.telefone ?? "");
 
   return (
     <form key={JSON.stringify(state?.values)} action={formAction} className="flex max-w-xl flex-col gap-4">
@@ -65,7 +67,7 @@ export function LeadForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="telefone">Telefone</Label>
-        <Input id="telefone" name="telefone" defaultValue={values?.telefone} required />
+        <TelefoneInput id="telefone" name="telefone" value={telefone} onValueChange={setTelefone} required />
         {state?.errors?.telefone && (
           <p role="alert" className="text-destructive text-sm">
             {state.errors.telefone[0]}

@@ -4,7 +4,6 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { cadastrarCandidatoExterno, type CadastroCandidatoExternoState } from "@/app/conecta/cadastro/actions";
-import { formatCpf, formatTelefone } from "@/lib/alunos/schema";
 import {
   FORMA_PAGAMENTO_CONECTA_LABELS,
   FORMAS_PAGAMENTO_CONECTA,
@@ -16,6 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CpfInput } from "@/components/ui/cpf-input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
@@ -107,25 +108,11 @@ export function ConectaCadastroExternoForm() {
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="whatsapp">WhatsApp</Label>
-                <Input
-                  id="whatsapp"
-                  name="whatsapp"
-                  placeholder="(00) 00000-0000"
-                  value={whatsapp}
-                  onChange={(e) => setWhatsapp(formatTelefone(e.target.value))}
-                  required
-                />
+                <TelefoneInput id="whatsapp" name="whatsapp" value={whatsapp} onValueChange={setWhatsapp} required />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="cpf">CPF *</Label>
-                <Input
-                  id="cpf"
-                  name="cpf"
-                  placeholder="000.000.000-00"
-                  value={cpf}
-                  onChange={(e) => setCpf(formatCpf(e.target.value))}
-                  required
-                />
+                <CpfInput id="cpf" name="cpf" value={cpf} onValueChange={setCpf} required />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="cidade">Cidade</Label>

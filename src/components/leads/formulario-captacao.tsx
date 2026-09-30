@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { criarLeadPublico, type CaptacaoFormState } from "@/app/captacao/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -30,6 +31,7 @@ function SubmitButton() {
 export function FormularioCaptacao({ cursos }: { cursos: CursoOption[] }) {
   const [state, formAction] = useActionState<CaptacaoFormState, FormData>(criarLeadPublico, undefined);
   const cursoItems = Object.fromEntries(cursos.map((curso) => [curso.id, curso.nome]));
+  const [telefone, setTelefone] = useState("");
 
   if (state?.success) {
     return (
@@ -56,7 +58,7 @@ export function FormularioCaptacao({ cursos }: { cursos: CursoOption[] }) {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="telefone">WhatsApp</Label>
-        <Input id="telefone" name="telefone" type="tel" placeholder="(11) 99999-9999" required />
+        <TelefoneInput id="telefone" name="telefone" value={telefone} onValueChange={setTelefone} required />
         {state?.errors?.telefone && (
           <p role="alert" className="text-destructive text-sm">
             {state.errors.telefone[0]}

@@ -14,6 +14,7 @@ import { formatCep, formatTelefone } from "@/lib/alunos/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -247,13 +248,7 @@ function NovoFornecedorDialog({ onCriado }: { onCriado: () => void }) {
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="whatsapp">WhatsApp</Label>
-              <Input
-                id="whatsapp"
-                name="whatsapp"
-                value={whatsapp}
-                onChange={(event) => setWhatsapp(formatTelefone(event.target.value))}
-                placeholder="Opcional"
-              />
+              <TelefoneInput id="whatsapp" name="whatsapp" value={whatsapp} onValueChange={setWhatsapp} />
             </div>
           </div>
           <div className="flex flex-col gap-2">
@@ -474,12 +469,11 @@ function EditarFornecedorDialog({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor={`whatsapp-${fornecedor.id}`}>WhatsApp</Label>
-              <Input
+              <TelefoneInput
                 id={`whatsapp-${fornecedor.id}`}
                 name="whatsapp"
                 value={whatsapp}
-                onChange={(event) => setWhatsapp(formatTelefone(event.target.value))}
-                placeholder="Opcional"
+                onValueChange={setWhatsapp}
               />
             </div>
           </div>

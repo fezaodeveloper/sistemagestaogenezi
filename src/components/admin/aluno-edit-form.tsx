@@ -4,6 +4,8 @@ import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CpfInput } from "@/components/ui/cpf-input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -15,8 +17,6 @@ import {
 } from "@/components/ui/select";
 import {
   formatCep,
-  formatCpf,
-  formatTelefone,
   isMinor,
   STATUS_ALUNO_LABELS,
   STATUS_ALUNO_VALUES,
@@ -76,16 +76,16 @@ export function AlunoEditForm({
   const values = state?.values ?? defaultValues;
 
   const [dataNascimento, setDataNascimento] = useState(values.data_nascimento);
-  const [cpf, setCpf] = useState(formatCpf(values.cpf ?? ""));
-  const [telefone, setTelefone] = useState(formatTelefone(values.telefone ?? ""));
+  // CpfInput/TelefoneInput já aplicam a própria máscara sobre o value recebido — não precisa
+  // pré-formatar aqui como antes (formatCpf/formatTelefone).
+  const [cpf, setCpf] = useState(values.cpf ?? "");
+  const [telefone, setTelefone] = useState(values.telefone ?? "");
   const [cep, setCep] = useState(formatCep(values.cep ?? ""));
   const [bairro, setBairro] = useState(values.bairro ?? "");
   const [cidade, setCidade] = useState(values.cidade ?? "");
   const [estado, setEstado] = useState(values.estado ?? "");
-  const [responsavelCpf, setResponsavelCpf] = useState(formatCpf(values.responsavel_cpf ?? ""));
-  const [responsavelTelefone, setResponsavelTelefone] = useState(
-    formatTelefone(values.responsavel_telefone ?? ""),
-  );
+  const [responsavelCpf, setResponsavelCpf] = useState(values.responsavel_cpf ?? "");
+  const [responsavelTelefone, setResponsavelTelefone] = useState(values.responsavel_telefone ?? "");
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState<string | null>(null);
 
@@ -167,14 +167,7 @@ export function AlunoEditForm({
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="cpf">CPF</Label>
-            <Input
-              id="cpf"
-              name="cpf"
-              placeholder="000.000.000-00"
-              value={cpf}
-              onChange={(event) => setCpf(formatCpf(event.target.value))}
-              required
-            />
+            <CpfInput id="cpf" name="cpf" value={cpf} onValueChange={setCpf} required />
             {errors?.cpf && (
               <p role="alert" className="text-destructive text-sm">
                 {errors.cpf[0]}
@@ -183,14 +176,7 @@ export function AlunoEditForm({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="telefone">Telefone</Label>
-            <Input
-              id="telefone"
-              name="telefone"
-              placeholder="(00) 00000-0000"
-              value={telefone}
-              onChange={(event) => setTelefone(formatTelefone(event.target.value))}
-              required
-            />
+            <TelefoneInput id="telefone" name="telefone" value={telefone} onValueChange={setTelefone} required />
             {errors?.telefone && (
               <p role="alert" className="text-destructive text-sm">
                 {errors.telefone[0]}
@@ -389,11 +375,11 @@ export function AlunoEditForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="responsavel_cpf">CPF do responsável</Label>
-              <Input
+              <CpfInput
                 id="responsavel_cpf"
                 name="responsavel_cpf"
                 value={responsavelCpf}
-                onChange={(event) => setResponsavelCpf(formatCpf(event.target.value))}
+                onValueChange={setResponsavelCpf}
                 required
               />
               {errors?.responsavel_cpf && (
@@ -404,11 +390,11 @@ export function AlunoEditForm({
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="responsavel_telefone">Telefone do responsável</Label>
-              <Input
+              <TelefoneInput
                 id="responsavel_telefone"
                 name="responsavel_telefone"
                 value={responsavelTelefone}
-                onChange={(event) => setResponsavelTelefone(formatTelefone(event.target.value))}
+                onValueChange={setResponsavelTelefone}
                 required
               />
               {errors?.responsavel_telefone && (

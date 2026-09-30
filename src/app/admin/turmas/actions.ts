@@ -256,9 +256,57 @@ export async function deleteTurma(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 
   const supabase = await createClient();
+
+  // matriculas.turma_id é "on delete restrict" (não cascade) — excluir a turma com QUALQUER
+  // matrícula ainda apontando pra ela falha na FK, mesmo uma matrícula cancelada há meses. Só
+  // "status = cancelada" pode ser removido antes pra liberar a exclusão; qualquer outro status
+  // (ativa, inativa, concluída, transferida) bloqueia de propósito — apagar a turma apagaria o
+  // histórico acadêmico/financeiro de um aluno que passou por ela de verdade.
+  // (alunos.turma_id também é "on delete restrict", mas é uma coluna legada nunca preenchida
+  // pelo app — toda matrícula de verdade vive em `matriculas` — então nunca bloqueia na prática.)
+  const { data: matriculas, error: matriculasError } = await supabase
+    .from("matriculas")
+    .select("id, status")
+    .eq("turma_id", id);
+
+  if (matriculasError) {
+    console.error("[deleteTurma] erro ao verificar matrículas:", matriculasError);
+    return { error: "Não foi possível verificar as matrículas desta turma. Tente novamente." };
+  }
+
+  const vinculadas = matriculas ?? [];
+  const bloqueantes = vinculadas.filter((m) => m.status !== "cancelada");
+  const canceladas = vinculadas.filter((m) => m.status === "cancelada");
+
+  if (bloqueantes.length > 0) {
+    return {
+      error: `Não é possível excluir: ${bloqueantes.length} matrícula(s) não cancelada(s) ainda vinculada(s) a esta turma. Cancele ou transfira essas matrículas antes de excluir.`,
+    };
+  }
+
+  if (canceladas.length > 0) {
+    const { error: limpezaError } = await supabase
+      .from("matriculas")
+      .delete()
+      .in(
+        "id",
+        canceladas.map((m) => m.id),
+      );
+
+    if (limpezaError) {
+      console.error("[deleteTurma] erro ao limpar matrículas canceladas:", limpezaError);
+      return { error: "Não foi possível remover as matrículas canceladas desta turma. Tente novamente." };
+    }
+  }
+
   const { error } = await supabase.from("turmas").delete().eq("id", id);
 
   if (error) {
+    console.error("[deleteTurma] erro Supabase:", error);
+    // 23503 = foreign_key_violation — sobrou alguma referência que não previmos acima.
+    if (error.code === "23503") {
+      return { error: "Não é possível excluir: ainda existem registros vinculados a esta turma." };
+    }
     return { error: "Não foi possível excluir a turma." };
   }
 

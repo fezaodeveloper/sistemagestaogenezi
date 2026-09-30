@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -168,14 +169,7 @@ export function EmpresaCadastroForm() {
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="whatsapp">WhatsApp</Label>
-                <Input
-                  id="whatsapp"
-                  name="whatsapp"
-                  placeholder="(00) 00000-0000"
-                  value={whatsapp}
-                  onChange={(e) => setWhatsapp(formatTelefone(e.target.value))}
-                  required
-                />
+                <TelefoneInput id="whatsapp" name="whatsapp" value={whatsapp} onValueChange={setWhatsapp} required />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="telefone">Telefone (opcional)</Label>
