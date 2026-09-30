@@ -333,19 +333,22 @@ export function TurmasTable({
           Nenhuma turma encontrada com os filtros aplicados.
         </p>
       ) : (
-        <Table>
+        <Table className="min-w-300">
           <TableHeader>
             <TableRow>
-              <TableHead>Turma</TableHead>
-              <TableHead>Curso</TableHead>
-              <TableHead>Professor</TableHead>
-              <TableHead>Turno</TableHead>
-              <TableHead>Horário</TableHead>
-              <TableHead>Local/Sala</TableHead>
-              <TableHead>Período</TableHead>
-              <TableHead>Vagas</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className="min-w-40">Turma</TableHead>
+              <TableHead className="min-w-37.5">Curso</TableHead>
+              <TableHead className="min-w-30">Professor</TableHead>
+              <TableHead className="min-w-20">Turno</TableHead>
+              <TableHead className="min-w-30">Horário</TableHead>
+              <TableHead className="min-w-30">Local/Sala</TableHead>
+              <TableHead className="min-w-40">Período</TableHead>
+              <TableHead className="min-w-20">Vagas</TableHead>
+              <TableHead className="min-w-20">Status</TableHead>
+              {/* 5 ações lado a lado (Alunos, Presenças, Editar, Duplicar, Excluir) — precisa de
+                  mais espaço que uma coluna de status comum, mesmo raciocínio de
+                  matriculas-table.tsx. */}
+              <TableHead className="min-w-96 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

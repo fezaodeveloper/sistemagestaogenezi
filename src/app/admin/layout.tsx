@@ -42,7 +42,14 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     <div className="admin-dark bg-background text-foreground min-h-svh">
       <SidebarProvider>
         <AdminSidebar user={user} conversasNaoLidas={conversasNaoLidas} pendenciasCount={pendencias.length} logos={logos} />
-        <SidebarInset>
+        {/* min-w-0: SidebarInset é item de um flex row (o wrapper do SidebarProvider). Sem isso,
+            o default min-width:auto do flex faz este item nunca encolher abaixo da largura
+            mínima do CONTEÚDO — e agora que as tabelas internas têm min-w grande (ver
+            matriculas-table.tsx/alunos-table.tsx/turmas-table.tsx), esse conteúdo "empurra" o
+            <main> inteiro (e a página toda) pra além da viewport, em vez de ficar confinado no
+            overflow-x-auto próprio da tabela. Sintoma exato do bug relatado: rolagem "trava na
+            metade" porque quem realmente cresce sem limite é o layout, não só a tabela. */}
+        <SidebarInset className="min-w-0">
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-4" />
