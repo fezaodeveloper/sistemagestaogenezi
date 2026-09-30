@@ -127,12 +127,16 @@ export function SinoNotificacoes({ grupos }: { grupos: NotificacaoSinoGrupo[] })
             <p className="text-muted-foreground text-sm">Nenhuma notificação pendente.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2 border-b pb-2">
+              {/* Duas linhas: título sozinho em cima, ações embaixo — numa linha só o botão
+                  "Excluir todas" (com texto) ficava sem espaço e cortava pra "Excl". O botão de
+                  excluir usa só o ícone (size="icon") pra caber ao lado de "Marcar todas como
+                  lidas" mesmo na largura estreita do popover (w-80). */}
+              <div className="flex flex-col gap-1.5 border-b pb-2">
                 <span className="text-sm font-medium">
                   Notificações
                   {naoLidas.length > 0 && <span className="text-muted-foreground ml-1 text-xs">({naoLidas.length} não lidas)</span>}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center justify-between gap-2">
                   <Button
                     type="button"
                     variant="ghost"
@@ -146,12 +150,13 @@ export function SinoNotificacoes({ grupos }: { grupos: NotificacaoSinoGrupo[] })
                   <Button
                     type="button"
                     variant="ghost"
-                    size="xs"
+                    size="icon"
                     className="text-destructive"
+                    aria-label="Excluir todas as notificações"
+                    title="Excluir todas"
                     onClick={() => setConfirmacao({ tipo: "todas" })}
                   >
                     <Trash2 />
-                    Excluir todas
                   </Button>
                 </div>
               </div>
