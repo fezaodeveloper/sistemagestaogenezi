@@ -614,7 +614,7 @@ export function MatriculasTable({
           Nenhuma matrícula encontrada com os filtros aplicados.
         </p>
       ) : (
-        <Table>
+        <Table className="min-w-300">
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">
@@ -625,15 +625,18 @@ export function MatriculasTable({
                   aria-label="Selecionar todas as matrículas visíveis"
                 />
               </TableHead>
-              <TableHead>Aluno</TableHead>
-              <TableHead>Curso</TableHead>
-              <TableHead>Turma</TableHead>
-              <TableHead>Valor Final</TableHead>
-              <TableHead>Desconto</TableHead>
-              <TableHead>Parcelas</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Data matrícula</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className="min-w-50">Aluno</TableHead>
+              <TableHead className="min-w-37.5">Curso</TableHead>
+              <TableHead className="min-w-45">Turma</TableHead>
+              <TableHead className="min-w-25">Valor Final</TableHead>
+              <TableHead className="min-w-25">Desconto</TableHead>
+              <TableHead className="min-w-30">Parcelas</TableHead>
+              <TableHead className="min-w-20">Status</TableHead>
+              <TableHead className="min-w-30">Data matrícula</TableHead>
+              {/* min-w bem maior que os 80px sugeridos na tarefa: esta coluna carrega 4 ações
+                  lado a lado (Ver, contrato, WhatsApp, Cancelar) — 80px reproduziria a mesma
+                  compressão que este ajuste inteiro está corrigindo. */}
+              <TableHead className="min-w-80 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

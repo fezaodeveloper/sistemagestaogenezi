@@ -530,7 +530,7 @@ export function AlunosTable({
           Nenhum aluno encontrado com os filtros aplicados.
         </p>
       ) : (
-        <Table>
+        <Table className="min-w-300">
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">
@@ -541,16 +541,16 @@ export function AlunosTable({
                   aria-label="Selecionar todos os alunos visíveis"
                 />
               </TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>CPF</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Turmas ativas</TableHead>
-              <TableHead>Idade</TableHead>
-              <TableHead>Risco</TableHead>
-              <TableHead>Cadastrado em</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className="min-w-50">Nome</TableHead>
+              <TableHead className="min-w-50">E-mail</TableHead>
+              <TableHead className="min-w-30">CPF</TableHead>
+              <TableHead className="min-w-30">Telefone</TableHead>
+              <TableHead className="min-w-20">Status</TableHead>
+              <TableHead className="min-w-30">Turmas ativas</TableHead>
+              <TableHead className="min-w-25">Idade</TableHead>
+              <TableHead className="min-w-25">Risco</TableHead>
+              <TableHead className="min-w-30">Cadastrado em</TableHead>
+              <TableHead className="min-w-30 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
