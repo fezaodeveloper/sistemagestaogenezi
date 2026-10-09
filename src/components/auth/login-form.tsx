@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { signInWithPassword, signInWithGoogle, type LoginState } from "@/app/login/actions";
@@ -16,7 +17,10 @@ function SubmitButton() {
   );
 }
 
-export function LoginForm() {
+// "from" só decide pra onde o link "Esqueci minha senha" volta depois (ver
+// src/app/recuperar-senha/page.tsx) — este mesmo LoginForm é usado tanto em /login (admin) quanto
+// no fallback de /entrar (aluno, quando a tela de login ainda não tem configuração de portal).
+export function LoginForm({ from = "admin" }: { from?: "admin" | "aluno" }) {
   const [state, formAction] = useActionState<LoginState, FormData>(signInWithPassword, undefined);
 
   return (
@@ -42,6 +46,9 @@ export function LoginForm() {
           </p>
         )}
         <SubmitButton />
+        <Link href={`/recuperar-senha?from=${from}`} className="text-muted-foreground hover:text-foreground text-center text-sm underline">
+          Esqueci minha senha
+        </Link>
       </form>
 
       <div className="text-muted-foreground flex items-center gap-2 text-sm">

@@ -2,6 +2,7 @@
 
 // "use client": estado dos formulários (useActionState) e status de envio.
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { signInWithGoogle, signInWithPassword, type LoginState } from "@/app/login/actions";
@@ -48,6 +49,9 @@ function FormSenha() {
         </p>
       )}
       <BotaoEnviar texto="Entrar" textoEnviando="Entrando..." />
+      <Link href="/recuperar-senha?from=aluno" className="text-muted-foreground hover:text-foreground text-center text-sm underline">
+        Esqueci minha senha
+      </Link>
     </form>
   );
 }
@@ -110,6 +114,9 @@ export function AlunoLoginFormPreview({ tipoSenha }: { tipoSenha: PortalLoginTip
         <Button type="button" tabIndex={-1} className="w-full">
           {tipoSenha === "so_email" ? "Enviar link de acesso" : "Entrar"}
         </Button>
+        {tipoSenha !== "so_email" && (
+          <span className="text-muted-foreground text-center text-sm underline">Esqueci minha senha</span>
+        )}
       </div>
       <Separador />
       <Button type="button" tabIndex={-1} variant="outline" className="w-full">

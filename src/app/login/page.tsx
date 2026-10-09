@@ -10,7 +10,7 @@ const RODAPE_LOGIN_PADRAO = "© 2026 GÊNEZI Educação Profissional";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; mensagem?: string }>;
 }) {
   const profile = await getCurrentProfile();
 
@@ -19,7 +19,7 @@ export default async function LoginPage({
   }
 
   const supabase = await createClient();
-  const [{ error }, { data: configuracoes }] = await Promise.all([
+  const [{ error, mensagem }, { data: configuracoes }] = await Promise.all([
     searchParams,
     supabase.from("configuracoes").select("escola_logo_url, login_rodape").single(),
   ]);
@@ -63,6 +63,11 @@ export default async function LoginPage({
             <h2 className="text-xl font-semibold">Bem-vindo!</h2>
             <p className="text-muted-foreground text-sm">Acesse sua conta para continuar.</p>
           </div>
+          {mensagem === "senha-alterada" && (
+            <p role="status" className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
+              Senha alterada com sucesso!
+            </p>
+          )}
           {error === "link_invalido" && (
             <p role="alert" className="text-destructive text-sm">
               Link inválido ou expirado. Se você estava confirmando a troca de e-mail, abra o link no mesmo navegador

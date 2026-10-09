@@ -11,9 +11,14 @@ import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
 
 const RODAPE_LOGIN_PADRAO = "© 2026 GÊNEZI Educação Profissional";
 
-function MensagensDeErro({ error }: { error?: string }) {
+function MensagensDeErro({ error, mensagem }: { error?: string; mensagem?: string }) {
   return (
     <>
+      {mensagem === "senha-alterada" && (
+        <p role="status" className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
+          Senha alterada com sucesso!
+        </p>
+      )}
       {error === "google" && (
         <p role="alert" className="text-destructive text-sm">
           Não foi possível entrar com o Google. Tente novamente.
@@ -36,7 +41,7 @@ function MensagensDeErro({ error }: { error?: string }) {
 export default async function EntrarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; mensagem?: string }>;
 }) {
   const profile = await getCurrentProfile();
 
@@ -45,7 +50,7 @@ export default async function EntrarPage({
   }
 
   const supabase = await createClient();
-  const [{ error }, { data: configuracoes }, portal] = await Promise.all([
+  const [{ error, mensagem }, { data: configuracoes }, portal] = await Promise.all([
     searchParams,
     supabase.from("configuracoes").select("escola_logo_url, login_rodape").single(),
     getPortalLoginConfig(supabase),
@@ -67,7 +72,7 @@ export default async function EntrarPage({
         instalarApp={config.mostrarInstalarApp ? <PwaInstallButton /> : null}
         formulario={
           <div className="flex flex-col gap-6">
-            <MensagensDeErro error={error} />
+            <MensagensDeErro error={error} mensagem={mensagem} />
             <AlunoLoginForm tipoSenha={config.tipoSenha} />
           </div>
         }
@@ -114,8 +119,8 @@ export default async function EntrarPage({
             <h2 className="text-xl font-semibold">Bem-vindo!</h2>
             <p className="text-muted-foreground text-sm">Acesse sua conta para continuar.</p>
           </div>
-          <MensagensDeErro error={error} />
-          <LoginForm />
+          <MensagensDeErro error={error} mensagem={mensagem} />
+          <LoginForm from="aluno" />
         </div>
 
         <p className="text-xs text-muted-foreground">

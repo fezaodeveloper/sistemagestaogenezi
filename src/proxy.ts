@@ -66,6 +66,8 @@ export async function proxy(request: NextRequest) {
     "/agendar",
     "/campanha",
     "/descadastro",
+    "/recuperar-senha",
+    "/nova-senha",
     "/",
   ];
   const isRotaPublica = ROTAS_PUBLICAS.some(
