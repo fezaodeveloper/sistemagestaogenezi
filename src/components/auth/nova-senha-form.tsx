@@ -1,7 +1,7 @@
 "use client";
 
-// "use client": precisa do createBrowserClient pra detectar a sessão de recovery a partir do
-// #access_token na URL (ver comentário no useEffect abaixo) — isso nunca chega ao servidor.
+// "use client": precisa do createBrowserClient pra trocar o código PKCE da URL por uma sessão
+// de verdade (ver comentário no useEffect abaixo) — isso nunca chega ao servidor.
 
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
@@ -22,32 +22,34 @@ export function NovaSenhaForm() {
   );
 
   useEffect(() => {
-    const supabase = createClient();
+    // O projeto está configurado pra fluxo PKCE (padrão do supabase-js): o link de recovery do
+    // Supabase chega em /nova-senha?code=... — NÃO no fragmento #access_token como num fluxo
+    // implícito. Precisa trocar esse código por sessão explicitamente via exchangeCodeForSession;
+    // sem isso o updateUser mais abaixo falha com "Auth session missing" (não existe evento
+    // automático equivalente ao PASSWORD_RECOVERY pro fluxo PKCE).
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (!code) {
+      // queueMicrotask evita setState síncrono direto no corpo do efeito (react-hooks/set-state-in-effect).
+      queueMicrotask(() => setSessao("invalida"));
+      return;
+    }
 
-    // O link de recovery do Supabase chega com os tokens no FRAGMENTO da URL
-    // (#access_token=...&type=recovery) — createBrowserClient (@supabase/ssr) já detecta e
-    // processa isso automaticamente ao montar (detectSessionInUrl, ligado por padrão), sem
-    // precisar ler window.location.hash nem chamar setSession() à mão aqui. PASSWORD_RECOVERY é
-    // o evento oficial que ele dispara quando reconhece esse fluxo (doc do supabase-js);
-    // INITIAL_SESSION com uma sessão já presente cobre o caso de o hash já ter sido processado
-    // antes deste componente montar.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || (event === "INITIAL_SESSION" && session)) {
-        setSessao("pronta");
+    let cancelado = false;
+    const supabase = createClient();
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (cancelado) return;
+      if (error) {
+        setSessao("invalida");
+        return;
       }
+      // Remove o "code" da URL depois de trocado — ele já foi consumido (um code PKCE só vale
+      // uma troca) e não deve sobreviver a um refresh da página nem ficar visível/compartilhável.
+      window.history.replaceState({}, "", window.location.pathname);
+      setSessao("pronta");
     });
 
-    // Link inválido/expirado nunca dispara PASSWORD_RECOVERY — sem isso a pessoa ficaria
-    // esperando pra sempre em "Verificando...".
-    const timeout = setTimeout(() => {
-      setSessao((atual) => (atual === "verificando" ? "invalida" : atual));
-    }, 4000);
-
     return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
+      cancelado = true;
     };
   }, []);
 
