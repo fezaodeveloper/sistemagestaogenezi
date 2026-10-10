@@ -1,9 +1,10 @@
 "use client";
 
-// "use client": precisa do createBrowserClient pra trocar o código PKCE da URL por uma sessão
-// de verdade (ver comentário no useEffect abaixo) — isso nunca chega ao servidor.
+// "use client": precisa do createBrowserClient pra trocar o token_hash da URL por uma sessão de
+// verdade (ver comentário no useEffect abaixo) — isso nunca chega ao servidor.
 
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { atualizarNovaSenha, type NovaSenhaState } from "@/app/nova-senha/actions";
@@ -22,13 +23,19 @@ export function NovaSenhaForm() {
   );
 
   useEffect(() => {
-    // O projeto está configurado pra fluxo PKCE (padrão do supabase-js): o link de recovery do
-    // Supabase chega em /nova-senha?code=... — NÃO no fragmento #access_token como num fluxo
-    // implícito. Precisa trocar esse código por sessão explicitamente via exchangeCodeForSession;
-    // sem isso o updateUser mais abaixo falha com "Auth session missing" (não existe evento
-    // automático equivalente ao PASSWORD_RECOVERY pro fluxo PKCE).
-    const code = new URLSearchParams(window.location.search).get("code");
-    if (!code) {
+    // O fluxo PKCE (code=...) dependia de um redirect intermediário do próprio Supabase
+    // (.../auth/v1/verify?token=pkce_...&redirect_to=...) que o Chrome passou a bloquear como
+    // "bounce tracking protection" — o ?code= nunca chegava em /nova-senha. token_hash evita
+    // esse salto: o Supabase manda o usuário direto pra /nova-senha?token_hash=...&type=recovery
+    // (sem redirect intermediário), e verifyOtp troca esse hash por sessão — mesmo padrão já
+    // usado em src/app/auth/callback/route.ts pros outros fluxos de recovery/magic-link deste
+    // projeto. Exige trocar o link do template "Reset Password" no Supabase Dashboard (ver
+    // relatório) — sem isso o Supabase continua mandando o link antigo baseado em ConfirmationURL.
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    const type = params.get("type");
+
+    if (!tokenHash || type !== "recovery") {
       // queueMicrotask evita setState síncrono direto no corpo do efeito (react-hooks/set-state-in-effect).
       queueMicrotask(() => setSessao("invalida"));
       return;
@@ -36,14 +43,17 @@ export function NovaSenhaForm() {
 
     let cancelado = false;
     const supabase = createClient();
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+    supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" }).then(({ error }) => {
+      // Diagnóstico temporário — remover depois de confirmado em produção que o link de
+      // recuperação está funcionando de ponta a ponta.
+      console.log("[nova-senha] token_hash resultado:", error?.message ?? "ok");
       if (cancelado) return;
       if (error) {
         setSessao("invalida");
         return;
       }
-      // Remove o "code" da URL depois de trocado — ele já foi consumido (um code PKCE só vale
-      // uma troca) e não deve sobreviver a um refresh da página nem ficar visível/compartilhável.
+      // Remove o token_hash da URL depois de trocado — ele já foi consumido (um token_hash só
+      // vale uma troca) e não deve sobreviver a um refresh da página nem ficar visível/compartilhável.
       window.history.replaceState({}, "", window.location.pathname);
       setSessao("pronta");
     });
@@ -70,7 +80,12 @@ export function NovaSenhaForm() {
   }
 
   if (sessao === "verificando") {
-    return <p className="text-muted-foreground text-center text-sm">Verificando link de recuperação...</p>;
+    return (
+      <div className="flex flex-col items-center gap-2 py-2 text-center">
+        <Loader2 className="text-muted-foreground size-5 animate-spin" />
+        <p className="text-muted-foreground text-sm">Verificando link de recuperação...</p>
+      </div>
+    );
   }
 
   if (sessao === "invalida") {
