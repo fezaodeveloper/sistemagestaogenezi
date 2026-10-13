@@ -62,3 +62,43 @@ export type ConfiguracoesNotificacoes = {
   notif_eventos_hoje: boolean;
   notif_eventos_amanha: boolean;
 };
+
+// Toggles de notificações do Telegram (aba Configurações > Notificações) — cada chave liga/
+// desliga um alerta específico enviado por enviarAlertaTelegram/sendTelegram
+// (src/lib/telegram/client.ts, src/lib/telegram.ts). TELEGRAM_NOTIF_CHAVES abaixo é a lista
+// dessas chaves, reaproveitada pelo SELECT da página e por verificar-toggle.ts.
+export const TELEGRAM_NOTIF_CHAVES = [
+  // Financeiro
+  "tg_matricula_criada",
+  "tg_pagamento_confirmado",
+  "tg_pagamento_atrasado",
+  "tg_cobranca_gerada",
+  "tg_resumo_financeiro_diario",
+  // Alunos / LMS
+  "tg_curso_concluido",
+  "tg_certificado_gerado",
+  "tg_aluno_sem_acesso",
+  "tg_nota_reprovacao",
+  "tg_frequencia_baixa",
+  // Leads / CRM
+  "tg_lead_criado",
+  "tg_lead_convertido",
+  "tg_lead_sem_followup",
+  // Prêmios
+  "tg_premio_resgatado",
+  "tg_estoque_baixo",
+  // Agendamentos
+  "tg_agendamento_criado",
+  "tg_agendamento_cancelado",
+  "tg_lembrete_agendamento",
+  // Relatórios
+  "tg_relatorio_frequencia",
+  "tg_relatorio_semanal",
+  // Gênezi Conecta
+  "tg_conecta_nova_postagem",
+  "tg_conecta_novo_comentario",
+] as const;
+
+export type TelegramNotifChave = (typeof TELEGRAM_NOTIF_CHAVES)[number];
+
+export type TelegramNotifConfig = Record<TelegramNotifChave, boolean>;

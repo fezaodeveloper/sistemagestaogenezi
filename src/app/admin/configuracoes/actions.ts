@@ -7,7 +7,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { exportarTabelas, TABELAS_BACKUP } from "@/lib/backup/exportar";
-import { escolaFormSchema } from "@/lib/configuracoes/schema";
+import { escolaFormSchema, TELEGRAM_NOTIF_CHAVES } from "@/lib/configuracoes/schema";
 import { CERTIFICADO_STATUS_LABELS } from "@/lib/certificados/certificados";
 import { PARCELA_STATUS_LABELS } from "@/lib/financeiro/schema";
 import { PRESENCA_STATUS_LABELS, type PRESENCA_STATUSES } from "@/lib/presencas/schema";
@@ -235,6 +235,31 @@ export async function salvarNotificacoes(
   // (src/components/admin/sino-notificacoes.tsx) lê essas preferências.
   revalidatePath("/admin/configuracoes");
   revalidatePath("/admin");
+  return { salvo: true };
+}
+
+export type TelegramNotificacoesFormState = { error?: string; salvo?: boolean } | undefined;
+
+export async function salvarTelegramNotificacoes(
+  _prevState: TelegramNotificacoesFormState,
+  formData: FormData,
+): Promise<TelegramNotificacoesFormState> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const payload = Object.fromEntries(
+    TELEGRAM_NOTIF_CHAVES.map((chave) => [chave, formData.get(chave) === "on"]),
+  );
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ ...payload, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar as preferências. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
   return { salvo: true };
 }
 
