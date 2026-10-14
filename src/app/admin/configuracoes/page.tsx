@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { TELEGRAM_NOTIF_CHAVES, type TelegramNotifConfig } from "@/lib/configuracoes/schema";
+import { TELEGRAM_NOTIF_CHAVES, type TelegramNotifConfig, WHATSAPP_NOTIF_CHAVES, type WhatsappNotifConfig } from "@/lib/configuracoes/schema";
 import { getBannersLoginAdmin } from "@/app/admin/configuracoes/actions";
 import { AssinaturaDiretorForm } from "@/components/admin/assinatura-diretor-form";
 import { ConfiguracoesForm } from "@/components/admin/configuracoes-form";
@@ -12,6 +12,7 @@ import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
 import { ConfiguracoesNotificacoesForm } from "@/components/admin/configuracoes-notificacoes-form";
 import { PushNotificacoesForm } from "@/components/admin/push-notificacoes-form";
 import { TelegramNotificacoesForm } from "@/components/admin/telegram-notificacoes-form";
+import { WhatsappNotificacoesForm } from "@/components/admin/whatsapp-notificacoes-form";
 import { ConfiguracoesRecursosForm } from "@/components/admin/configuracoes-recursos-form";
 import { BannersLoginForm } from "@/components/admin/banners-login-form";
 import { LogoEscolaForm } from "@/components/admin/logo-escola-form";
@@ -66,7 +67,7 @@ export default async function ConfiguracoesPage({
       // tipo (GenericStringError). As 21 colunas tg_* de TELEGRAM_NOTIF_CHAVES (src/lib/
       // configuracoes/schema.ts) entram escritas à mão aqui por esse motivo.
       .select(
-        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido, conecta_habilitado, termo_imagem_texto, tg_matricula_criada, tg_pagamento_confirmado, tg_pagamento_atrasado, tg_cobranca_gerada, tg_resumo_financeiro_diario, tg_curso_concluido, tg_certificado_gerado, tg_aluno_sem_acesso, tg_nota_reprovacao, tg_frequencia_baixa, tg_lead_criado, tg_lead_convertido, tg_lead_sem_followup, tg_premio_resgatado, tg_estoque_baixo, tg_agendamento_criado, tg_agendamento_cancelado, tg_lembrete_agendamento, tg_relatorio_frequencia, tg_relatorio_semanal, tg_conecta_nova_postagem, tg_conecta_novo_comentario",
+        "ead_participa_gamificacao, certificado_nota_minima_percentual, certificado_frequencia_minima_percentual, escola_nome, escola_cnpj, escola_telefone, escola_email, escola_endereco, escola_cidade, escola_estado, escola_cep, escola_site, escola_logo_url, escola_logo_path, assinatura_admin_url, assinatura_admin_path, nome_diretor, notif_financeiro_atrasado, notif_certificados_pendentes, notif_eventos_hoje, notif_eventos_amanha, login_rodape, pts_aula_concluida, pts_quiz_concluido, pts_nota_maxima, pts_presenca, pts_modulo_concluido, pts_curso_concluido, limite_pts_dia, push_vapid_public_key, recurso_gamificacao_presencial, recurso_gamificacao_ead, recurso_gamificacao_hibrido, recurso_premios_presencial, recurso_premios_ead, recurso_premios_hibrido, recurso_ranking_presencial, recurso_ranking_ead, recurso_ranking_hibrido, recurso_chat_presencial, recurso_chat_ead, recurso_chat_hibrido, recurso_certificados_presencial, recurso_certificados_ead, recurso_certificados_hibrido, conecta_habilitado, termo_imagem_texto, tg_matricula_criada, tg_pagamento_confirmado, tg_pagamento_atrasado, tg_cobranca_gerada, tg_resumo_financeiro_diario, tg_curso_concluido, tg_certificado_gerado, tg_aluno_sem_acesso, tg_nota_reprovacao, tg_frequencia_baixa, tg_lead_criado, tg_lead_convertido, tg_lead_sem_followup, tg_premio_resgatado, tg_estoque_baixo, tg_agendamento_criado, tg_agendamento_cancelado, tg_lembrete_agendamento, tg_relatorio_frequencia, tg_relatorio_semanal, tg_conecta_nova_postagem, tg_conecta_novo_comentario, wz_matricula_criada, wz_lembrete_aula, wz_falta_aula, wz_dados_acesso, wz_cobranca_gerada, wz_cobranca_atrasada_d1, wz_cobranca_atrasada_d3, wz_cobranca_atrasada_d7, wz_cobranca_atrasada_d15, wz_recontato_lead, wz_followup_lead, wz_lembrete_agendamento, wz_agendamento_cancelado, wz_agendamento_falta",
       )
       .single(),
     getBannersLoginAdmin(),
@@ -75,6 +76,10 @@ export default async function ConfiguracoesPage({
   const telegramDefaultValues = Object.fromEntries(
     TELEGRAM_NOTIF_CHAVES.map((chave) => [chave, (data as Record<string, boolean> | null)?.[chave] ?? true]),
   ) as TelegramNotifConfig;
+
+  const whatsappDefaultValues = Object.fromEntries(
+    WHATSAPP_NOTIF_CHAVES.map((chave) => [chave, (data as Record<string, boolean> | null)?.[chave] ?? true]),
+  ) as WhatsappNotifConfig;
 
   return (
     <div className="flex flex-col gap-6">
@@ -293,6 +298,15 @@ export default async function ConfiguracoesPage({
             </CardHeader>
             <CardContent>
               <TelegramNotificacoesForm defaultValues={telegramDefaultValues} />
+            </CardContent>
+          </Card>
+
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle>Notificações do WhatsApp (GênZap)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WhatsappNotificacoesForm defaultValues={whatsappDefaultValues} />
             </CardContent>
           </Card>
         </TabsContent>

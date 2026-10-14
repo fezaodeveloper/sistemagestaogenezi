@@ -8,6 +8,7 @@ import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 import type { WhatsappTemplateId } from "@/lib/whatsapp/templates";
 import { enviarWhatsapp } from "./evolution";
 import { normalizarTelefone } from "./texto";
+import { whatsappToggleHabilitado } from "@/lib/whatsapp/verificar-toggle";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
 import type { MensagemStatus, MensagemTipo, MensagemEnviada } from "./schema";
@@ -122,6 +123,8 @@ export async function enviarMensagemMatriculaCriada(
   criadoPor: string,
 ): Promise<void> {
   try {
+    if (!(await whatsappToggleHabilitado("wz_matricula_criada"))) return;
+
     const admin = createAdminClient();
 
     const { data } = await admin
@@ -191,6 +194,8 @@ export async function enviarMensagemFalta(
   criadoPor: string,
 ): Promise<void> {
   try {
+    if (!(await whatsappToggleHabilitado("wz_falta_aula"))) return;
+
     const admin = createAdminClient();
 
     const { data } = await admin
@@ -233,6 +238,8 @@ export async function enviarMensagemLembreteAula(
   horarioAula: string | null,
 ): Promise<void> {
   try {
+    if (!(await whatsappToggleHabilitado("wz_lembrete_aula"))) return;
+
     const admin = createAdminClient();
 
     const { data } = await admin
@@ -277,6 +284,8 @@ export async function enviarMensagemLeadRecontato(
   contexto?: { nomeTurma: string; dataInicioTurma: string },
 ): Promise<void> {
   try {
+    if (!(await whatsappToggleHabilitado("wz_recontato_lead"))) return;
+
     const admin = createAdminClient();
 
     const { data } = await admin

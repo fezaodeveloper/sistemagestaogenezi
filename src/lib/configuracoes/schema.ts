@@ -102,3 +102,32 @@ export const TELEGRAM_NOTIF_CHAVES = [
 export type TelegramNotifChave = (typeof TELEGRAM_NOTIF_CHAVES)[number];
 
 export type TelegramNotifConfig = Record<TelegramNotifChave, boolean>;
+
+// Toggles de notificações do WhatsApp (GênZap) — cada chave liga/desliga
+// uma automação específica de envio de mensagem via Evolution API.
+// WHATSAPP_NOTIF_CHAVES é reaproveitada pelo SELECT da página e pelo
+// verificador de toggle (src/lib/whatsapp/verificar-toggle.ts).
+export const WHATSAPP_NOTIF_CHAVES = [
+  // Alunos / LMS
+  "wz_matricula_criada",
+  "wz_lembrete_aula",
+  "wz_falta_aula",
+  "wz_dados_acesso",
+  // Financeiro
+  "wz_cobranca_gerada",
+  "wz_cobranca_atrasada_d1",
+  "wz_cobranca_atrasada_d3",
+  "wz_cobranca_atrasada_d7",
+  "wz_cobranca_atrasada_d15",
+  // Leads / CRM
+  "wz_recontato_lead",
+  "wz_followup_lead",
+  // Agendamentos
+  "wz_lembrete_agendamento",
+  "wz_agendamento_cancelado",
+  "wz_agendamento_falta",
+] as const;
+
+export type WhatsappNotifChave = (typeof WHATSAPP_NOTIF_CHAVES)[number];
+
+export type WhatsappNotifConfig = Record<WhatsappNotifChave, boolean>;

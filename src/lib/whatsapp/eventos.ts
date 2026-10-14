@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 import { renderTemplate } from "@/lib/whatsapp/render";
 import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
+import { whatsappToggleHabilitado } from "@/lib/whatsapp/verificar-toggle";
 // Reaproveitado de propósito (apesar do nome): só busca configuracoes.escola_nome, não tem nada
 // de específico de SMS — evita duplicar essa mesma busca aqui.
 import { nomeEscolaParaSms } from "@/lib/integrax/modelos";
@@ -82,6 +83,8 @@ function urlPortal(): string {
 export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Promise<void> {
   return (async () => {
     try {
+      if (!(await whatsappToggleHabilitado("wz_lembrete_agendamento"))) return;
+
       const { data } = await createAdminClient()
         .from("agendamentos")
         .select("nome, whatsapp, data_agendada, horario")
@@ -109,6 +112,7 @@ export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Pro
 
 export function notificarWhatsappAgendamentoCancelado(agendamentoId: string, motivo?: string): void {
   emSegundoPlano(async () => {
+    if (!(await whatsappToggleHabilitado("wz_agendamento_cancelado"))) return;
     const { data } = await createAdminClient()
       .from("agendamentos")
       .select("nome, whatsapp, data_agendada, horario")
@@ -129,6 +133,7 @@ export function notificarWhatsappAgendamentoCancelado(agendamentoId: string, mot
 
 export function notificarWhatsappAgendamentoFalta(agendamentoId: string): void {
   emSegundoPlano(async () => {
+    if (!(await whatsappToggleHabilitado("wz_agendamento_falta"))) return;
     const { data } = await createAdminClient()
       .from("agendamentos")
       .select("nome, whatsapp, data_agendada, horario")
@@ -177,6 +182,7 @@ function rotuloParcela(parcela: LinhaParcelaCobranca): string {
 
 export function notificarWhatsappCobrancaGerada(parcelaId: string): void {
   emSegundoPlano(async () => {
+    if (!(await whatsappToggleHabilitado("wz_cobranca_gerada"))) return;
     const parcela = await carregarParcelaParaCobranca(parcelaId);
     const aluno = parcela?.alunos;
     if (!parcela || !aluno?.telefone) return;
@@ -212,13 +218,22 @@ export function diasParaTemplateAtraso(diasAtraso: number): "cobranca_atrasada_d
 export function notificarWhatsappCobrancaAtrasada(parcelaId: string, diasAtraso: number): Promise<void> {
   return (async () => {
     try {
+      // Verifica o toggle correto para cada faixa de atraso
+      const templateId = diasParaTemplateAtraso(diasAtraso);
+      const chaveToggle =
+        templateId === "cobranca_atrasada_d15" ? "wz_cobranca_atrasada_d15"
+        : templateId === "cobranca_atrasada_d7" ? "wz_cobranca_atrasada_d7"
+        : templateId === "cobranca_atrasada_d3" ? "wz_cobranca_atrasada_d3"
+        : "wz_cobranca_atrasada_d1";
+      if (!(await whatsappToggleHabilitado(chaveToggle))) return;
+
       const parcela = await carregarParcelaParaCobranca(parcelaId);
       const aluno = parcela?.alunos;
       if (!parcela || !aluno?.telefone) return;
 
       const link = parcela.asaas_bank_slip_url ?? parcela.asaas_invoice_url ?? "";
       const nome = primeiroNome(aluno.full_name) || "aluno(a)";
-      const mensagem = await renderTemplate(diasParaTemplateAtraso(diasAtraso), {
+      const mensagem = await renderTemplate(templateId, {
         nome,
         valor: reais(parcela.valor),
         vencimento: dataBR(parcela.data_vencimento),
@@ -245,6 +260,8 @@ export function notificarWhatsappCobrancaAtrasada(parcelaId: string, diasAtraso:
 export function notificarWhatsappLeadFollowup(leadId: string, tentativa: number): Promise<void> {
   return (async () => {
     try {
+      if (!(await whatsappToggleHabilitado("wz_followup_lead"))) return;
+
       const { data } = await createAdminClient().from("leads").select("nome, telefone, cursos(nome)").eq("id", leadId).maybeSingle();
       const lead = data as unknown as { nome: string; telefone: string; cursos: { nome: string } | null } | null;
       if (!lead?.telefone) return;
@@ -269,6 +286,8 @@ export function notificarWhatsappLeadFollowup(leadId: string, tentativa: number)
 
 export function notificarWhatsappDadosAcesso(matriculaId: string): void {
   emSegundoPlano(async () => {
+    if (!(await whatsappToggleHabilitado("wz_dados_acesso"))) return;
+
     const admin = createAdminClient();
     const { data } = await admin
       .from("matriculas")
