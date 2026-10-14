@@ -308,8 +308,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
           <div className="relative flex flex-col gap-2" style={{ isolation: "isolate" }}>
             <Label htmlFor="turma">Turma</Label>
             {turmaSelecionada ? (
@@ -327,7 +326,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
             ) : (
               <Input
                 id="turma"
-                placeholder="Buscar turma..."
+                placeholder="Ex: terça, sábado, 08:00..."
                 className="w-64"
                 value={buscaTurma}
                 onChange={(event) => {
@@ -394,8 +393,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
             <FileSpreadsheet />
             {exportandoExcel ? "Exportando..." : "Exportar Excel"}
           </Button>
-        </CardContent>
-      </Card>
+      </div>
 
       {error && (
         <p
