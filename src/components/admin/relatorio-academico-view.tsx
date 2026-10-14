@@ -310,7 +310,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
     <div className="flex flex-col gap-4">
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="relative flex flex-col gap-2">
+          <div className="relative flex flex-col gap-2" style={{ isolation: "isolate" }}>
             <Label htmlFor="turma">Turma</Label>
             {turmaSelecionada ? (
               <Badge variant="secondary" className="flex w-fit items-center gap-1.5 py-1.5 pr-1.5 pl-2.5">
@@ -340,7 +340,7 @@ export function RelatorioAcademicoView({ turmas }: { turmas: TurmaOpcao[] }) {
             )}
 
             {sugestoesAbertas && !turmaSelecionada && termoTurma.length >= 2 && (
-              <div className="bg-popover absolute top-full left-0 z-10 mt-1 flex w-64 flex-col overflow-hidden rounded-md border shadow-md">
+              <div className="bg-popover absolute top-full left-0 z-50 mt-1 flex w-64 flex-col overflow-hidden rounded-md border shadow-md">
                 {sugestoesTurma.length === 0 ? (
                   <p className="text-muted-foreground p-3 text-sm">Nenhuma turma encontrada.</p>
                 ) : (

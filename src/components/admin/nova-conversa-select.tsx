@@ -56,7 +56,7 @@ export function NovaConversaSelect({ alunos }: { alunos: AlunoElegivelChat[] }) 
       />
 
       {sugestoesAbertas && termoDebounced.length >= 2 && (
-        <div className="bg-popover absolute top-full left-0 z-10 mt-1 flex w-full flex-col overflow-hidden rounded-md border shadow-md">
+        <div className="bg-popover absolute top-full left-0 z-50 mt-1 flex w-full flex-col overflow-hidden rounded-md border shadow-md">
           {sugestoes.length === 0 ? (
             <p className="text-muted-foreground p-3 text-sm">Nenhum aluno encontrado.</p>
           ) : (
