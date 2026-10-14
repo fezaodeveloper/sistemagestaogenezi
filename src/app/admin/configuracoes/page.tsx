@@ -292,23 +292,25 @@ export default async function ConfiguracoesPage({
             </CardContent>
           </Card>
 
-          <Card className="max-w-xl">
-            <CardHeader>
-              <CardTitle>Notificações do Telegram</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TelegramNotificacoesForm defaultValues={telegramDefaultValues} />
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Notificações do Telegram</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TelegramNotificacoesForm defaultValues={telegramDefaultValues} />
+              </CardContent>
+            </Card>
 
-          <Card className="max-w-xl">
-            <CardHeader>
-              <CardTitle>Notificações do WhatsApp (GênZap)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <WhatsappNotificacoesForm defaultValues={whatsappDefaultValues} />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Notificações do WhatsApp (GênZap)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <WhatsappNotificacoesForm defaultValues={whatsappDefaultValues} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="recursos">
