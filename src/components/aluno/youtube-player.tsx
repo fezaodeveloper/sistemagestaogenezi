@@ -6,7 +6,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  FastForward,
   Maximize,
   Minimize,
   Pause,
@@ -593,9 +592,6 @@ export function YoutubePlayer({
         evento.preventDefault();
         if (tocando) player.pauseVideo();
         else player.playVideo();
-      } else if (evento.key === "ArrowRight") {
-        evento.preventDefault();
-        pular(10);
       } else if (evento.key === "ArrowLeft") {
         evento.preventDefault();
         pular(-10);
@@ -863,10 +859,6 @@ export function YoutubePlayer({
 
               <button type="button" aria-label={tocando ? "Pausar" : "Reproduzir"} onClick={alternarPlayPause} className="shrink-0">
                 {tocando ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
-              </button>
-
-              <button type="button" aria-label="Avançar 10 segundos" onClick={() => pular(10)} className="shrink-0">
-                <FastForward className="size-4 fill-current" />
               </button>
 
               <span className="text-xs tabular-nums whitespace-nowrap">
