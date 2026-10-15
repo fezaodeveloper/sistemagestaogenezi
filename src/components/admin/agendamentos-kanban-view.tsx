@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useOptimistic, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, List, Trash2 } from "lucide-react";
+import { Ban, LayoutGrid, List, Trash2 } from "lucide-react";
 import {
   atualizarStatusAgendamento,
   excluirAgendamento,
@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -81,6 +82,7 @@ function LinhaAgendamento({
   onSelecionar,
   onMover,
   onExcluir,
+  onCancelar,
   onReagendado,
   onDragStart,
   onDragEnd,
@@ -92,6 +94,7 @@ function LinhaAgendamento({
   onSelecionar: () => void;
   onMover: (status: StatusColuna) => void;
   onExcluir: () => void;
+  onCancelar: () => void;
   onReagendado: () => void;
   onDragStart: (event: DragEvent<HTMLTableRowElement>) => void;
   onDragEnd: () => void;
@@ -159,6 +162,19 @@ function LinhaAgendamento({
               ))}
             </SelectContent>
           </Select>
+          {agendamento.status === "confirmado" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-destructive shrink-0"
+              onClick={onCancelar}
+              aria-label="Cancelar agendamento"
+              title="Cancelar agendamento"
+            >
+              <Ban className="size-3.5" />
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -182,6 +198,7 @@ function CardAgendamento({
   arrastando,
   onMover,
   onExcluir,
+  onCancelar,
   onReagendado,
   onDragStart,
   onDragEnd,
@@ -191,6 +208,7 @@ function CardAgendamento({
   arrastando: boolean;
   onMover: (status: StatusColuna) => void;
   onExcluir: () => void;
+  onCancelar: () => void;
   onReagendado: () => void;
   onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
@@ -211,17 +229,32 @@ function CardAgendamento({
         <CardContent className="flex flex-col gap-2 p-3">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-medium">{agendamento.nome}</p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="text-destructive -mt-1 -mr-1 shrink-0"
-              onClick={onExcluir}
-              aria-label="Excluir agendamento"
-              title="Excluir agendamento"
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
+            <div className="-mt-1 -mr-1 flex shrink-0 items-center gap-0.5">
+              {agendamento.status === "confirmado" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-destructive"
+                  onClick={onCancelar}
+                  aria-label="Cancelar agendamento"
+                  title="Cancelar agendamento"
+                >
+                  <Ban className="size-3.5" />
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-destructive"
+                onClick={onExcluir}
+                aria-label="Excluir agendamento"
+                title="Excluir agendamento"
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
           </div>
 
           <a
@@ -298,6 +331,9 @@ export function AgendamentosKanbanView({
   const [arrastandoId, setArrastandoId] = useState<string | null>(null);
   const [colunaSobre, setColunaSobre] = useState<StatusColuna | null>(null);
   const [excluindo, setExcluindo] = useState<Agendamento | null>(null);
+  const [cancelando, setCancelando] = useState<Agendamento | null>(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [sucesso, setSucesso] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [visualizacao, setVisualizacao] = useState<Visualizacao>("card");
   const [mensagemLote, setMensagemLote] = useState<string | null>(null);
@@ -359,6 +395,25 @@ export function AgendamentosKanbanView({
       const resultado = await excluirAgendamento(alvo.id);
       setExcluindo(null);
       if (resultado.error) setErro(resultado.error);
+      router.refresh();
+    });
+  }
+
+  function confirmarCancelamento() {
+    if (!cancelando) return;
+    const alvo = cancelando;
+    const motivo = motivoCancelamento.trim();
+    setErro(null);
+    setSucesso(null);
+    startTransition(async () => {
+      // atualizarStatusAgendamento já dispara notificarWhatsappAgendamentoCancelado
+      // automaticamente quando o status muda pra "cancelado" (ver
+      // src/app/admin/comercial/agendamentos/actions.ts) — não precisa de nada extra aqui.
+      const resultado = await atualizarStatusAgendamento(alvo.id, "cancelado", motivo || undefined);
+      setCancelando(null);
+      setMotivoCancelamento("");
+      if (resultado.error) setErro(resultado.error);
+      else setSucesso("Agendamento cancelado.");
       router.refresh();
     });
   }
@@ -445,6 +500,11 @@ export function AgendamentosKanbanView({
           {erro}
         </p>
       )}
+      {sucesso && (
+        <p role="status" className="text-muted-foreground text-sm">
+          {sucesso}
+        </p>
+      )}
 
       {visiveis.length === 0 ? (
         <Card>
@@ -527,6 +587,7 @@ export function AgendamentosKanbanView({
                     onSelecionar={() => selecao.alternar(agendamento.id)}
                     onMover={(status) => mover(agendamento, status)}
                     onExcluir={() => setExcluindo(agendamento)}
+                    onCancelar={() => setCancelando(agendamento)}
                     onReagendado={() => router.refresh()}
                     onDragStart={(event) => {
                       event.dataTransfer.setData("text/plain", agendamento.id);
@@ -585,6 +646,7 @@ export function AgendamentosKanbanView({
                       arrastando={arrastandoId === agendamento.id}
                       onMover={(status) => mover(agendamento, status)}
                       onExcluir={() => setExcluindo(agendamento)}
+                      onCancelar={() => setCancelando(agendamento)}
                       onReagendado={() => router.refresh()}
                       onDragStart={(event) => {
                         event.dataTransfer.setData("text/plain", agendamento.id);
@@ -627,6 +689,41 @@ export function AgendamentosKanbanView({
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction variant="destructive" disabled={isPending} onClick={confirmarExclusao}>
               {isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={cancelando !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) {
+            setCancelando(null);
+            setMotivoCancelamento("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar agendamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar o agendamento de &quot;{cancelando?.nome}&quot; (
+              {cancelando ? `${formatDateBR(cancelando.data_agendada)} às ${cancelando.horario}` : ""})? O aluno é
+              avisado automaticamente por WhatsApp.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Textarea
+              value={motivoCancelamento}
+              onChange={(event) => setMotivoCancelamento(event.target.value)}
+              placeholder="Motivo do cancelamento (opcional)"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={isPending} onClick={confirmarCancelamento}>
+              {isPending ? "Cancelando..." : "Cancelar agendamento"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
