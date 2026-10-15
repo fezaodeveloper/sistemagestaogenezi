@@ -18,7 +18,7 @@ import { AulaAcoesBar } from "@/components/aluno/aula-acoes-bar";
 import { AulaListaModulo } from "@/components/aluno/aula-lista-modulo";
 import { AulaComentarios } from "@/components/aluno/aula-comentarios";
 import { AulaAvaliacao } from "@/components/aluno/aula-avaliacao";
-import { YoutubePlayer } from "@/components/aluno/youtube-player";
+import { YoutubePlayer } from "@/components/aluno/youtube-player-lazy";
 import { getSecaoComentarios } from "@/lib/comentarios/aula";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
