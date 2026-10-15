@@ -62,7 +62,9 @@ function formatDateBR(iso: string): string {
 }
 
 // Preferência de visualização (Card/Lista): fica só neste navegador.
-type Visualizacao = "card" | "lista";
+// "cancelados" nunca é persistida em localStorage (ver escolherVisualizacao) — é uma visão
+// pontual, não uma preferência de layout como card/lista.
+type Visualizacao = "card" | "lista" | "cancelados";
 const CHAVE_VISUALIZACAO = "agendamentos_visualizacao";
 
 function lerVisualizacao(): Visualizacao | null {
@@ -309,6 +311,7 @@ function CardAgendamento({
 export function AgendamentosKanbanView({
   paginaId,
   agendamentos,
+  agendamentosCancelados,
   camposExtrasConfigurados,
   resumo,
   dataFiltro,
@@ -318,6 +321,7 @@ export function AgendamentosKanbanView({
 }: {
   paginaId: string;
   agendamentos: Agendamento[];
+  agendamentosCancelados: Agendamento[];
   camposExtrasConfigurados: CampoExtra[];
   resumo: ResumoAgendamentos;
   dataFiltro: string;
@@ -350,6 +354,7 @@ export function AgendamentosKanbanView({
 
   function escolherVisualizacao(nova: Visualizacao) {
     setVisualizacao(nova);
+    if (nova === "cancelados") return; // visão pontual — nunca persistida.
     try {
       localStorage.setItem(CHAVE_VISUALIZACAO, nova);
     } catch {
@@ -440,7 +445,7 @@ export function AgendamentosKanbanView({
   return (
     <div className="flex flex-col gap-4">
       {/* Histórico completo da página — ignora filtro de data e paginação. */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <Card>
           <CardContent className="flex flex-col gap-0.5 p-3">
             <span className="text-muted-foreground text-xs">Total agendados</span>
@@ -459,18 +464,25 @@ export function AgendamentosKanbanView({
             <span className="text-2xl font-semibold text-amber-700 dark:text-amber-400">{resumo.faltou}</span>
           </CardContent>
         </Card>
+        {/* Clicável — leva pra aba Cancelados em vez do texto informativo sem ação que existia
+            antes aqui. */}
+        <button type="button" className="text-left" onClick={() => escolherVisualizacao("cancelados")}>
+          <Card className={visualizacao === "cancelados" ? "ring-destructive ring-2" : ""}>
+            <CardContent className="flex flex-col gap-0.5 p-3">
+              <span className="text-muted-foreground text-xs">Cancelados</span>
+              <span className="text-destructive text-2xl font-semibold">{resumo.cancelado}</span>
+            </CardContent>
+          </Card>
+        </button>
       </div>
-      {resumo.cancelado > 0 && (
-        <p className="text-muted-foreground -mt-2 text-xs">
-          O total inclui {resumo.cancelado} agendamento(s) cancelado(s), que não aparecem no Kanban.
-        </p>
-      )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted-foreground text-xs">Data</span>
-          <Input type="date" value={data} onChange={(event) => handleDataChange(event.target.value)} className="w-40" />
-        </div>
+        {visualizacao !== "cancelados" && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-muted-foreground text-xs">Data</span>
+            <Input type="date" value={data} onChange={(event) => handleDataChange(event.target.value)} className="w-40" />
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5" role="group" aria-label="Modo de visualização">
           <Button
             type="button"
@@ -480,7 +492,7 @@ export function AgendamentosKanbanView({
             onClick={() => escolherVisualizacao("card")}
           >
             <LayoutGrid />
-            Card
+            Kanban
           </Button>
           <Button
             type="button"
@@ -491,6 +503,16 @@ export function AgendamentosKanbanView({
           >
             <List />
             Lista
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={visualizacao === "cancelados" ? "secondary" : "ghost"}
+            aria-pressed={visualizacao === "cancelados"}
+            onClick={() => escolherVisualizacao("cancelados")}
+          >
+            <Ban />
+            Cancelados
           </Button>
         </div>
       </div>
@@ -506,7 +528,44 @@ export function AgendamentosKanbanView({
         </p>
       )}
 
-      {visiveis.length === 0 ? (
+      {visualizacao === "cancelados" ? (
+        agendamentosCancelados.length === 0 ? (
+          <Card>
+            <p className="text-muted-foreground py-10 text-center text-sm">
+              Nenhum agendamento cancelado ainda.
+            </p>
+          </Card>
+        ) : (
+          <Card>
+            {/* Só visualização — sem botões de ação (reagendar/excluir/cancelar não fazem
+                sentido pra um agendamento que já está cancelado). */}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>WhatsApp</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Horário</TableHead>
+                  <TableHead>Motivo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {agendamentosCancelados.map((agendamento) => (
+                  <TableRow key={agendamento.id}>
+                    <TableCell className="max-w-64">{agendamento.nome}</TableCell>
+                    <TableCell>{agendamento.whatsapp}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDateBR(agendamento.data_agendada)}</TableCell>
+                    <TableCell>{agendamento.horario}</TableCell>
+                    <TableCell className="max-w-80 whitespace-normal">
+                      {agendamento.motivo_cancelamento || "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )
+      ) : visiveis.length === 0 ? (
         <Card>
           <p className="text-muted-foreground py-10 text-center text-sm">
             {dataFiltro
@@ -666,14 +725,18 @@ export function AgendamentosKanbanView({
         </div>
       )}
 
-      <Paginacao
-        paginaAtual={paginaAtual}
-        totalPaginas={totalPaginas}
-        totalRegistros={totalRegistros}
-        limite={LIMITE_PADRAO}
-        baseUrl={`/admin/comercial/agendamentos/${paginaId}`}
-        searchParams={paginacaoSearchParams}
-      />
+      {/* Cancelados não é paginado (lista fixa, limit 100 em getAgendamentosCancelados) — a
+          paginação é só do Kanban/Lista (getAgendamentosPaginados). */}
+      {visualizacao !== "cancelados" && (
+        <Paginacao
+          paginaAtual={paginaAtual}
+          totalPaginas={totalPaginas}
+          totalRegistros={totalRegistros}
+          limite={LIMITE_PADRAO}
+          baseUrl={`/admin/comercial/agendamentos/${paginaId}`}
+          searchParams={paginacaoSearchParams}
+        />
+      )}
 
       <AlertDialog open={excluindo !== null} onOpenChange={(aberto) => !aberto && setExcluindo(null)}>
         <AlertDialogContent>

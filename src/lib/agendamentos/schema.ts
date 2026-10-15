@@ -126,6 +126,9 @@ export type Agendamento = {
   status: AgendamentoStatus;
   // Recado opcional do visitante (coluna nova; ausente antes da migration).
   mensagem?: string | null;
+  // Preenchido só quando status === "cancelado" e o admin digitou um motivo (coluna nova; ver
+  // 20261015100000_add_motivo_cancelamento_agendamento.sql — ausente antes dela).
+  motivo_cancelamento?: string | null;
   whatsapp_enviado: boolean;
   lembrete_enviado: boolean;
   created_at: string;

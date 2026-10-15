@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getAgendamentoPagina, getAgendamentosPaginados, getResumoAgendamentos } from "@/lib/agendamentos/agendamentos";
+import {
+  getAgendamentoPagina,
+  getAgendamentosCancelados,
+  getAgendamentosPaginados,
+  getResumoAgendamentos,
+} from "@/lib/agendamentos/agendamentos";
 import { calcularOffset, calcularTotalPaginas, LIMITE_PADRAO, parsePagina } from "@/lib/paginacao";
 import { AgendamentosKanbanView } from "@/components/admin/agendamentos-kanban-view";
 
@@ -22,13 +27,14 @@ export default async function AgendamentoPaginaDetalhePage({
   if (!pagina) notFound();
 
   const paginaAtual = parsePagina(paginaParam);
-  const [{ itens, total }, resumo] = await Promise.all([
+  const [{ itens, total }, resumo, agendamentosCancelados] = await Promise.all([
     getAgendamentosPaginados(supabase, id, {
       data: data || undefined,
       offset: calcularOffset(paginaAtual, LIMITE_PADRAO),
       limite: LIMITE_PADRAO,
     }),
     getResumoAgendamentos(supabase, id),
+    getAgendamentosCancelados(supabase, id),
   ]);
 
   return (
@@ -41,6 +47,7 @@ export default async function AgendamentoPaginaDetalhePage({
       <AgendamentosKanbanView
         paginaId={id}
         agendamentos={itens}
+        agendamentosCancelados={agendamentosCancelados}
         camposExtrasConfigurados={pagina.campos_extras}
         resumo={resumo}
         dataFiltro={data ?? ""}

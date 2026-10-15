@@ -100,6 +100,24 @@ export async function getAgendamentosPaginados(
   return { itens: (data as Agendamento[] | null) ?? [], total: count ?? 0 };
 }
 
+// Aba "Cancelados" do Kanban — só visualização (sem paginação de verdade, por isso o limit fixo
+// em vez do mesmo range() de getAgendamentosPaginados). Mais recentes primeiro por created_at
+// (quando o cancelamento aconteceu), não por data_agendada (a aula/visita que não vai mais
+// acontecer) — é o que importa pra essa lista.
+export async function getAgendamentosCancelados(
+  supabase: SupabaseServerClient,
+  paginaId: string,
+): Promise<Agendamento[]> {
+  const { data } = await supabase
+    .from("agendamentos")
+    .select("*")
+    .eq("pagina_id", paginaId)
+    .eq("status", "cancelado")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  return (data as Agendamento[] | null) ?? [];
+}
+
 export type ResumoAgendamentos = Record<AgendamentoStatus, number> & { total: number };
 
 // Contadores do histórico completo da página (ignora filtro de data e

@@ -175,7 +175,10 @@ export async function atualizarStatusAgendamento(id: string, status: string, mot
   const supabase = await createClient();
   const { data: antes } = await supabase.from("agendamentos").select("status").eq("id", id).maybeSingle();
 
-  const { error } = await supabase.from("agendamentos").update({ status }).eq("id", id);
+  const atualizacao: { status: string; motivo_cancelamento?: string } = { status };
+  if (status === "cancelado" && motivo) atualizacao.motivo_cancelamento = motivo;
+
+  const { error } = await supabase.from("agendamentos").update(atualizacao).eq("id", id);
 
   if (error) {
     return { error: "Não foi possível atualizar o status." };
