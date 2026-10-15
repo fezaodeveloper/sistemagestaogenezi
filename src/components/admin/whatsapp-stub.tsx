@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { MessageCircle } from "lucide-react";
-import { registrarWhatsappStub, enviarContratoWhatsappAction, type WhatsappStubTipo } from "@/app/admin/matriculas/actions";
+import {
+  registrarWhatsappStub,
+  enviarComprovanteWhatsappAction,
+  enviarContratoWhatsappAction,
+  type WhatsappStubTipo,
+} from "@/app/admin/matriculas/actions";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -12,10 +17,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// "comprovante" continua STUB — só dispara whatsapp.stub (ver registrarWhatsappStub em
-// src/app/admin/matriculas/actions.ts) pra registrar a intenção no log de automações, e mostra
-// esta mensagem padrão. "dados_acesso" e, agora, "contrato" enviam de verdade pelo GênZap
-// (Evolution API) — ver MENSAGEM_DADOS_ACESSO e useEnviarContratoWhatsapp abaixo.
+// "dados_acesso" continua com o disparar() síncrono (alert otimista) por não fazer parte desta
+// tarefa. "contrato" e "comprovante" enviam de verdade pelo GênZap (Evolution API), com
+// feedback real de sucesso/erro — ver TIPOS_COM_ENVIO_REAL/useEnviarDocumentoWhatsapp abaixo.
 const MENSAGEM_PADRAO =
   "Integração com WhatsApp em breve. Esta funcionalidade será habilitada com a API Evolution.";
 
@@ -29,11 +33,22 @@ function disparar(tipo: WhatsappStubTipo, matriculaId: string, mensagem: string)
   window.alert(mensagem);
 }
 
-// Compartilhado entre WhatsappStubButton e WhatsappStubDropdown: "contrato" é o único tipo com
-// feedback de sucesso/erro real (enviarContratoWhatsappAction é awaitable, não
-// fire-and-forget como o resto) — por isso precisa do próprio estado de loading/resultado, em
-// vez do disparar() síncrono (alert otimista) usado por comprovante/dados_acesso.
-function useEnviarContratoWhatsapp(matriculaId: string) {
+type TipoComEnvioReal = "contrato" | "comprovante";
+
+const ACOES_ENVIO_REAL: Record<TipoComEnvioReal, { action: (matriculaId: string) => Promise<{ success: true } | { error: string }>; sucesso: string }> = {
+  contrato: { action: enviarContratoWhatsappAction, sucesso: "Contrato enviado via WhatsApp!" },
+  comprovante: { action: enviarComprovanteWhatsappAction, sucesso: "Comprovante enviado via WhatsApp!" },
+};
+
+function ehTipoComEnvioReal(tipo: WhatsappStubTipo): tipo is TipoComEnvioReal {
+  return tipo === "contrato" || tipo === "comprovante";
+}
+
+// Compartilhado entre WhatsappStubButton e WhatsappStubDropdown: "contrato"/"comprovante" são os
+// únicos tipos com feedback de sucesso/erro real (as Server Actions são awaitable, não
+// fire-and-forget como o resto) — por isso precisam de estado próprio de loading/resultado, em
+// vez do disparar() síncrono (alert otimista) usado por dados_acesso.
+function useEnviarDocumentoWhatsapp(tipo: TipoComEnvioReal, matriculaId: string) {
   const [enviando, setEnviando] = useState(false);
   const [mensagem, setMensagem] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
 
@@ -41,11 +56,10 @@ function useEnviarContratoWhatsapp(matriculaId: string) {
     setMensagem(null);
     setEnviando(true);
     try {
-      const resultado = await enviarContratoWhatsappAction(matriculaId);
+      const { action, sucesso } = ACOES_ENVIO_REAL[tipo];
+      const resultado = await action(matriculaId);
       setMensagem(
-        "error" in resultado
-          ? { tipo: "erro", texto: resultado.error }
-          : { tipo: "sucesso", texto: "Contrato enviado via WhatsApp!" },
+        "error" in resultado ? { tipo: "erro", texto: resultado.error } : { tipo: "sucesso", texto: sucesso },
       );
     } finally {
       setEnviando(false);
@@ -68,31 +82,31 @@ export function WhatsappStubButton({
   mensagem?: string;
   disabled?: boolean;
 }) {
-  const contrato = useEnviarContratoWhatsapp(matriculaId);
+  const envioReal = useEnviarDocumentoWhatsapp(ehTipoComEnvioReal(tipo) ? tipo : "contrato", matriculaId);
 
-  if (tipo === "contrato") {
+  if (ehTipoComEnvioReal(tipo)) {
     return (
       <div className="flex flex-col items-end gap-1">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          disabled={disabled || contrato.enviando}
+          disabled={disabled || envioReal.enviando}
           className={WHATSAPP_BUTTON_CLASS}
-          onClick={contrato.enviar}
+          onClick={envioReal.enviar}
         >
           <MessageCircle />
-          {contrato.enviando ? "Enviando..." : label}
+          {envioReal.enviando ? "Enviando..." : label}
         </Button>
-        {contrato.mensagem && (
+        {envioReal.mensagem && (
           <span
             className={
-              contrato.mensagem.tipo === "erro"
+              envioReal.mensagem.tipo === "erro"
                 ? "text-destructive text-xs"
                 : "text-xs text-green-600 dark:text-green-400"
             }
           >
-            {contrato.mensagem.texto}
+            {envioReal.mensagem.texto}
           </span>
         )}
       </div>
@@ -126,7 +140,7 @@ type OpcaoWhatsappStub = { tipo: WhatsappStubTipo; label: string; mensagem?: str
 const MENSAGEM_DADOS_ACESSO = "Enviando os dados de acesso por WhatsApp (GênZap)...";
 
 const OPCOES_PADRAO: OpcaoWhatsappStub[] = [
-  // Envia de verdade pelo GênZap desde esta tarefa — ver useEnviarContratoWhatsapp.
+  // Envia de verdade pelo GênZap desde esta tarefa — ver useEnviarDocumentoWhatsapp.
   { tipo: "contrato", label: "📱 Enviar contrato" },
   { tipo: "comprovante", label: "📱 Enviar comprovante" },
   { tipo: "dados_acesso", label: "📱 Dados de acesso", mensagem: MENSAGEM_DADOS_ACESSO },
@@ -144,7 +158,10 @@ export function WhatsappStubDropdown({
   // parcela) — sem isso, fica preso às 3 opções fixas de matrícula/contrato.
   opcoes?: OpcaoWhatsappStub[];
 }) {
-  const contrato = useEnviarContratoWhatsapp(matriculaId);
+  const contrato = useEnviarDocumentoWhatsapp("contrato", matriculaId);
+  const comprovante = useEnviarDocumentoWhatsapp("comprovante", matriculaId);
+  const estadoPorTipo = { contrato, comprovante } as const;
+  const mensagemAtual = contrato.mensagem ?? comprovante.mensagem;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -158,30 +175,27 @@ export function WhatsappStubDropdown({
           }
         />
         <DropdownMenuContent align="end">
-          {opcoes.map((opcao) => (
-            <DropdownMenuItem
-              key={opcao.tipo}
-              disabled={opcao.tipo === "contrato" && contrato.enviando}
-              onClick={() =>
-                opcao.tipo === "contrato"
-                  ? contrato.enviar()
-                  : disparar(opcao.tipo, matriculaId, opcao.mensagem ?? MENSAGEM_PADRAO)
-              }
-            >
-              {opcao.tipo === "contrato" && contrato.enviando ? "Enviando contrato..." : opcao.label}
-            </DropdownMenuItem>
-          ))}
+          {opcoes.map((opcao) => {
+            const real = ehTipoComEnvioReal(opcao.tipo) ? estadoPorTipo[opcao.tipo] : null;
+            return (
+              <DropdownMenuItem
+                key={opcao.tipo}
+                disabled={real?.enviando}
+                onClick={() => (real ? real.enviar() : disparar(opcao.tipo, matriculaId, opcao.mensagem ?? MENSAGEM_PADRAO))}
+              >
+                {real?.enviando ? "Enviando..." : opcao.label}
+              </DropdownMenuItem>
+            );
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
-      {contrato.mensagem && (
+      {mensagemAtual && (
         <span
           className={
-            contrato.mensagem.tipo === "erro"
-              ? "text-destructive text-xs"
-              : "text-xs text-green-600 dark:text-green-400"
+            mensagemAtual.tipo === "erro" ? "text-destructive text-xs" : "text-xs text-green-600 dark:text-green-400"
           }
         >
-          {contrato.mensagem.texto}
+          {mensagemAtual.texto}
         </span>
       )}
     </div>

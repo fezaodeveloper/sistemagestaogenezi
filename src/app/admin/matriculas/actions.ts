@@ -18,7 +18,11 @@ import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeMatricula } from "@/lib/webhooks/payloads";
 import { notificarSmsMatriculaCriada } from "@/lib/integrax/notificacoes";
-import { notificarWhatsappDadosAcesso, notificarWhatsappEnviarContrato } from "@/lib/whatsapp/eventos";
+import {
+  notificarWhatsappDadosAcesso,
+  notificarWhatsappEnviarComprovante,
+  notificarWhatsappEnviarContrato,
+} from "@/lib/whatsapp/eventos";
 import { notificarEmailMatriculaCriada } from "@/lib/email/eventos";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
@@ -728,6 +732,16 @@ export async function enviarContratoWhatsappAction(matriculaId: string): Promise
   const resultado = await notificarWhatsappEnviarContrato(matriculaId);
   if (!resultado.ok) {
     return { error: resultado.erro ?? "Não foi possível enviar o contrato por WhatsApp." };
+  }
+  return { success: true };
+}
+
+export async function enviarComprovanteWhatsappAction(matriculaId: string): Promise<EnviarContratoWhatsappResult> {
+  await requireRole("admin");
+
+  const resultado = await notificarWhatsappEnviarComprovante(matriculaId);
+  if (!resultado.ok) {
+    return { error: resultado.erro ?? "Não foi possível enviar o comprovante por WhatsApp." };
   }
   return { success: true };
 }

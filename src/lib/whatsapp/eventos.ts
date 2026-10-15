@@ -327,6 +327,45 @@ export async function notificarWhatsappEnviarContrato(
   return { ok: true };
 }
 
+// ----- Comprovante de matrícula: reenvio manual (botão "Enviar comprovante") -----
+// AWAITABLE, não emSegundoPlano — mesmo motivo de notificarWhatsappEnviarContrato acima.
+
+type LinhaMatriculaComprovante = {
+  alunos: { telefone: string | null; profiles: { full_name: string | null } | null } | null;
+  turmas: { cursos: { nome: string } | null } | null;
+};
+
+export async function notificarWhatsappEnviarComprovante(
+  matriculaId: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  const { data } = await createAdminClient()
+    .from("matriculas")
+    .select("alunos(telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
+    .eq("id", matriculaId)
+    .maybeSingle();
+
+  const matricula = data as unknown as LinhaMatriculaComprovante | null;
+  const aluno = matricula?.alunos;
+  if (!matricula || !aluno?.telefone) {
+    return { ok: false, erro: "Aluno sem telefone cadastrado." };
+  }
+
+  // "wz_envio_comprovante"/equivalente também não existe entre as colunas reais (ver
+  // WHATSAPP_NOTIF_CHAVES) — enviado sem gate, mesmo critério de notificarWhatsappEnviarContrato.
+  const nome = primeiroNome(aluno.profiles?.full_name) || "aluno(a)";
+  const curso = matricula.turmas?.cursos?.nome ?? "seu curso";
+  const url = `${urlPortal()}/api/comprovantes/${matriculaId}/pdf`;
+  const mensagem =
+    `Olá ${nome}! 🎓 Seu comprovante de matrícula do curso ${curso} está disponível:\n\n` +
+    `${url}\n\n` +
+    `Guarde este documento como confirmação da sua matrícula na Gênezi. Qualquer dúvida, estamos à disposição! 😊`;
+
+  const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
+  if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { ok: true };
+}
+
 // ----- Cobrança: atrasada, por faixa de dias (cron verificar-atrasos) -----
 // Chamada sequencialmente dentro do loop do cron (o delay entre mensagens é o próprio
 // comportamento anti-banimento desejado) — por isso é awaitable, não fire-and-forget.

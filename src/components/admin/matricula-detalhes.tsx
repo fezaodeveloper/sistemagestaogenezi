@@ -23,7 +23,7 @@ import {
 import { MatriculaComprovantePdf } from "@/components/admin/matricula-comprovante-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { ResponsavelMenorDialog, type ResponsavelMenor } from "@/components/admin/responsavel-menor-dialog";
-import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
+import { WhatsappStubButton, WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -574,6 +574,7 @@ export function MatriculaDetalhes({
               </Button>
             }
           />
+          <WhatsappStubButton tipo="comprovante" matriculaId={matriculaAtual.id} label="Enviar comprovante" />
           {!modoEdicao && (
             <>
               <Button variant="outline" onClick={entrarEdicao}>
