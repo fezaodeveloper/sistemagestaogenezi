@@ -38,6 +38,7 @@ import {
   notificarSmsPagamentoRecebido,
 } from "@/lib/integrax/notificacoes";
 import {
+  emSegundoPlano,
   notificarWhatsappCobrancaGerada,
   notificarWhatsappComprovantePagamento,
   notificarWhatsappEnviarCobrancaManual,
@@ -592,6 +593,13 @@ export async function marcarComoPagoManual(
   dispararWebhookDeParcela("pedido_pago", parcelaId, { gateway: "manual" });
   notificarSmsPagamentoRecebido(parcelaId);
   emitirNotaAutomatica(parcelaId);
+  // notificarWhatsappComprovantePagamento recebe só parcelaId (ela mesma busca aluno/matrícula
+  // internamente, ver carregarParcelaParaCobranca em src/lib/whatsapp/eventos.ts) — por isso não
+  // precisa de matriculaId aqui. emSegundoPlano porque ela é awaitable (pra dar feedback real no
+  // botão manual "Enviar comprovante"), e aqui não tem ninguém esperando o resultado.
+  emSegundoPlano(async () => {
+    await notificarWhatsappComprovantePagamento(parcelaId);
+  });
 
   revalidatePath("/admin/financeiro");
   return { success: true };

@@ -4,6 +4,7 @@ import { dispararWebhookDeParcela } from "@/lib/webhooks/payloads";
 import { notificarSmsPagamentoRecebido } from "@/lib/integrax/notificacoes";
 import { emitirNotaAutomatica } from "@/lib/spedy/nfe";
 import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
+import { emSegundoPlano, notificarWhatsappComprovantePagamento } from "@/lib/whatsapp/eventos";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 
@@ -66,6 +67,17 @@ async function processarEvento(
         dispararWebhookDeParcela("pedido_pago", antes.id as string, { gateway: "asaas" });
         notificarSmsPagamentoRecebido(antes.id as string);
         emitirNotaAutomatica(antes.id as string);
+        // PAYMENT_RECEIVED e PAYMENT_CONFIRMED caem no MESMO case (fallthrough) — não são dois
+        // blocos pra escolher entre si, são o mesmo código rodando pra cada webhook que chega.
+        // O guard "antes.status !== 'pago'" acima é o que já evita duplicar (mesmo mecanismo que
+        // protege notificarSmsPagamentoRecebido/emitirNotaAutomatica): no segundo webhook do
+        // mesmo pagamento (ex.: RECEIVED seguido de CONFIRMED no cartão), a parcela já estará
+        // "pago" e este bloco inteiro é pulado — por isso a chamada entra aqui dentro, não em
+        //"apenas um dos eventos".
+        const parcelaId = antes.id as string;
+        emSegundoPlano(async () => {
+          await notificarWhatsappComprovantePagamento(parcelaId);
+        });
       }
 
       if (!error) {
