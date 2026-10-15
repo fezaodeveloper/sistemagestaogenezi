@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, MessageCircle, Paperclip, Plus, Printer, Send } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
@@ -158,11 +158,16 @@ function KpiCard({
   valor,
   cor,
   sublabel,
+  acao,
 }: {
   label: string;
   valor: string;
   cor: "amber" | "green" | "red" | "blue";
   sublabel?: string;
+  // Conteúdo extra abaixo do sublabel (ex.: botão de ação) — só o card "Em atraso no mês" usa
+  // isso hoje (cobrança em massa), mas fica genérico pra não prender a lógica desse botão aqui
+  // dentro do KpiCard.
+  acao?: ReactNode;
 }) {
   const corTexto: Record<string, string> = {
     amber: "#FFB020",
@@ -180,6 +185,7 @@ function KpiCard({
           {valor}
         </span>
         {sublabel && <span className="text-muted-foreground text-xs">{sublabel}</span>}
+        {acao}
       </CardContent>
     </Card>
   );
@@ -1126,25 +1132,7 @@ export function FinanceiroView({
       </div>
 
       <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-col gap-1">
-            {dados.kpis.countAtrasado > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={WHATSAPP_BUTTON_CLASS}
-                disabled={enviandoEmMassa}
-                onClick={() => setConfirmandoEmMassa(true)}
-              >
-                <Send />
-                {enviandoEmMassa ? "Enviando... (pode levar alguns minutos)" : "Enviar cobrança a todos os atrasados"}
-              </Button>
-            )}
-            {resultadoEmMassa && (
-              <span className="text-muted-foreground text-sm">{resultadoEmMassa}</span>
-            )}
-          </div>
+        <div className="mb-3 flex items-center justify-end">
           <Button type="button" variant="ghost" size="sm" onClick={() => setKpisVisiveis((atual) => !atual)}>
             {kpisVisiveis ? <Eye /> : <EyeOff />}
             {kpisVisiveis ? "Ocultar valores" : "Mostrar valores"}
@@ -1166,6 +1154,26 @@ export function FinanceiroView({
             valor={kpisVisiveis ? formatValor(dados.kpis.totalAtrasado) : VALOR_OCULTO}
             cor="red"
             sublabel={`${dados.kpis.countAtrasado} parcela(s)`}
+            acao={
+              dados.kpis.countAtrasado > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`${WHATSAPP_BUTTON_CLASS} w-fit`}
+                    disabled={enviandoEmMassa}
+                    onClick={() => setConfirmandoEmMassa(true)}
+                  >
+                    <Send className="size-3.5" />
+                    {enviandoEmMassa ? "Enviando..." : "Cobrar todos via WhatsApp"}
+                  </Button>
+                  {resultadoEmMassa && (
+                    <span className="text-muted-foreground text-xs">{resultadoEmMassa}</span>
+                  )}
+                </div>
+              ) : undefined
+            }
           />
           <KpiCard
             label="Adimplência"
