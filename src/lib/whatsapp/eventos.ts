@@ -315,16 +315,71 @@ export async function notificarWhatsappEnviarContrato(
   // src/lib/configuracoes/schema.ts) — enviado sem gate, como pedido explicitamente na tarefa.
   const nome = primeiroNome(aluno.profiles?.full_name) || "aluno(a)";
   const curso = contrato.matriculas?.turmas?.cursos?.nome ?? "seu curso";
-  const url = `${urlPortal()}/api/contratos/${matriculaId}/pdf`;
+  // Dois links: /aluno/contrato (exige login — é onde o aluno LÊ e ASSINA de verdade, ver
+  // AlunoContratoView) e a rota pública de PDF cru (só leitura/download, sem assinatura).
+  const urlAssinar = `${urlPortal()}/aluno/contrato`;
+  const urlPdf = `${urlPortal()}/api/contratos/${matriculaId}/pdf`;
   const mensagem =
-    `Olá ${nome}! 📄 Seu contrato do curso ${curso} está disponível para visualização e download:\n\n` +
-    `${url}\n\n` +
-    `Guarde este documento — ele confirma sua matrícula na Gênezi. Qualquer dúvida, estamos à disposição! 😊`;
+    `Olá ${nome}! 📄 Seu contrato do curso ${curso} está disponível.\n\n` +
+    `✍️ Para ler e assinar digitalmente, acesse sua área do aluno:\n${urlAssinar}\n\n` +
+    `📥 Para baixar o PDF diretamente:\n${urlPdf}\n\n` +
+    `Qualquer dúvida, estamos à disposição! 😊`;
 
   const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
   if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
   if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
   return { ok: true };
+}
+
+// ----- Contrato: aviso ao ADMIN quando o aluno assina digitalmente (/aluno/contrato) -----
+// Fire-and-forget de propósito (pedido explícito) — é um aviso complementar ao Telegram que já
+// existe (notificarContratoAssinado em src/lib/automacoes/handlers/telegram.ts), não um fluxo
+// que alguém espera/precisa confirmar.
+//
+// "profiles" NÃO tem coluna de telefone (só full_name/avatar_url/avatar_id — telefone é só de
+// aluno/responsável). Não existe em lugar nenhum do banco um "telefone do admin" dedicado — o
+// único número de telefone de contato da escola salvo é configuracoes.escola_telefone, reaproveitado
+// aqui como o destino do aviso (mesmo papel que TELEGRAM_CHAT_ID cumpre do lado do Telegram).
+function formatarDataHoraAdmin(iso: string): string {
+  const date = new Date(iso);
+  const data = date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const hora = date.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${data} ${hora}`;
+}
+
+export function notificarWhatsappContratoAssinado(matriculaId: string, alunoId: string): void {
+  emSegundoPlano(async () => {
+    const admin = createAdminClient();
+    const [{ data: alunoData }, { data: matriculaData }, { data: contratoData }, { data: configData }] =
+      await Promise.all([
+        admin.from("profiles").select("full_name").eq("id", alunoId).maybeSingle(),
+        admin.from("matriculas").select("turmas(cursos(nome))").eq("id", matriculaId).maybeSingle(),
+        admin.from("contratos_assinados").select("aceito_em").eq("matricula_id", matriculaId).maybeSingle(),
+        admin.from("configuracoes").select("escola_telefone").eq("id", true).maybeSingle(),
+      ]);
+
+    const telefoneAdmin = configData?.escola_telefone as string | null | undefined;
+    if (!telefoneAdmin) return;
+
+    const nomeAluno = (alunoData?.full_name as string | null) ?? "aluno(a)";
+    const curso =
+      (matriculaData as unknown as { turmas: { cursos: { nome: string } | null } | null } | null)?.turmas?.cursos
+        ?.nome ?? "—";
+    const aceitoEm = contratoData?.aceito_em as string | null;
+
+    const mensagem =
+      `📝 Contrato assinado!\n\n` +
+      `👤 Aluno: ${nomeAluno}\n` +
+      `📚 Curso: ${curso}\n` +
+      `🕐 Assinado em: ${aceitoEm ? formatarDataHoraAdmin(aceitoEm) : "—"}\n\n` +
+      `Acesse o painel para visualizar: ${urlPortal()}/admin/contratos`;
+
+    await enviarWhatsApp(telefoneAdmin, mensagem);
+  });
 }
 
 // ----- Comprovante de matrícula: reenvio manual (botão "Enviar comprovante") -----

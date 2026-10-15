@@ -65,7 +65,17 @@ export async function assinarContrato(matriculaId: string): Promise<{ error?: st
 
   await dispararEvento(
     "contrato.assinado",
-    { nome_aluno: user.full_name ?? user.email ?? "—", nome_curso: nomeCurso, matricula_id: matriculaId },
+    {
+      nome_aluno: user.full_name ?? user.email ?? "—",
+      nome_curso: nomeCurso,
+      matricula_id: matriculaId,
+      // matriculaId/alunoId (camelCase, adicionados nesta tarefa): lidos por
+      // notificarContratoAssinado (src/lib/automacoes/handlers/telegram.ts) pra disparar o
+      // aviso complementar de WhatsApp ao admin — matricula_id (snake_case) já existia antes e
+      // fica mantido, mesmo sem nenhum consumidor atual, pra não quebrar nada que já leia esse campo.
+      matriculaId,
+      alunoId: user.id,
+    },
     `contrato-assinado-${matriculaId}`,
   );
 

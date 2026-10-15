@@ -4,6 +4,7 @@ import { enviarAlertaTelegram } from "@/lib/telegram/client";
 import { enviarPushAdmin } from "@/lib/push/enviar";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { escapeHtml, sendTelegram } from "@/lib/telegram";
+import { notificarWhatsappContratoAssinado } from "@/lib/whatsapp/eventos";
 
 const LINK_FINANCEIRO = "https://sistemagestaogenezi.vercel.app/admin/financeiro";
 const LINK_LEADS = "https://sistemagestaogenezi.vercel.app/admin/leads";
@@ -216,7 +217,7 @@ export async function notificarErroSistema(payload: Record<string, unknown>): Pr
 }
 
 export async function notificarContratoAssinado(payload: Record<string, unknown>): Promise<boolean> {
-  return enviarAlertaTelegram(
+  const resultado = await enviarAlertaTelegram(
     "Contrato Assinado",
     [
       `📝 ${texto(payload.nome_aluno)} assinou o contrato digitalmente`,
@@ -224,6 +225,16 @@ export async function notificarContratoAssinado(payload: Record<string, unknown>
     ],
     "✅",
   );
+
+  // Aviso complementar por WhatsApp — best-effort, nunca deve afetar o resultado da notificação
+  // do Telegram acima (já enviada e retornada normalmente). notificarWhatsappContratoAssinado já
+  // roda dentro do próprio emSegundoPlano internamente (void, fire-and-forget) — não precisa de
+  // um segundo emSegundoPlano aqui por fora.
+  if (typeof payload.matriculaId === "string" && typeof payload.alunoId === "string") {
+    notificarWhatsappContratoAssinado(payload.matriculaId, payload.alunoId);
+  }
+
+  return resultado;
 }
 
 export async function notificarContratoPendente(payload: Record<string, unknown>): Promise<boolean> {
