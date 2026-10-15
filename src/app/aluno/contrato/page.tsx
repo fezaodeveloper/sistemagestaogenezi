@@ -46,12 +46,7 @@ export default async function AlunoContratoPage() {
             </Badge>
             {contrato.conteudo_pdf_base64 && (
               <Button
-                render={
-                  <a
-                    href={`data:application/pdf;base64,${contrato.conteudo_pdf_base64}`}
-                    download="contrato.pdf"
-                  />
-                }
+                render={<a href={`/api/contratos/${contrato.matricula_id}/pdf`} download="contrato.pdf" />}
                 nativeButton={false}
                 variant="outline"
               >

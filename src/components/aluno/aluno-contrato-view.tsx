@@ -48,9 +48,9 @@ export function AlunoContratoView({ contrato }: { contrato: ContratoAssinado }) 
         <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
           <Check className="text-primary size-8" />
           <p className="font-medium">Contrato assinado com sucesso!</p>
-          {pdfUrl && (
+          {contrato.conteudo_pdf_base64 && (
             <Button
-              render={<a href={pdfUrl} download="contrato.pdf" />}
+              render={<a href={`/api/contratos/${contrato.matricula_id}/pdf`} download="contrato.pdf" />}
               nativeButton={false}
               variant="outline"
             >
