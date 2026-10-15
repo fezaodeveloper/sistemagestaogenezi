@@ -11,6 +11,7 @@ import { getConquistasAtivo } from "@/lib/conquistas/config";
 import { escolherLogo, getLogosEscola } from "@/lib/personalizacao/logos";
 import { ConquistasPersonalizadasProvider } from "@/components/aluno/conquistas-personalizadas-provider";
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
+import { AlunoBottomNav } from "@/components/aluno/aluno-bottom-nav";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -109,9 +110,10 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
             <Separator orientation="vertical" className="h-4" />
             <span className="text-sm font-medium">Área do aluno</span>
           </header>
-          <div className="flex-1 p-6">{children}</div>
+          <div className="flex-1 p-6 pb-20 md:pb-6">{children}</div>
         </SidebarInset>
       </SidebarProvider>
+      <AlunoBottomNav />
     </div>
   );
 }
