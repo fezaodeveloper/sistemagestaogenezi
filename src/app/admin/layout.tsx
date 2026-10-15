@@ -6,6 +6,7 @@ import { getContadoresNotificacoes } from "@/lib/admin/notificacoes";
 import { getPendencias } from "@/app/admin/pendencias/actions";
 import { getLogosEscola } from "@/lib/personalizacao/logos";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { AdminBottomNav } from "@/components/admin/admin-bottom-nav";
 import { SinoNotificacoes } from "@/components/admin/sino-notificacoes";
 import { BuscaGlobal } from "@/components/admin/busca-global";
 import { BalaoAcessoRemoto } from "@/components/admin/balao-acesso-remoto";
@@ -61,9 +62,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               <SinoNotificacoes grupos={gruposNotificacao} />
             </div>
           </header>
-          <div className="flex-1 p-6">{children}</div>
+          <div className="flex-1 p-6 pb-20 md:pb-6">{children}</div>
         </SidebarInset>
       </SidebarProvider>
+      <AdminBottomNav />
       {/* Balão flutuante de acesso remoto (fixo, só no painel admin). */}
       <BalaoAcessoRemoto />
     </div>
