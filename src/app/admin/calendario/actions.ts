@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sincronizarFeriados } from "@/lib/calendario/feriados-api";
+import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 import {
   eventoFormSchema,
   type EventoCalendarioComRelacoes,
@@ -184,4 +186,58 @@ export async function sincronizarFeriadosAction(ano: number): Promise<Sincroniza
       error: "Não foi possível sincronizar os feriados. Tente novamente.",
     };
   }
+}
+
+export type EnviarAvisoFeriadoResult = { enviadas: number; erros: number };
+
+type LinhaMatriculaAtiva = {
+  aluno_id: string;
+  alunos: { telefone: string | null; profiles: { full_name: string | null } | null } | null;
+};
+
+// Mensagem manual em massa pra todo aluno com matrícula ativa, disparada do dialog de evento do
+// calendário (botão "Enviar para todos os alunos", só quando o evento é um feriado). Dedup por
+// aluno_id: um aluno com mais de uma matrícula ativa não recebe a mensagem repetida. Sequencial
+// de propósito (for...of com await, não Promise.all) — mesmo padrão dos outros envios em massa
+// deste projeto, enviarWhatsApp já embute o delay anti-banimento.
+export async function enviarAvisoFeriadoAction(
+  eventoId: string,
+  nomeEvento: string,
+  mensagem: string,
+): Promise<EnviarAvisoFeriadoResult> {
+  await requireRole("admin");
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("matriculas")
+    .select("aluno_id, alunos(telefone, profiles!alunos_id_fkey(full_name))")
+    .eq("status", "ativa");
+
+  if (error || !data) {
+    console.error("[enviarAvisoFeriadoAction]", error);
+    return { enviadas: 0, erros: 0 };
+  }
+
+  const vistos = new Set<string>();
+  let enviadas = 0;
+  let erros = 0;
+  for (const matricula of data as unknown as LinhaMatriculaAtiva[]) {
+    if (vistos.has(matricula.aluno_id)) continue;
+    vistos.add(matricula.aluno_id);
+
+    const telefone = matricula.alunos?.telefone;
+    if (!telefone) {
+      erros++;
+      continue;
+    }
+
+    const nome = matricula.alunos?.profiles?.full_name ?? "aluno(a)";
+    const texto = mensagem.replaceAll("{nome}", nome).replaceAll("{feriado}", nomeEvento);
+
+    const resultado = await enviarWhatsApp(telefone, texto);
+    if (resultado.ok && resultado.enviado) enviadas++;
+    else erros++;
+  }
+
+  return { enviadas, erros };
 }

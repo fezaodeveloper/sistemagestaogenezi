@@ -5,9 +5,10 @@
 
 import { useEffect, useMemo, useOptimistic, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, LayoutGrid, List, Trash2 } from "lucide-react";
+import { Ban, LayoutGrid, List, Send, Trash2 } from "lucide-react";
 import {
   atualizarStatusAgendamento,
+  enviarMensagemAgendadosAction,
   excluirAgendamento,
   excluirAgendamentosEmLote,
 } from "@/app/admin/comercial/agendamentos/actions";
@@ -41,6 +42,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 // "Agendado" é o status `confirmado` (o padrão de todo agendamento novo).
@@ -343,6 +345,11 @@ export function AgendamentosKanbanView({
   const [isPending, startTransition] = useTransition();
   const [visualizacao, setVisualizacao] = useState<Visualizacao>("card");
   const [mensagemLote, setMensagemLote] = useState<string | null>(null);
+  const [isPendingEnvio, startEnvio] = useTransition();
+  const [mensagemAgendados, setMensagemAgendados] = useState(
+    "Olá, {nome}! 👋 Lembrando do seu agendamento no dia {data} às {horario}. Qualquer dúvida, estamos à disposição!",
+  );
+  const [resultadoEnvio, setResultadoEnvio] = useState<{ enviadas: number; erros: number } | null>(null);
 
   // localStorage só existe no client: restaura a preferência em efeito (nunca
   // no render inicial, senão o HTML do server diverge do client e dá hydration
@@ -518,6 +525,51 @@ export function AgendamentosKanbanView({
             <Input type="date" value={data} onChange={(event) => handleDataChange(event.target.value)} className="w-40" />
           </div>
         )}
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={
+              <Button variant="outline" size="sm" disabled={isPendingEnvio}>
+                <Send />
+                {isPendingEnvio ? "Enviando..." : "Enviar para todos"}
+              </Button>
+            }
+          />
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Mensagem para todos os agendados</AlertDialogTitle>
+              <AlertDialogDescription>
+                Envia para todos os agendamentos com status &quot;confirmado&quot; desta página. Use{" "}
+                {"{nome}"}, {"{data}"} e {"{horario}"} como variáveis.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Textarea
+              value={mensagemAgendados}
+              onChange={(event) => setMensagemAgendados(event.target.value)}
+              rows={4}
+              className="mt-2"
+            />
+            {resultadoEnvio && (
+              <p className="text-muted-foreground mt-2 text-sm">
+                ✅ {resultadoEnvio.enviadas} enviadas, ❌ {resultadoEnvio.erros} erros
+              </p>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isPendingEnvio || !mensagemAgendados.trim()}
+                onClick={() =>
+                  startEnvio(async () => {
+                    setResultadoEnvio(null);
+                    const resultado = await enviarMensagemAgendadosAction(paginaId, mensagemAgendados);
+                    setResultadoEnvio(resultado);
+                  })
+                }
+              >
+                Enviar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <div className="ml-auto flex items-center gap-1 rounded-md border p-0.5" role="group" aria-label="Modo de visualização">
           <Button
             type="button"

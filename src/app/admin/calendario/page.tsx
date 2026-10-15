@@ -2,6 +2,11 @@ import { requireRole } from "@/lib/auth/dal";
 import { getEventos } from "@/app/admin/calendario/actions";
 import { CalendarioView } from "@/components/admin/calendario-view";
 
+// Eleva o timeout das Server Actions chamadas a partir desta página — necessário pro botão
+// "Enviar para todos os alunos" (enviarAvisoFeriadoAction, envio sequencial com delay
+// anti-banimento). Mesmo raciocínio de /admin/alunos/page.tsx.
+export const maxDuration = 60;
+
 export default async function CalendarioPage() {
   await requireRole("admin");
 

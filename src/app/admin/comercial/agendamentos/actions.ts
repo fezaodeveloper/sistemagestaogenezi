@@ -22,6 +22,7 @@ import {
 } from "@/lib/agendamentos/schema";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { notificarWhatsappAgendamentoCancelado, notificarWhatsappAgendamentoFalta } from "@/lib/whatsapp/eventos";
+import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 
 const DATA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const HORARIO_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -385,4 +386,47 @@ export async function reagendarAgendamento(id: string, dataISO: string, horario:
 
   revalidarAgendamentos();
   return {};
+}
+
+export type EnviarMensagemAgendadosResult = { enviadas: number; erros: number };
+
+// Mensagem manual em massa pra todos os confirmados da página (botão "Enviar para todos" no
+// Kanban). Usa createAdminClient (não createClient) pra buscar TODOS os confirmados sem
+// paginação — getAgendamentos (acima) já faz isso sem .range(), mas aqui chama direto a tabela
+// porque o resultado não precisa do tipo Agendamento completo, só dos campos usados na mensagem.
+// Sequencial de propósito (for...of com await, não Promise.all): mesmo padrão dos outros envios
+// em massa deste projeto — enviarWhatsApp já embute o delay anti-banimento.
+export async function enviarMensagemAgendadosAction(
+  paginaId: string,
+  mensagem: string,
+): Promise<EnviarMensagemAgendadosResult> {
+  await requireRole("admin");
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("agendamentos")
+    .select("id, nome, whatsapp, data_agendada, horario")
+    .eq("pagina_id", paginaId)
+    .eq("status", "confirmado")
+    .order("data_agendada", { ascending: true });
+
+  if (error || !data) {
+    console.error("[enviarMensagemAgendadosAction]", error);
+    return { enviadas: 0, erros: 0 };
+  }
+
+  let enviadas = 0;
+  let erros = 0;
+  for (const ag of data as { id: string; nome: string; whatsapp: string; data_agendada: string; horario: string }[]) {
+    const texto = mensagem
+      .replaceAll("{nome}", ag.nome)
+      .replaceAll("{data}", new Date(`${ag.data_agendada}T12:00:00`).toLocaleDateString("pt-BR"))
+      .replaceAll("{horario}", ag.horario);
+
+    const resultado = await enviarWhatsApp(ag.whatsapp, texto);
+    if (resultado.ok && resultado.enviado) enviadas++;
+    else erros++;
+  }
+
+  return { enviadas, erros };
 }

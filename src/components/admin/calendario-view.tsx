@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { deleteEvento, getEventos, sincronizarFeriadosAction } from "@/app/admin/calendario/actions";
+import { ChevronLeft, ChevronRight, Loader2, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import {
+  deleteEvento,
+  enviarAvisoFeriadoAction,
+  getEventos,
+  sincronizarFeriadosAction,
+} from "@/app/admin/calendario/actions";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ABRANGENCIA_LABELS,
   EVENTO_TIPO_BADGE_CLASS,
@@ -118,6 +124,11 @@ export function CalendarioView({
   );
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  const [isPendingFeriado, startFeriado] = useTransition();
+  const [mensagemFeriado, setMensagemFeriado] = useState(
+    "Olá, {nome}! 📅 Informamos que não haverá aulas no dia de {feriado}. Bom feriado! 🎉",
+  );
+  const [resultadoFeriado, setResultadoFeriado] = useState<{ enviadas: number; erros: number } | null>(null);
 
   function irParaMes(novoAno: number, novoMes: number) {
     startTransition(async () => {
@@ -321,6 +332,7 @@ export function CalendarioView({
           if (!open) {
             setEventoSelecionado(null);
             setConfirmandoExclusao(false);
+            setResultadoFeriado(null);
           }
         }}
       >
@@ -390,6 +402,41 @@ export function CalendarioView({
                   </p>
                 )}
               </div>
+              {eventoSelecionado.tipo === "feriado" && (
+                <div className="mt-4 border-t pt-4">
+                  <p className="mb-2 text-sm font-medium">Enviar aviso de feriado</p>
+                  <Textarea
+                    value={mensagemFeriado}
+                    onChange={(event) => setMensagemFeriado(event.target.value)}
+                    rows={3}
+                    className="mb-2"
+                    placeholder="Use {nome} e {feriado} como variáveis"
+                  />
+                  {resultadoFeriado && (
+                    <p className="text-muted-foreground mb-2 text-sm">
+                      ✅ {resultadoFeriado.enviadas} enviadas, ❌ {resultadoFeriado.erros} erros
+                    </p>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPendingFeriado || !mensagemFeriado.trim()}
+                    onClick={() =>
+                      startFeriado(async () => {
+                        const resultado = await enviarAvisoFeriadoAction(
+                          eventoSelecionado.id,
+                          eventoSelecionado.nome,
+                          mensagemFeriado,
+                        );
+                        setResultadoFeriado(resultado);
+                      })
+                    }
+                  >
+                    <Send />
+                    {isPendingFeriado ? "Enviando..." : "Enviar para todos os alunos"}
+                  </Button>
+                </div>
+              )}
               <DialogFooter>
                 {confirmandoExclusao ? (
                   <>

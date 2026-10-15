@@ -10,6 +10,11 @@ import {
 import { calcularOffset, calcularTotalPaginas, LIMITE_PADRAO, parsePagina } from "@/lib/paginacao";
 import { AgendamentosKanbanView } from "@/components/admin/agendamentos-kanban-view";
 
+// Eleva o timeout das Server Actions chamadas a partir desta página — necessário pro botão
+// "Enviar para todos" (enviarMensagemAgendadosAction, envio sequencial com delay
+// anti-banimento). Mesmo raciocínio de /admin/alunos/page.tsx.
+export const maxDuration = 60;
+
 export default async function AgendamentoPaginaDetalhePage({
   params,
   searchParams,
