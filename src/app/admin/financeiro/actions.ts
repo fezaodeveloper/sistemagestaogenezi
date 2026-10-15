@@ -37,7 +37,11 @@ import {
   notificarSmsCobrancaGerada,
   notificarSmsPagamentoRecebido,
 } from "@/lib/integrax/notificacoes";
-import { notificarWhatsappCobrancaGerada } from "@/lib/whatsapp/eventos";
+import {
+  notificarWhatsappCobrancaGerada,
+  notificarWhatsappComprovantePagamento,
+  notificarWhatsappEnviarCobrancaManual,
+} from "@/lib/whatsapp/eventos";
 import {
   criarClienteAsaas,
   buscarClienteAsaasPorCpf,
@@ -712,4 +716,34 @@ export async function gerarCarne(installmentId: string): Promise<GerarCarneResul
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Não foi possível gerar o carnê." };
   }
+}
+
+// matriculaId não é usado — notificarWhatsappEnviarCobrancaManual (src/lib/whatsapp/eventos.ts)
+// já busca aluno/telefone/curso a partir só do parcelaId (mesma query de
+// notificarWhatsappCobrancaGerada, que roda pro mesmo evento automaticamente). Mantido como
+// parâmetro pra bater com a assinatura pedida, mas sem uso real — não repassado pra frente.
+export async function enviarCobrancaWhatsappAction(
+  _matriculaId: string,
+  parcelaId: string,
+): Promise<ParcelaActionResult> {
+  await requireRole("admin");
+
+  const resultado = await notificarWhatsappEnviarCobrancaManual(parcelaId);
+  if (!resultado.ok) {
+    return { error: resultado.erro ?? "Não foi possível enviar a cobrança por WhatsApp." };
+  }
+  return { success: true };
+}
+
+export async function enviarComprovantePagamentoWhatsappAction(
+  _matriculaId: string,
+  parcelaId: string,
+): Promise<ParcelaActionResult> {
+  await requireRole("admin");
+
+  const resultado = await notificarWhatsappComprovantePagamento(parcelaId);
+  if (!resultado.ok) {
+    return { error: resultado.erro ?? "Não foi possível enviar o comprovante por WhatsApp." };
+  }
+  return { success: true };
 }

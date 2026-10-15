@@ -20,7 +20,9 @@ import {
 const MENSAGEM_PADRAO =
   "Integração com WhatsApp em breve. Esta funcionalidade será habilitada com a API Evolution.";
 
-const WHATSAPP_BUTTON_CLASS =
+// Exportada pra outros botões de WhatsApp fora deste arquivo terem o mesmo visual (ex.:
+// "Enviar cobrança"/"Enviar comprovante" em financeiro-view.tsx, que não são mais stub).
+export const WHATSAPP_BUTTON_CLASS =
   "border-green-500/30 text-green-600 opacity-80 hover:bg-green-500/10 hover:text-green-700 hover:opacity-100 dark:text-green-400 dark:hover:text-green-300";
 
 function disparar(tipo: WhatsappStubTipo, matriculaId: string, mensagem: string) {

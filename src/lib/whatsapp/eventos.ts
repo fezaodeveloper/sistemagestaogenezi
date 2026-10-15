@@ -158,6 +158,7 @@ type LinhaParcelaCobranca = {
   valor: number;
   numero_parcela: number;
   data_vencimento: string | null;
+  data_pagamento: string | null;
   asaas_invoice_url: string | null;
   asaas_bank_slip_url: string | null;
   alunos: { id: string; full_name: string | null; telefone: string | null } | null;
@@ -168,7 +169,7 @@ async function carregarParcelaParaCobranca(parcelaId: string): Promise<LinhaParc
   const { data } = await createAdminClient()
     .from("parcelas")
     .select(
-      "valor, numero_parcela, data_vencimento, asaas_invoice_url, asaas_bank_slip_url, alunos(id, full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
+      "valor, numero_parcela, data_vencimento, data_pagamento, asaas_invoice_url, asaas_bank_slip_url, alunos(id, full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
     )
     .eq("id", parcelaId)
     .maybeSingle();
@@ -202,6 +203,76 @@ export function notificarWhatsappCobrancaGerada(parcelaId: string): void {
     });
     await enviarWhatsApp(aluno.telefone, mensagem);
   });
+}
+
+// ----- Cobrança/comprovante: reenvio manual (botão "Enviar cobrança"/"Enviar comprovante" na
+// tela de Financeiro, src/components/admin/financeiro-view.tsx) -----
+// Diferente dos eventos automáticos acima: são AWAITABLE (não emSegundoPlano/fire-and-forget)
+// de propósito — a Server Action que chama precisa saber se o envio realmente funcionou pra
+// mostrar sucesso/erro pro admin, não só "disparei e já volto".
+
+export async function notificarWhatsappEnviarCobrancaManual(
+  parcelaId: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  // Nem "wz_envio_cobranca" nem "wz_cobranca_atrasada" existem entre as colunas reais (ver
+  // WHATSAPP_NOTIF_CHAVES em src/lib/configuracoes/schema.ts — a cobrança atrasada é dividida
+  // em d1/d3/d7/d15, sem uma chave "geral"). Reaproveita wz_cobranca_gerada: é o toggle mais
+  // próximo semanticamente já existente, o mesmo usado por notificarWhatsappCobrancaGerada acima
+  // pro envio automático desta mesma mensagem.
+  if (!(await whatsappToggleHabilitado("wz_cobranca_gerada"))) {
+    return { ok: false, erro: "Notificações de cobrança por WhatsApp estão desativadas em Configurações." };
+  }
+
+  const parcela = await carregarParcelaParaCobranca(parcelaId);
+  const aluno = parcela?.alunos;
+  if (!parcela || !aluno?.telefone) {
+    return { ok: false, erro: "Aluno sem telefone cadastrado." };
+  }
+
+  const curso = parcela.matriculas?.turmas?.cursos?.nome ?? "seu curso";
+  const link = parcela.asaas_bank_slip_url ?? parcela.asaas_invoice_url ?? "";
+  const mensagem = await renderTemplate("cobranca_gerada", {
+    nome: primeiroNome(aluno.full_name) || "aluno(a)",
+    valor: reais(parcela.valor),
+    vencimento: dataBR(parcela.data_vencimento),
+    descricao: `Parcela ${rotuloParcela(parcela)} - ${curso}`,
+    link_boleto: link,
+    codigo_pix: link,
+  });
+
+  const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
+  if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { ok: true };
+}
+
+export async function notificarWhatsappComprovantePagamento(
+  parcelaId: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  // Sem toggle dedicado: não existe nenhuma coluna wz_* pra confirmação de pagamento na lista
+  // real (ver WHATSAPP_NOTIF_CHAVES) — enviada sempre, por ser uma ação manual e pontual do
+  // admin (clique em "Enviar comprovante"), não uma automação recorrente que precise de um
+  // interruptor próprio.
+  const parcela = await carregarParcelaParaCobranca(parcelaId);
+  const aluno = parcela?.alunos;
+  if (!parcela || !aluno?.telefone) {
+    return { ok: false, erro: "Aluno sem telefone cadastrado." };
+  }
+  if (!parcela.data_pagamento) {
+    return { ok: false, erro: "Esta parcela ainda não tem pagamento confirmado." };
+  }
+
+  const curso = parcela.matriculas?.turmas?.cursos?.nome ?? "seu curso";
+  const nome = primeiroNome(aluno.full_name) || "aluno(a)";
+  const mensagem =
+    `✅ Pagamento confirmado! Olá, ${nome}, recebemos o pagamento da parcela ${rotuloParcela(parcela)} ` +
+    `do curso ${curso} no valor de ${reais(parcela.valor)} em ${dataBR(parcela.data_pagamento)}.\n\n` +
+    `Obrigado pela confiança! 🎓`;
+
+  const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
+  if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { ok: true };
 }
 
 // ----- Cobrança: atrasada, por faixa de dias (cron verificar-atrasos) -----

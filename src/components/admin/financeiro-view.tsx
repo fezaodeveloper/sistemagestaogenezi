@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, Paperclip, Plus, Printer } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, MessageCircle, Paperclip, Plus, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import {
   cancelarParcela,
   criarParcelaManual,
+  enviarCobrancaWhatsappAction,
+  enviarComprovantePagamentoWhatsappAction,
   estornarParcela,
   gerarCarne,
   gerarCobranca,
@@ -21,7 +23,7 @@ import {
 } from "@/app/admin/financeiro/actions";
 import { gerarRelatorioMEI } from "@/app/admin/financeiro/mei/actions";
 import { createClient } from "@/lib/supabase/client";
-import { WhatsappStubDropdown } from "@/components/admin/whatsapp-stub";
+import { WHATSAPP_BUTTON_CLASS } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -521,6 +523,10 @@ function AcoesParcela({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Estado próprio (não isPending/error de cima) pra não desabilitar/confundir com os outros
+  // botões desta linha (Gerar cobrança, Marcar como pago, etc.) enquanto envia WhatsApp.
+  const [enviandoWhatsapp, setEnviandoWhatsapp] = useState<"cobranca" | "comprovante" | null>(null);
+  const [mensagemWhatsapp, setMensagemWhatsapp] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
   const [confirmandoEstorno, setConfirmandoEstorno] = useState(false);
   const [pagamentoDialogOpen, setPagamentoDialogOpen] = useState(false);
@@ -611,6 +617,36 @@ function AcoesParcela({
     });
   }
 
+  async function handleEnviarCobrancaWhatsapp() {
+    setMensagemWhatsapp(null);
+    setEnviandoWhatsapp("cobranca");
+    try {
+      const resultado = await enviarCobrancaWhatsappAction(parcela.matricula_id, parcela.id);
+      setMensagemWhatsapp(
+        "error" in resultado
+          ? { tipo: "erro", texto: resultado.error }
+          : { tipo: "sucesso", texto: "Cobrança enviada via WhatsApp!" },
+      );
+    } finally {
+      setEnviandoWhatsapp(null);
+    }
+  }
+
+  async function handleEnviarComprovanteWhatsapp() {
+    setMensagemWhatsapp(null);
+    setEnviandoWhatsapp("comprovante");
+    try {
+      const resultado = await enviarComprovantePagamentoWhatsappAction(parcela.matricula_id, parcela.id);
+      setMensagemWhatsapp(
+        "error" in resultado
+          ? { tipo: "erro", texto: resultado.error }
+          : { tipo: "sucesso", texto: "Comprovante enviado via WhatsApp!" },
+      );
+    } finally {
+      setEnviandoWhatsapp(null);
+    }
+  }
+
   const emAberto = parcela.status === "pendente" || parcela.status === "atrasado";
   // Cartão é processado na maquininha Infinipay (fora do Asaas) — nunca gera
   // cobrança, só permite baixa manual. Com asaas_payment_id já existente
@@ -628,26 +664,32 @@ function AcoesParcela({
             {isPending ? "Gerando..." : "Gerar cobrança"}
           </Button>
         )}
-        <WhatsappStubDropdown
-          matriculaId={parcela.matricula_id}
-          opcoes={[
-            {
-              tipo: "cobranca",
-              label: "Enviar cobrança",
-              mensagem: parcela.asaas_invoice_url
-                ? `Integração com WhatsApp em breve. Quando ativa, enviará o link da fatura: ${parcela.asaas_invoice_url}`
-                : "Integração com WhatsApp em breve.",
-            },
-            {
-              tipo: "comprovante",
-              label: "Enviar comprovante",
-              mensagem:
-                parcela.status === "pago"
-                  ? "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante de pagamento ao aluno."
-                  : "Integração com WhatsApp em breve. Quando ativa, enviará o comprovante quando o pagamento for confirmado.",
-            },
-          ]}
-        />
+        {(parcela.asaas_bank_slip_url || parcela.asaas_invoice_url) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={WHATSAPP_BUTTON_CLASS}
+            disabled={enviandoWhatsapp !== null}
+            onClick={handleEnviarCobrancaWhatsapp}
+          >
+            <MessageCircle />
+            {enviandoWhatsapp === "cobranca" ? "Enviando..." : "Enviar cobrança"}
+          </Button>
+        )}
+        {parcela.status === "pago" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={WHATSAPP_BUTTON_CLASS}
+            disabled={enviandoWhatsapp !== null}
+            onClick={handleEnviarComprovanteWhatsapp}
+          >
+            <MessageCircle />
+            {enviandoWhatsapp === "comprovante" ? "Enviando..." : "Enviar comprovante"}
+          </Button>
+        )}
         {parcela.asaas_invoice_url && (
           <Button
             render={<a href={parcela.asaas_invoice_url} target="_blank" rel="noopener noreferrer" />}
@@ -777,6 +819,11 @@ function AcoesParcela({
         />
       )}
       {error && !pagamentoDialogOpen && <span className="text-destructive text-sm">{error}</span>}
+      {mensagemWhatsapp && (
+        <span className={mensagemWhatsapp.tipo === "erro" ? "text-destructive text-sm" : "text-sm text-green-600 dark:text-green-400"}>
+          {mensagemWhatsapp.texto}
+        </span>
+      )}
     </div>
   );
 }
