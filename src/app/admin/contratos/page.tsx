@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { ContratosView, type ContratoListItem } from "@/components/admin/contratos-view";
 import { Card, CardContent } from "@/components/ui/card";
 
+// Eleva o timeout das Server Actions chamadas a partir desta página — necessário pro botão
+// "Lembrar pendentes" (enviarMensagemContratoPendenteAction, envio sequencial com delay
+// anti-banimento). Mesmo raciocínio de /admin/alunos/page.tsx.
+export const maxDuration = 60;
+
 export default async function ContratosPage() {
   await requireRole("admin");
 

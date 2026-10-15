@@ -275,6 +275,43 @@ export async function notificarWhatsappComprovantePagamento(
   return { ok: true };
 }
 
+// ----- Aluno sem aula: lembrete manual em massa (botão "Inativos (7 dias)" em /admin/alunos) -----
+// AWAITABLE — a Server Action em massa que chama precisa do resultado real de cada envio pra
+// contar enviados/erros. Sem toggle dedicado: "wz_aluno_sem_acesso" não existe entre as colunas
+// reais (só a versão do Telegram, tg_aluno_sem_acesso, existe — e nunca foi ligada a lógica
+// nenhuma, ver src/lib/configuracoes/schema.ts).
+export async function notificarWhatsappAlunoSemAula(
+  telefone: string,
+  nome: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  const mensagem =
+    `Olá, ${primeiroNome(nome) || "aluno(a)"}! 👋 Notamos que faz mais de uma semana que você não ` +
+    `acessa suas aulas. Que tal retomar hoje? Acesse o portal e continue de onde parou! 📚`;
+
+  const resultado = await enviarWhatsApp(telefone, mensagem);
+  if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { ok: true };
+}
+
+// ----- Contrato pendente: lembrete manual em massa (botão "Lembrar pendentes" em /admin/contratos) -----
+// Diferente de notificarContratoPendente (Telegram, src/lib/automacoes/handlers/telegram.ts) —
+// aquele avisa o ADMIN que existem contratos parados; este manda WhatsApp direto pro ALUNO,
+// disparado manualmente. AWAITABLE, mesmo motivo de notificarWhatsappAlunoSemAula acima.
+export async function notificarWhatsappContratoPendenteLembrete(
+  telefone: string,
+  nome: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  const mensagem =
+    `Olá, ${primeiroNome(nome) || "aluno(a)"}! 📝 Seu contrato de matrícula ainda está pendente de ` +
+    `assinatura. Acesse o portal do aluno para assinar e garantir seu acesso completo ao curso!`;
+
+  const resultado = await enviarWhatsApp(telefone, mensagem);
+  if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { ok: true };
+}
+
 // ----- Contrato: reenvio manual (botão "Enviar contrato" — whatsapp-stub.tsx / matriculas-table.tsx
 // / contratos-view.tsx, todos via WhatsappStubButton/WhatsappStubDropdown) -----
 // AWAITABLE, não emSegundoPlano — mesmo motivo de notificarWhatsappEnviarCobrancaManual acima: o

@@ -1,12 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { MessageCircle } from "lucide-react";
 import { downloadContrato } from "@/app/admin/matriculas/actions";
+import { enviarMensagemContratoPendenteAction } from "@/app/admin/contratos/actions";
 import { WhatsappStubButton } from "@/components/admin/whatsapp-stub";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -101,6 +114,8 @@ function BaixarPdfButton({ matriculaId }: { matriculaId: string }) {
 export function ContratosView({ contratos }: { contratos: ContratoListItem[] }) {
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
+  const [isPendingContrato, startContrato] = useTransition();
+  const [resultadoContrato, setResultadoContrato] = useState<{ enviadas: number; erros: number } | null>(null);
 
   const contratosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -113,8 +128,59 @@ export function ContratosView({ contratos }: { contratos: ContratoListItem[] }) 
     });
   }, [contratos, statusFiltro, busca]);
 
+  const totalPendentes = useMemo(
+    () => contratos.filter((contrato) => contrato.status === "pendente").length,
+    [contratos],
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-muted-foreground text-sm">
+          {totalPendentes} contrato{totalPendentes === 1 ? "" : "s"} pendente{totalPendentes === 1 ? "" : "s"}
+        </p>
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={
+              <Button variant="outline" size="sm" disabled={isPendingContrato || totalPendentes === 0}>
+                <MessageCircle />
+                {isPendingContrato ? "Enviando..." : "Lembrar pendentes"}
+              </Button>
+            }
+          />
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Lembrar alunos com contrato pendente?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Envia uma mensagem WhatsApp para todos os {totalPendentes} aluno(s) cujo contrato de
+                matrícula ainda está com status &quot;pendente&quot;. O envio é sequencial (com delay entre
+                mensagens) e pode levar alguns minutos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {resultadoContrato && (
+              <p className="text-muted-foreground text-sm">
+                ✅ {resultadoContrato.enviadas} enviadas, ❌ {resultadoContrato.erros} erros
+              </p>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isPendingContrato}
+                onClick={() =>
+                  startContrato(async () => {
+                    setResultadoContrato(null);
+                    const resultado = await enviarMensagemContratoPendenteAction();
+                    setResultadoContrato(resultado);
+                  })
+                }
+              >
+                Enviar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <Input
           placeholder="Buscar por aluno ou curso..."

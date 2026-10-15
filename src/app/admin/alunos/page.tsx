@@ -9,6 +9,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlunosTable, type AlunoListItem } from "@/components/admin/alunos-table";
 import { ResumoCard } from "@/components/admin/resumo-card";
 
+// Eleva o timeout de TODAS as Server Actions chamadas a partir desta página (doc do Next:
+// "If using Server Actions, set the maxDuration at the page level") — necessário pro botão
+// "Inativos (7 dias)" (enviarMensagemSemAulaAction, envio sequencial com delay anti-banimento
+// de 3-8s por mensagem) não ser encerrado pela plataforma no meio do envio. Mesmo valor já
+// usado em followup-leads/route.ts e no financeiro (mesma natureza de envio em massa).
+export const maxDuration = 60;
+
 const ALUNOS_ORDER_BY_VALIDOS = ["nome", "recente", "risco"] as const;
 export type AlunosOrderBy = (typeof ALUNOS_ORDER_BY_VALIDOS)[number];
 

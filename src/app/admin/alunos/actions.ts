@@ -17,7 +17,7 @@ import { lerConfigSenhaPortal } from "@/lib/portal-login/config";
 import { enviarEmail } from "@/lib/email/provedor";
 import { renderizarTemplate } from "@/lib/email/templates";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
-import { emSegundoPlano } from "@/lib/whatsapp/eventos";
+import { emSegundoPlano, notificarWhatsappAlunoSemAula } from "@/lib/whatsapp/eventos";
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -810,4 +810,31 @@ export async function deleteAluno(id: string): Promise<{ error?: string }> {
 
   revalidatePath("/admin/alunos");
   return {};
+}
+
+export type EnviarMensagemSemAulaResult = { enviadas: number; erros: number };
+
+// RPC alunos_sem_aula_ha_dias (supabase/migrations/20261015200000_rpc_alunos_sem_aula.sql) já
+// filtra matrícula ativa + telefone preenchido — só itera e envia. Sequencial de propósito
+// (for...of com await, não Promise.all): mesmo padrão dos crons de cobrança atrasada/follow-up
+// de lead — cada chamada a notificarWhatsappAlunoSemAula já embute o delay anti-banimento.
+export async function enviarMensagemSemAulaAction(): Promise<EnviarMensagemSemAulaResult> {
+  await requireRole("admin");
+  const admin = createAdminClient();
+
+  const { data, error } = await admin.rpc("alunos_sem_aula_ha_dias", { dias: 7 });
+  if (error || !data) {
+    console.error("[enviarMensagemSemAulaAction]", error);
+    return { enviadas: 0, erros: 0 };
+  }
+
+  let enviadas = 0;
+  let erros = 0;
+  for (const aluno of data as { aluno_id: string; telefone: string; nome: string }[]) {
+    const resultado = await notificarWhatsappAlunoSemAula(aluno.telefone, aluno.nome);
+    if (resultado.ok) enviadas++;
+    else erros++;
+  }
+
+  return { enviadas, erros };
 }

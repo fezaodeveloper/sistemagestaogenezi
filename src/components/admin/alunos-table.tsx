@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { AlertTriangle, FileSpreadsheet, Printer } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { AlertTriangle, FileSpreadsheet, MessageCircle, Printer } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
@@ -16,7 +16,7 @@ import { Paginacao } from "@/components/ui/paginacao";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 import { useBuscaUrl } from "@/hooks/use-busca-url";
 import { useSelecaoMultipla } from "@/hooks/use-selecao-multipla";
-import { deleteAlunosEmLote } from "@/app/admin/alunos/actions";
+import { deleteAlunosEmLote, enviarMensagemSemAulaAction } from "@/app/admin/alunos/actions";
 import { BarraSelecaoExclusao } from "@/components/admin/excluir-selecionados";
 import { descreverResultadoLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import {
@@ -26,6 +26,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -278,6 +289,8 @@ export function AlunosTable({
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
   const [mensagemLote, setMensagemLote] = useState<string | null>(null);
+  const [isPendingSemAula, startSemAula] = useTransition();
+  const [resultadoSemAula, setResultadoSemAula] = useState<{ enviadas: number; erros: number } | null>(null);
 
   // A BUSCA (nome, CPF, telefone) é feita no servidor (parâmetro q) e vale
   // pra todos os registros. Status, faixa etária, risco e período de cadastro
@@ -390,6 +403,46 @@ export function AlunosTable({
           {alunosFiltrados.length === 1 ? "" : "s"}
         </p>
         <div className="flex gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={
+                <Button variant="outline" disabled={isPendingSemAula}>
+                  <MessageCircle />
+                  {isPendingSemAula ? "Enviando..." : "Inativos (7 dias)"}
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Enviar mensagem para inativos?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Envia uma mensagem WhatsApp para todos os alunos com matrícula ativa que não
+                  concluíram nenhuma aula nos últimos 7 dias. O envio é sequencial (com delay
+                  entre mensagens) e pode levar alguns minutos.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {resultadoSemAula && (
+                <p className="text-muted-foreground text-sm">
+                  ✅ {resultadoSemAula.enviadas} enviadas, ❌ {resultadoSemAula.erros} erros
+                </p>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isPendingSemAula}
+                  onClick={() =>
+                    startSemAula(async () => {
+                      setResultadoSemAula(null);
+                      const resultado = await enviarMensagemSemAulaAction();
+                      setResultadoSemAula(resultado);
+                    })
+                  }
+                >
+                  Enviar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Button variant="outline" onClick={handleExportarExcel} disabled={exportandoExcel}>
             <FileSpreadsheet />
             {exportandoExcel ? "Exportando..." : "Exportar Excel"}
