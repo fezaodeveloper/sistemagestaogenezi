@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, MessageCircle, Paperclip, Plus, Printer } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, MessageCircle, Paperclip, Plus, Printer, Send } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import {
   cancelarParcela,
   criarParcelaManual,
+  enviarCobrancaEmMassaAction,
   enviarCobrancaWhatsappAction,
   enviarComprovantePagamentoWhatsappAction,
   estornarParcela,
@@ -857,6 +858,11 @@ export function FinanceiroView({
   const [limite, setLimite] = useState(LIMITE_PADRAO);
   const [kpisVisiveis, setKpisVisiveis] = useState(false);
   const [kpisHydrated, setKpisHydrated] = useState(false);
+  // Transição própria, separada do isPending de cima — um envio em massa não deve desabilitar
+  // os outros botões da tela (gerar cobrança, marcar como pago, etc.) enquanto roda.
+  const [confirmandoEmMassa, setConfirmandoEmMassa] = useState(false);
+  const [enviandoEmMassa, startEnvioEmMassa] = useTransition();
+  const [resultadoEmMassa, setResultadoEmMassa] = useState<string | null>(null);
 
   // Leitura de localStorage tem que ficar num efeito pós-montagem, não num
   // inicializador de useState — mesmo motivo já documentado em
@@ -1013,6 +1019,18 @@ export function FinanceiroView({
     }
   }
 
+  function handleEnviarCobrancaEmMassa() {
+    setConfirmandoEmMassa(false);
+    setResultadoEmMassa(null);
+    // Transição própria (não bloqueia o resto da tela) — o admin pode continuar usando os
+    // outros botões enquanto o envio sequencial roda em segundo plano (pode levar minutos: cada
+    // mensagem tem um delay anti-banimento de 3-8s embutido, ver notificarWhatsappEnviarCobrancaManual).
+    startEnvioEmMassa(async () => {
+      const resultado = await enviarCobrancaEmMassaAction();
+      setResultadoEmMassa(`${resultado.enviados} cobrança(s) enviada(s), ${resultado.erros} erro(s).`);
+    });
+  }
+
   const todasVisiveisSelecionadas =
     parcelasFiltradas.length > 0 && parcelasFiltradas.every((parcela) => selecionadas.has(parcela.id));
 
@@ -1108,7 +1126,25 @@ export function FinanceiroView({
       </div>
 
       <div>
-        <div className="mb-3 flex items-center justify-end">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col gap-1">
+            {dados.kpis.countAtrasado > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={WHATSAPP_BUTTON_CLASS}
+                disabled={enviandoEmMassa}
+                onClick={() => setConfirmandoEmMassa(true)}
+              >
+                <Send />
+                {enviandoEmMassa ? "Enviando... (pode levar alguns minutos)" : "Enviar cobrança a todos os atrasados"}
+              </Button>
+            )}
+            {resultadoEmMassa && (
+              <span className="text-muted-foreground text-sm">{resultadoEmMassa}</span>
+            )}
+          </div>
           <Button type="button" variant="ghost" size="sm" onClick={() => setKpisVisiveis((atual) => !atual)}>
             {kpisVisiveis ? <Eye /> : <EyeOff />}
             {kpisVisiveis ? "Ocultar valores" : "Mostrar valores"}
@@ -1265,6 +1301,22 @@ export function FinanceiroView({
         limite={limite}
         onNavigate={handlePaginar}
       />
+
+      <AlertDialog open={confirmandoEmMassa} onOpenChange={setConfirmandoEmMassa}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enviar cobrança em massa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Enviar cobrança via WhatsApp para todos os {dados.kpis.countAtrasado} aluno(s) com parcelas
+              atrasadas? O envio é sequencial (com delay entre mensagens) e pode levar alguns minutos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleEnviarCobrancaEmMassa}>Enviar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

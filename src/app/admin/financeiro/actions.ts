@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { termoIlike } from "@/lib/busca";
 import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
 import { escapeHtml, formatarDataTelegram, formatarReaisTelegram, sendTelegram } from "@/lib/telegram";
@@ -754,4 +755,39 @@ export async function enviarComprovantePagamentoWhatsappAction(
     return { error: resultado.erro ?? "Não foi possível enviar o comprovante por WhatsApp." };
   }
   return { success: true };
+}
+
+// Client admin (service_role): busca TODAS as parcelas atrasadas do sistema, sem o filtro de
+// mês/período nem a paginação que a tela de Financeiro aplica na listagem normal — é esse
+// recorte mais amplo que getFinanceiroDados não devolve (só a contagem, via head: true).
+async function getTodasParcelasAtrasadas(): Promise<{ id: string; matricula_id: string }[]> {
+  const { data } = await createAdminClient().from("parcelas").select("id, matricula_id").eq("status", "atrasado");
+  return (data as { id: string; matricula_id: string }[] | null) ?? [];
+}
+
+export type EnviarCobrancaEmMassaResult = { enviados: number; erros: number; total: number };
+
+// Sequencial de propósito (for...of com await, não Promise.all) — mesmo padrão já usado pelos
+// crons de cobrança atrasada/follow-up de lead (ver src/app/api/cron/verificar-atrasos/route.ts):
+// cada chamada a notificarWhatsappEnviarCobrancaManual já embute o delay anti-banimento
+// (src/lib/whatsapp/evolution.ts), então paralelizar aqui dispararia todas as mensagens juntas,
+// sem o espaçamento que a Evolution API espera. Um erro numa parcela nunca interrompe o loop —
+// é best-effort por natureza (notificação, não a cobrança em si, que já existe no Asaas).
+export async function enviarCobrancaEmMassaAction(): Promise<EnviarCobrancaEmMassaResult> {
+  await requireRole("admin");
+
+  const parcelas = await getTodasParcelasAtrasadas();
+  if (parcelas.length === 0) {
+    return { enviados: 0, erros: 0, total: 0 };
+  }
+
+  let enviados = 0;
+  let erros = 0;
+  for (const parcela of parcelas) {
+    const resultado = await notificarWhatsappEnviarCobrancaManual(parcela.id);
+    if (resultado.ok) enviados++;
+    else erros++;
+  }
+
+  return { enviados, erros, total: parcelas.length };
 }
