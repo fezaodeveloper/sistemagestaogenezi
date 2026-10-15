@@ -335,6 +335,8 @@ export function AgendamentosKanbanView({
   const [arrastandoId, setArrastandoId] = useState<string | null>(null);
   const [colunaSobre, setColunaSobre] = useState<StatusColuna | null>(null);
   const [excluindo, setExcluindo] = useState<Agendamento | null>(null);
+  const [excluindoCancelado, setExcluindoCancelado] = useState<Agendamento | null>(null);
+  const [listaCancelados, setListaCancelados] = useState(agendamentosCancelados);
   const [cancelando, setCancelando] = useState<Agendamento | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -351,6 +353,19 @@ export function AgendamentosKanbanView({
       if (salva) setVisualizacao(salva);
     });
   }, []);
+
+  // Resincroniza a lista local com a prop sempre que ela mudar de verdade (ex.: navegação pra
+  // outra página de agendamento, ou um router.refresh() disparado por outra ação neste mesmo
+  // componente) — exclusão nesta aba não passa por aqui, ela só tira o item localmente (ver
+  // confirmarExclusaoCancelado), sem esperar essa resincronização. Ajuste durante a
+  // renderização (mesmo padrão de outras telas do admin, ex.: matriculas-table.tsx), não um
+  // useEffect — setState direto no corpo de um efeito é desaconselhado
+  // (react-hooks/set-state-in-effect).
+  const [agendamentosCanceladosAnterior, setAgendamentosCanceladosAnterior] = useState(agendamentosCancelados);
+  if (agendamentosCancelados !== agendamentosCanceladosAnterior) {
+    setAgendamentosCanceladosAnterior(agendamentosCancelados);
+    setListaCancelados(agendamentosCancelados);
+  }
 
   function escolherVisualizacao(nova: Visualizacao) {
     setVisualizacao(nova);
@@ -401,6 +416,26 @@ export function AgendamentosKanbanView({
       setExcluindo(null);
       if (resultado.error) setErro(resultado.error);
       router.refresh();
+    });
+  }
+
+  // Diferente de confirmarExclusao: sem router.refresh() — só tira o item da lista local, já
+  // que a aba Cancelados não depende de recarregar nada mais na página (Kanban/paginação ficam
+  // intactos, sem necessidade de rebuscar do servidor).
+  function confirmarExclusaoCancelado() {
+    if (!excluindoCancelado) return;
+    const alvo = excluindoCancelado;
+    setErro(null);
+    setSucesso(null);
+    startTransition(async () => {
+      const resultado = await excluirAgendamento(alvo.id);
+      setExcluindoCancelado(null);
+      if (resultado.error) {
+        setErro(resultado.error);
+        return;
+      }
+      setListaCancelados((atual) => atual.filter((a) => a.id !== alvo.id));
+      setSucesso("Agendamento excluído.");
     });
   }
 
@@ -529,7 +564,7 @@ export function AgendamentosKanbanView({
       )}
 
       {visualizacao === "cancelados" ? (
-        agendamentosCancelados.length === 0 ? (
+        listaCancelados.length === 0 ? (
           <Card>
             <p className="text-muted-foreground py-10 text-center text-sm">
               Nenhum agendamento cancelado ainda.
@@ -537,8 +572,8 @@ export function AgendamentosKanbanView({
           </Card>
         ) : (
           <Card>
-            {/* Só visualização — sem botões de ação (reagendar/excluir/cancelar não fazem
-                sentido pra um agendamento que já está cancelado). */}
+            {/* Só visualização — sem botões de reagendar/cancelar (não fazem sentido pra um
+                agendamento que já está cancelado); o único de ação aqui é Excluir. */}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -547,10 +582,11 @@ export function AgendamentosKanbanView({
                   <TableHead>Data</TableHead>
                   <TableHead>Horário</TableHead>
                   <TableHead>Motivo</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {agendamentosCancelados.map((agendamento) => (
+                {listaCancelados.map((agendamento) => (
                   <TableRow key={agendamento.id}>
                     <TableCell className="max-w-64">{agendamento.nome}</TableCell>
                     <TableCell>{agendamento.whatsapp}</TableCell>
@@ -558,6 +594,19 @@ export function AgendamentosKanbanView({
                     <TableCell>{agendamento.horario}</TableCell>
                     <TableCell className="max-w-80 whitespace-normal">
                       {agendamento.motivo_cancelamento || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive"
+                        onClick={() => setExcluindoCancelado(agendamento)}
+                        aria-label="Excluir agendamento"
+                        title="Excluir agendamento"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -751,6 +800,27 @@ export function AgendamentosKanbanView({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction variant="destructive" disabled={isPending} onClick={confirmarExclusao}>
+              {isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={excluindoCancelado !== null}
+        onOpenChange={(aberto) => !aberto && setExcluindoCancelado(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir agendamento cancelado</AlertDialogTitle>
+            <AlertDialogDescription>
+              Excluir agendamento cancelado de &quot;{excluindoCancelado?.nome}&quot;? Esta ação não pode ser
+              desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={isPending} onClick={confirmarExclusaoCancelado}>
               {isPending ? "Excluindo..." : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
