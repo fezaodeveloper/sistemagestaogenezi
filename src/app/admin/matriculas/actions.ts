@@ -18,7 +18,7 @@ import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeMatricula } from "@/lib/webhooks/payloads";
 import { notificarSmsMatriculaCriada } from "@/lib/integrax/notificacoes";
-import { notificarWhatsappDadosAcesso } from "@/lib/whatsapp/eventos";
+import { notificarWhatsappDadosAcesso, notificarWhatsappEnviarContrato } from "@/lib/whatsapp/eventos";
 import { notificarEmailMatriculaCriada } from "@/lib/email/eventos";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
 import type { CURSO_TIPOS } from "@/lib/cursos/schema";
@@ -715,6 +715,21 @@ export async function downloadContrato(matriculaId: string): Promise<DownloadCon
   }
 
   return { pdf: data.conteudo_pdf_base64 };
+}
+
+// Não existe src/app/admin/contratos/actions.ts (a pasta /admin/contratos só tem page/loading/
+// error.tsx) — todas as Server Actions de contrato já vivem aqui, junto de downloadContrato,
+// que é exatamente o padrão que esta nova action segue.
+export type EnviarContratoWhatsappResult = { success: true } | { error: string };
+
+export async function enviarContratoWhatsappAction(matriculaId: string): Promise<EnviarContratoWhatsappResult> {
+  await requireRole("admin");
+
+  const resultado = await notificarWhatsappEnviarContrato(matriculaId);
+  if (!resultado.ok) {
+    return { error: resultado.erro ?? "Não foi possível enviar o contrato por WhatsApp." };
+  }
+  return { success: true };
 }
 
 // ===== Botões WhatsApp (5 melhorias: WhatsApp stub + taxa de matrícula) =====

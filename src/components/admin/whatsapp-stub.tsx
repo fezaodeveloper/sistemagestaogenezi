@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { MessageCircle } from "lucide-react";
-import { registrarWhatsappStub, type WhatsappStubTipo } from "@/app/admin/matriculas/actions";
+import { registrarWhatsappStub, enviarContratoWhatsappAction, type WhatsappStubTipo } from "@/app/admin/matriculas/actions";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -11,12 +12,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// "contrato" e "comprovante" continuam STUB — só disparam whatsapp.stub (ver
-// registrarWhatsappStub em src/app/admin/matriculas/actions.ts) pra registrar a intenção no log
-// de automações, e mostram esta mensagem padrão. "dados_acesso" passou a enviar de verdade pelo
-// GênZap (Evolution API) — tem mensagem própria (ver OPCOES_PADRAO). "Desabilitados
-// visualmente" (pedido da tarefa original) é lido aqui como "com cara de recurso ainda não
-// ativo" (opacidade reduzida) — os botões continuam clicáveis de verdade.
+// "comprovante" continua STUB — só dispara whatsapp.stub (ver registrarWhatsappStub em
+// src/app/admin/matriculas/actions.ts) pra registrar a intenção no log de automações, e mostra
+// esta mensagem padrão. "dados_acesso" e, agora, "contrato" enviam de verdade pelo GênZap
+// (Evolution API) — ver MENSAGEM_DADOS_ACESSO e useEnviarContratoWhatsapp abaixo.
 const MENSAGEM_PADRAO =
   "Integração com WhatsApp em breve. Esta funcionalidade será habilitada com a API Evolution.";
 
@@ -28,6 +27,32 @@ export const WHATSAPP_BUTTON_CLASS =
 function disparar(tipo: WhatsappStubTipo, matriculaId: string, mensagem: string) {
   void registrarWhatsappStub(tipo, matriculaId);
   window.alert(mensagem);
+}
+
+// Compartilhado entre WhatsappStubButton e WhatsappStubDropdown: "contrato" é o único tipo com
+// feedback de sucesso/erro real (enviarContratoWhatsappAction é awaitable, não
+// fire-and-forget como o resto) — por isso precisa do próprio estado de loading/resultado, em
+// vez do disparar() síncrono (alert otimista) usado por comprovante/dados_acesso.
+function useEnviarContratoWhatsapp(matriculaId: string) {
+  const [enviando, setEnviando] = useState(false);
+  const [mensagem, setMensagem] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
+
+  async function enviar() {
+    setMensagem(null);
+    setEnviando(true);
+    try {
+      const resultado = await enviarContratoWhatsappAction(matriculaId);
+      setMensagem(
+        "error" in resultado
+          ? { tipo: "erro", texto: resultado.error }
+          : { tipo: "sucesso", texto: "Contrato enviado via WhatsApp!" },
+      );
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return { enviando, mensagem, enviar };
 }
 
 export function WhatsappStubButton({
@@ -43,6 +68,37 @@ export function WhatsappStubButton({
   mensagem?: string;
   disabled?: boolean;
 }) {
+  const contrato = useEnviarContratoWhatsapp(matriculaId);
+
+  if (tipo === "contrato") {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || contrato.enviando}
+          className={WHATSAPP_BUTTON_CLASS}
+          onClick={contrato.enviar}
+        >
+          <MessageCircle />
+          {contrato.enviando ? "Enviando..." : label}
+        </Button>
+        {contrato.mensagem && (
+          <span
+            className={
+              contrato.mensagem.tipo === "erro"
+                ? "text-destructive text-xs"
+                : "text-xs text-green-600 dark:text-green-400"
+            }
+          >
+            {contrato.mensagem.texto}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -70,9 +126,9 @@ type OpcaoWhatsappStub = { tipo: WhatsappStubTipo; label: string; mensagem?: str
 const MENSAGEM_DADOS_ACESSO = "Enviando os dados de acesso por WhatsApp (GênZap)...";
 
 const OPCOES_PADRAO: OpcaoWhatsappStub[] = [
+  // Envia de verdade pelo GênZap desde esta tarefa — ver useEnviarContratoWhatsapp.
   { tipo: "contrato", label: "📱 Enviar contrato" },
   { tipo: "comprovante", label: "📱 Enviar comprovante" },
-  // Único que não é mais stub — envia de verdade pelo GênZap (Evolution API).
   { tipo: "dados_acesso", label: "📱 Dados de acesso", mensagem: MENSAGEM_DADOS_ACESSO },
 ];
 
@@ -88,26 +144,46 @@ export function WhatsappStubDropdown({
   // parcela) — sem isso, fica preso às 3 opções fixas de matrícula/contrato.
   opcoes?: OpcaoWhatsappStub[];
 }) {
+  const contrato = useEnviarContratoWhatsapp(matriculaId);
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button type="button" variant="outline" size="sm" className={WHATSAPP_BUTTON_CLASS}>
-            <MessageCircle />
-            {triggerLabel} ▾
-          </Button>
-        }
-      />
-      <DropdownMenuContent align="end">
-        {opcoes.map((opcao) => (
-          <DropdownMenuItem
-            key={opcao.tipo}
-            onClick={() => disparar(opcao.tipo, matriculaId, opcao.mensagem ?? MENSAGEM_PADRAO)}
-          >
-            {opcao.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex flex-col items-end gap-1">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button type="button" variant="outline" size="sm" className={WHATSAPP_BUTTON_CLASS}>
+              <MessageCircle />
+              {triggerLabel} ▾
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end">
+          {opcoes.map((opcao) => (
+            <DropdownMenuItem
+              key={opcao.tipo}
+              disabled={opcao.tipo === "contrato" && contrato.enviando}
+              onClick={() =>
+                opcao.tipo === "contrato"
+                  ? contrato.enviar()
+                  : disparar(opcao.tipo, matriculaId, opcao.mensagem ?? MENSAGEM_PADRAO)
+              }
+            >
+              {opcao.tipo === "contrato" && contrato.enviando ? "Enviando contrato..." : opcao.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {contrato.mensagem && (
+        <span
+          className={
+            contrato.mensagem.tipo === "erro"
+              ? "text-destructive text-xs"
+              : "text-xs text-green-600 dark:text-green-400"
+          }
+        >
+          {contrato.mensagem.texto}
+        </span>
+      )}
+    </div>
   );
 }

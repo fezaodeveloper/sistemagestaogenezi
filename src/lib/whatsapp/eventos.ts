@@ -275,6 +275,58 @@ export async function notificarWhatsappComprovantePagamento(
   return { ok: true };
 }
 
+// ----- Contrato: reenvio manual (botão "Enviar contrato" — whatsapp-stub.tsx / matriculas-table.tsx
+// / contratos-view.tsx, todos via WhatsappStubButton/WhatsappStubDropdown) -----
+// AWAITABLE, não emSegundoPlano — mesmo motivo de notificarWhatsappEnviarCobrancaManual acima: o
+// botão migrado mostra sucesso/erro reais (não é mais o alert "em breve" otimista de antes), e
+// isso exige saber o resultado de verdade antes de responder.
+
+type LinhaContratoWhatsapp = {
+  id: string;
+  status: string;
+  matriculas: {
+    alunos: { telefone: string | null; profiles: { full_name: string | null } | null } | null;
+    turmas: { cursos: { nome: string } | null } | null;
+  } | null;
+};
+
+export async function notificarWhatsappEnviarContrato(
+  matriculaId: string,
+): Promise<{ ok: boolean; erro?: string }> {
+  const { data } = await createAdminClient()
+    .from("contratos_assinados")
+    .select(
+      "id, status, matriculas(alunos(telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome)))",
+    )
+    .eq("matricula_id", matriculaId)
+    .maybeSingle();
+
+  const contrato = data as unknown as LinhaContratoWhatsapp | null;
+  if (!contrato) {
+    return { ok: false, erro: "Nenhum contrato encontrado para esta matrícula." };
+  }
+
+  const aluno = contrato.matriculas?.alunos;
+  if (!aluno?.telefone) {
+    return { ok: false, erro: "Aluno sem telefone cadastrado." };
+  }
+
+  // "wz_envio_contrato" não existe entre as colunas reais (ver WHATSAPP_NOTIF_CHAVES em
+  // src/lib/configuracoes/schema.ts) — enviado sem gate, como pedido explicitamente na tarefa.
+  const nome = primeiroNome(aluno.profiles?.full_name) || "aluno(a)";
+  const curso = contrato.matriculas?.turmas?.cursos?.nome ?? "seu curso";
+  const url = `${urlPortal()}/api/contratos/${matriculaId}/pdf`;
+  const mensagem =
+    `Olá ${nome}! 📄 Seu contrato do curso ${curso} está disponível para visualização e download:\n\n` +
+    `${url}\n\n` +
+    `Guarde este documento — ele confirma sua matrícula na Gênezi. Qualquer dúvida, estamos à disposição! 😊`;
+
+  const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
+  if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { ok: true };
+}
+
 // ----- Cobrança: atrasada, por faixa de dias (cron verificar-atrasos) -----
 // Chamada sequencialmente dentro do loop do cron (o delay entre mensagens é o próprio
 // comportamento anti-banimento desejado) — por isso é awaitable, não fire-and-forget.
