@@ -229,3 +229,19 @@ export async function enviarEmailTeste(
   });
   return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Não foi possível enviar." };
 }
+
+export async function testarEmailAction(para: string): Promise<{ ok: boolean; erro?: string }> {
+  await requireRole("admin");
+  try {
+    const { enviarEmail: enviarEmailLegado } = await import("@/lib/resend/client");
+    const ok = await enviarEmailLegado({
+      to: para,
+      subject: "✅ Teste de e-mail — SISTEMA DA GÊNEZI",
+      html: `<p>Se você está lendo isso, o envio de e-mail está funcionando corretamente.</p><p><small>Enviado em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</small></p>`,
+    });
+    if (!ok) return { ok: false, erro: "enviarEmail retornou false — verifique as credenciais do provedor." };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) };
+  }
+}

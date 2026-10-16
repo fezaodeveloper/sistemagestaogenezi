@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
+import { Send } from "lucide-react";
 import {
   salvarTelegramNotificacoes,
   type TelegramNotificacoesFormState,
 } from "@/app/admin/configuracoes/actions";
+import { testarTelegramAction } from "@/app/admin/configuracoes/notificacoes/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -93,6 +95,16 @@ export function TelegramNotificacoesForm({ defaultValues }: { defaultValues: Tel
     salvarTelegramNotificacoes,
     undefined,
   );
+  const [resultadoTeste, setResultadoTeste] = useState<string | null>(null);
+  const [isPendingTeste, startTransitionTeste] = useTransition();
+
+  function handleTestar() {
+    setResultadoTeste(null);
+    startTransitionTeste(async () => {
+      const res = await testarTelegramAction();
+      setResultadoTeste(res.ok ? "✅ Mensagem enviada no Telegram!" : `❌ ${res.erro}`);
+    });
+  }
 
   return (
     <form action={formAction} className="flex max-w-xl flex-col gap-6">
@@ -109,6 +121,14 @@ export function TelegramNotificacoesForm({ defaultValues }: { defaultValues: Tel
           ))}
         </div>
       ))}
+
+      <div className="mt-4 border-t pt-4">
+        <Button type="button" variant="outline" size="sm" disabled={isPendingTeste} onClick={handleTestar}>
+          <Send />
+          {isPendingTeste ? "Enviando…" : "Testar notificação"}
+        </Button>
+        {resultadoTeste && <p className="mt-2 text-sm">{resultadoTeste}</p>}
+      </div>
 
       <div className="flex items-center gap-3">
         <SubmitButton />

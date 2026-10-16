@@ -4,8 +4,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Info, PlugZap, XCircle } from "lucide-react";
-import { salvarProvedor, testarProvedorEmail, type DadosProvedorForm } from "@/app/admin/configuracoes/email/actions";
+import { CheckCircle2, Info, PlugZap, Send, XCircle } from "lucide-react";
+import {
+  salvarProvedor,
+  testarEmailAction,
+  testarProvedorEmail,
+  type DadosProvedorForm,
+} from "@/app/admin/configuracoes/email/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -237,12 +242,24 @@ function FormProvedor({ provedor, dados }: { provedor: ProvedorId; dados: DadosP
 
 export function EmailProvedores({ dados }: { dados: DadosProvedores }) {
   const [selecionado, setSelecionado] = useState<ProvedorId>(dados.emUso);
+  const [emailTeste, setEmailTeste] = useState("");
+  const [resultadoTeste, setResultadoTeste] = useState<string | null>(null);
+  const [isPendingTeste, startTransitionTeste] = useTransition();
 
   const configurado: Record<ProvedorId, boolean> = {
     resend: dados.resend.temChave || dados.resend.chaveNoAmbiente,
     smtp: !!dados.smtp.host && !!dados.smtp.fromEmail,
     sendgrid: dados.sendgrid.temChave && !!dados.sendgrid.fromEmail,
   };
+
+  function handleTestar() {
+    if (!emailTeste) return;
+    setResultadoTeste(null);
+    startTransitionTeste(async () => {
+      const res = await testarEmailAction(emailTeste);
+      setResultadoTeste(res.ok ? "✅ E-mail enviado com sucesso!" : `❌ ${res.erro}`);
+    });
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -282,6 +299,27 @@ export function EmailProvedores({ dados }: { dados: DadosProvedores }) {
 
       {/* key: trocar de provedor recomeça o formulário com os valores dele. */}
       <FormProvedor key={selecionado} provedor={selecionado} dados={dados} />
+
+      <div className="mt-6 border-t pt-6">
+        <p className="mb-2 text-sm font-medium">Testar envio</p>
+        <p className="text-muted-foreground mb-3 text-xs">
+          Envia um e-mail de teste usando o provedor e as credenciais configurados acima.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            type="email"
+            placeholder="destinatario@exemplo.com"
+            value={emailTeste}
+            onChange={(e) => setEmailTeste(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button type="button" variant="outline" size="sm" disabled={isPendingTeste || !emailTeste} onClick={handleTestar}>
+            <Send />
+            {isPendingTeste ? "Enviando…" : "Enviar teste"}
+          </Button>
+        </div>
+        {resultadoTeste && <p className="mt-2 text-sm">{resultadoTeste}</p>}
+      </div>
     </div>
   );
 }

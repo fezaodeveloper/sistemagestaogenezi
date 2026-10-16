@@ -31,7 +31,12 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Data em Brasília (UTC-3) — evita detectar atraso na virada de dia em UTC
+  const hoje = new Date()
+    .toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+    .split("/")
+    .reverse()
+    .join("-");
 
   const { data: vencidas } = await admin
     .from("parcelas")
@@ -94,8 +99,9 @@ export async function GET(request: Request) {
     }
   }
 
-  // Parcelas vencendo amanhã.
-  const amanha = new Date();
+  // Parcelas vencendo amanhã. Ancorado em `hoje` (já em Brasília) — um novo `new Date()` aqui
+  // reintroduziria o mesmo problema de virada de dia em UTC corrigido acima.
+  const amanha = new Date(hoje);
   amanha.setDate(amanha.getDate() + 1);
   const amanhaStr = amanha.toISOString().slice(0, 10);
 
