@@ -1,7 +1,12 @@
 -- NÃO APLICADA — aplicar manualmente pelo Supabase SQL Editor
 --
--- Infraestrutura de webhook de entrada do WhatsApp (GênZap) — ainda sem nenhuma rota/handler
--- usando essas tabelas (ver relatório da investigação): só o schema, preparado com antecedência.
+-- Infraestrutura de webhook de entrada do WhatsApp (GênZap) — consumida por
+-- src/app/api/webhooks/evolution/route.ts.
+--
+-- O check constraint da coluna whatsapp_fluxos.gatilho (que precisou aceitar
+-- "primeira_mensagem" e "palavra_chave") NÃO foi alterado aqui: ele vive na migration
+-- 20260924100000_whatsapp_fluxos.sql, que cria a tabela — editado direto lá (também ainda não
+-- aplicada), em vez de um ALTER TABLE ... DROP/ADD CONSTRAINT redundante neste arquivo.
 
 -- Sessões de conversa WhatsApp (um registro por número de telefone ativo)
 -- Guarda o último fluxo em execução aguardando resposta do contato.

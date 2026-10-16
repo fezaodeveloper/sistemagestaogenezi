@@ -8,11 +8,14 @@
 -- só ACRESCENTA duas tabelas novas, sem tocar nas anteriores.
 --
 -- Formato de `nos` (documentado aqui pra quem for ler os dados direto no banco):
---   [{ "id": "n1", "tipo": "gatilho|mensagem|aguardar|condicao|fim",
+--   [{ "id": "n1", "tipo": "gatilho|mensagem|aguardar|aguardar_resposta|condicao|fim",
 --      "posicao": {"x": 100, "y": 100}, "dados": {...}, "proximos": ["n2"] }, ...]
---   - "gatilho": único, sempre o primeiro nó (dados: { evento }).
+--   - "gatilho": único, sempre o primeiro nó (dados: { evento, palavras? }). "palavras" só
+--     existe quando evento = "palavra_chave" (lista separada por vírgula).
 --   - "mensagem": dados: { texto }. proximos[0] = próximo nó.
 --   - "aguardar": dados: { segundos }. proximos[0] = próximo nó.
+--   - "aguardar_resposta": dados: {}. proximos[0] = próximo nó (só roda depois que o contato
+--     responde pelo WhatsApp — ver src/app/api/webhooks/evolution/route.ts).
 --   - "condicao": dados: { campo, operador, valor }. proximos[0] = destino se VERDADEIRO,
 --     proximos[1] = destino se FALSO (convenção posicional — ver src/lib/whatsapp/fluxos.ts).
 --   - "fim": dados: {}. proximos = [] (nunca tem sucessor).
@@ -26,7 +29,7 @@ create table public.whatsapp_fluxos (
   gatilho text not null check (
     gatilho in (
       'matricula_criada', 'agendamento_criado', 'lead_criado',
-      'pagamento_recebido', 'cobranca_atrasada', 'manual'
+      'pagamento_recebido', 'cobranca_atrasada', 'primeira_mensagem', 'palavra_chave', 'manual'
     )
   ),
   ativo boolean not null default false,

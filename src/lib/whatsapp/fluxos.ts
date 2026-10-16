@@ -14,14 +14,16 @@ import {
 
 // Executor dos fluxos personalizados do GênZap. Roda os nós EM SÉRIE (nunca em paralelo: um
 // "mensagem" já embute o delay anti-banimento de enviarWhatsApp) até bater num nó "aguardar"
-// (pausa e devolve o controle — quem retoma é o cron, ver retomarExecucoesPendentes), num "fim"
-// (conclui) ou num erro (marca "erro", nunca lança pro chamador).
+// (pausa por tempo — quem retoma é o cron, ver retomarExecucoesPendentes), num "aguardar_resposta"
+// (pausa esperando o contato responder — quem retoma é o webhook de entrada, ver
+// src/app/api/webhooks/evolution/route.ts), num "fim" (conclui) ou num erro (marca "erro", nunca
+// lança pro chamador).
 //
-// LIMITAÇÃO CONHECIDA — granularidade do "aguardar": o cron que retoma execuções paradas roda
-// 1x/dia (ver src/app/api/cron/whatsapp-fluxos/route.ts — mesма restrição já aceita pelo projeto
-// pra sms-recuperacao, plano Hobby da Vercel só permite crons diários). Um nó "aguardar 1 hora"
-// na prática só retoma na próxima execução do cron, não exatamente 1h depois. Documentado
-// também no editor.
+// LIMITAÇÃO CONHECIDA — granularidade do "aguardar" (por tempo, não "aguardar_resposta"): o cron
+// que retoma execuções paradas roda 1x/dia (ver src/app/api/cron/whatsapp-fluxos/route.ts —
+// mesма restrição já aceita pelo projeto pra sms-recuperacao, plano Hobby da Vercel só permite
+// crons diários). Um nó "aguardar 1 hora" na prática só retoma na próxima execução do cron, não
+// exatamente 1h depois. Documentado também no editor.
 
 const MAX_PASSOS = 100; // trava contra fluxo com laço infinito sem "aguardar"/"fim"
 
@@ -74,6 +76,28 @@ async function processarAPartirDe(admin: Admin, execucao: ExecucaoBase, nos: NoF
       }
       atualId = no.proximos[0] ?? null;
       continue;
+    }
+
+    if (no.tipo === "aguardar_resposta") {
+      await admin
+        .from("whatsapp_fluxos_execucoes")
+        .update({ no_atual: no.proximos[0] ?? null, aguardando_resposta: true, retomar_em: null })
+        .eq("id", execucao.id);
+
+      // Vincula a sessão do contato a esta execução — o webhook de entrada
+      // (src/app/api/webhooks/evolution/route.ts) usa isso pra saber qual execução retomar
+      // quando a resposta chegar.
+      await admin.from("whatsapp_sessoes").upsert(
+        {
+          telefone: execucao.telefone,
+          execucao_id: execucao.id,
+          aguardando_resposta: true,
+          ultima_mensagem_em: new Date().toISOString(),
+        },
+        { onConflict: "telefone" },
+      );
+
+      return; // pausa — webhook-entrada.ts retoma quando chegar resposta
     }
 
     if (no.tipo === "condicao" && no.dados.campo && no.dados.operador) {

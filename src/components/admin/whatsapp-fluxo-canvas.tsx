@@ -57,7 +57,7 @@ const TELA_ALTURA = 1100;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.5;
 
-const TIPOS_ADICIONAVEIS: TipoNo[] = ["mensagem", "aguardar", "condicao", "fim"];
+const TIPOS_ADICIONAVEIS: TipoNo[] = ["mensagem", "aguardar", "aguardar_resposta", "condicao", "fim"];
 
 function previewNo(no: NoFluxo, gatilho: FluxoGatilho): string {
   switch (no.tipo) {
@@ -70,6 +70,8 @@ function previewNo(no: NoFluxo, gatilho: FluxoGatilho): string {
       const unidade = [...DELAY_UNIDADES].reverse().find((u) => segundos % u.segundos === 0 && segundos / u.segundos >= 1) ?? DELAY_UNIDADES[0];
       return `${segundos / unidade.segundos} ${unidade.label}`;
     }
+    case "aguardar_resposta":
+      return "Aguarda resposta do contato...";
     case "condicao":
       return no.dados.campo ? `{${no.dados.campo}} ${CONDICAO_OPERADOR_LABELS[no.dados.operador ?? "igual"]} ${no.dados.valor ?? ""}` : "(configure a condição)";
     case "fim":
@@ -417,12 +419,26 @@ function PainelNo({
 
   if (no.tipo === "gatilho") {
     return (
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold">🎯 Gatilho</h3>
-        <p className="text-muted-foreground text-sm">
-          Este fluxo começa quando: <strong>{FLUXO_GATILHO_LABELS[gatilho]}</strong>.
-        </p>
-        <p className="text-muted-foreground text-xs">O gatilho não é editável aqui — crie um novo fluxo para usar outro evento.</p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-sm font-semibold">🎯 Gatilho</h3>
+          <p className="text-muted-foreground text-sm">
+            Este fluxo começa quando: <strong>{FLUXO_GATILHO_LABELS[gatilho]}</strong>.
+          </p>
+          <p className="text-muted-foreground text-xs">O gatilho não é editável aqui — crie um novo fluxo para usar outro evento.</p>
+        </div>
+        {gatilho === "palavra_chave" && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`no-palavras-${no.id}`}>Palavras-chave</Label>
+            <Input
+              id={`no-palavras-${no.id}`}
+              placeholder="oi, olá, começar, info"
+              value={no.dados.palavras ?? ""}
+              onChange={(e) => onDadosChange({ ...no.dados, palavras: e.target.value })}
+            />
+            <p className="text-muted-foreground text-xs">Separadas por vírgula. Dispara se a mensagem contiver qualquer uma.</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -494,6 +510,22 @@ function PainelNo({
           retomada na próxima passagem diária, não com precisão de minuto.
         </p>
         <SeletorProximo label="Depois da espera, vai para" valor={no.proximos[0] ?? ""} opcoes={opcoes} onChange={(v) => onProximosChange(v ? [v] : [])} />
+      </div>
+    );
+  }
+
+  if (no.tipo === "aguardar_resposta") {
+    return (
+      <div className="flex flex-col gap-4">
+        <h3 className="text-sm font-semibold">⏸️ Aguardar resposta</h3>
+        <div className="space-y-3">
+          <p className="text-muted-foreground text-sm">
+            Pausa o fluxo até o contato responder. A resposta fica disponível como{" "}
+            <code className="bg-muted rounded px-1 text-xs">{"{resposta}"}</code> nos nós seguintes.
+          </p>
+          <p className="text-muted-foreground text-xs">Se o contato não responder, o fluxo fica pausado indefinidamente.</p>
+        </div>
+        <SeletorProximo label="Depois da resposta, vai para" valor={no.proximos[0] ?? ""} opcoes={opcoes} onChange={(v) => onProximosChange(v ? [v] : [])} />
       </div>
     );
   }

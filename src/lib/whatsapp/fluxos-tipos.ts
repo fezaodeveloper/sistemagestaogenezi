@@ -2,13 +2,17 @@
 // de propósito: importado pelo editor visual (client component) e pelo executor (server-only,
 // em src/lib/whatsapp/fluxos.ts) — mesmo motivo da separação em src/lib/whatsapp/templates.ts.
 
-export const TIPOS_NO = ["gatilho", "mensagem", "aguardar", "condicao", "fim"] as const;
+export const TIPOS_NO = ["gatilho", "mensagem", "aguardar", "aguardar_resposta", "condicao", "fim"] as const;
 export type TipoNo = (typeof TIPOS_NO)[number];
 
 export const TIPO_NO_INFO: Record<TipoNo, { label: string; emoji: string; cor: string }> = {
   gatilho: { label: "Gatilho", emoji: "🎯", cor: "#22c55e" },
   mensagem: { label: "Mensagem", emoji: "💬", cor: "#3b82f6" },
   aguardar: { label: "Aguardar", emoji: "⏳", cor: "#eab308" },
+  // Emoji diferente de "mensagem" (💬) de propósito: o pedido original repetia o mesmo emoji dos
+  // dois tipos, o que os tornaria visualmente indistinguíveis no canvas/dropdown — justamente o
+  // que esse campo existe para evitar.
+  aguardar_resposta: { label: "Aguardar resposta", emoji: "⏸️", cor: "#06b6d4" },
   condicao: { label: "Condição", emoji: "❓", cor: "#a855f7" },
   fim: { label: "Fim", emoji: "🏁", cor: "#6b7280" },
 };
@@ -19,6 +23,8 @@ export const FLUXO_GATILHOS = [
   "lead_criado",
   "pagamento_recebido",
   "cobranca_atrasada",
+  "primeira_mensagem",
+  "palavra_chave",
   "manual",
 ] as const;
 export type FluxoGatilho = (typeof FLUXO_GATILHOS)[number];
@@ -29,6 +35,8 @@ export const FLUXO_GATILHO_LABELS: Record<FluxoGatilho, string> = {
   lead_criado: "Lead criado",
   pagamento_recebido: "Pagamento recebido",
   cobranca_atrasada: "Cobrança atrasada",
+  primeira_mensagem: "Primeira mensagem recebida",
+  palavra_chave: "Palavra-chave recebida",
   manual: "Manual (só pelo botão \"Testar fluxo\")",
 };
 
@@ -40,6 +48,8 @@ export const FLUXO_GATILHO_VARIAVEIS: Record<FluxoGatilho, string[]> = {
   lead_criado: ["telefone", "nome", "curso"],
   pagamento_recebido: ["telefone", "nome", "valor", "curso"],
   cobranca_atrasada: ["telefone", "nome", "valor", "vencimento", "dias_atraso"],
+  primeira_mensagem: ["telefone", "nome", "mensagem"],
+  palavra_chave: ["telefone", "nome", "mensagem", "palavra"],
   manual: ["telefone", "nome"],
 };
 
@@ -49,7 +59,9 @@ export function isFluxoGatilho(valor: unknown): valor is FluxoGatilho {
 
 export type Posicao = { x: number; y: number };
 
-export type DadosGatilho = { evento: FluxoGatilho };
+// palavras: só usado quando evento === "palavra_chave" (lista separada por vírgula, editável no
+// painel do nó "gatilho" — ver whatsapp-fluxo-canvas.tsx).
+export type DadosGatilho = { evento: FluxoGatilho; palavras?: string };
 export type DadosMensagem = { texto: string };
 export type DadosAguardar = { segundos: number };
 
