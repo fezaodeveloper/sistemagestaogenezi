@@ -178,11 +178,11 @@ export async function deleteCurso(id: string): Promise<{ error?: string }> {
 
   // "turmas" e "leads" são as únicas FKs "on delete restrict" pra cursos.id (as demais —
   // aulas/modulos: cascade; resgates/calendario_academico/medalha_recompensas/campanhas_paginas/
-  // email_marketing: set null — nunca bloqueiam). Checar as duas ANTES de tentar o delete, pra
-  // dar a mensagem certa: o catch genérico de 23503 (abaixo) assumia que todo erro de FK vinha de
-  // turma, mas um curso sem turma ainda pode ter leads com "curso de interesse" apontando pra ele
-  // e falhar com o MESMO código de erro — nesse caso a mensagem antiga ("exclua as turmas
-  // primeiro") seria enganosa, porque não haveria turma nenhuma pra excluir.
+  // email_marketing: set null). Checar as duas ANTES de tentar o delete, pra dar a mensagem
+  // certa: o catch genérico de 23503 (abaixo) assumia que todo erro de FK vinha de turma, mas um
+  // curso sem turma ainda pode ter leads com "curso de interesse" apontando pra ele e falhar com
+  // o MESMO código de erro — nesse caso a mensagem antiga ("exclua as turmas primeiro") seria
+  // enganosa, porque não haveria turma nenhuma pra excluir.
   const [{ count: turmasCount }, { count: leadsCount }] = await Promise.all([
     supabase.from("turmas").select("id", { count: "exact", head: true }).eq("curso_id", id),
     supabase.from("leads").select("id", { count: "exact", head: true }).eq("curso_id", id),
@@ -197,12 +197,50 @@ export async function deleteCurso(id: string): Promise<{ error?: string }> {
     };
   }
 
+  // "email_campanhas_marketing.curso_id" é "on delete set null", mas a constraint
+  // "email_campanhas_curso_no_segmento" proíbe curso_id nulo quando segmento = 'curso_especifico'
+  // — então o SET NULL automático do Postgres viola essa constraint (23514) e aborta o delete do
+  // curso inteiro. Rascunho/agendada têm impacto real a futuro (iriam enviar pra todo mundo se só
+  // limpássemos o segmento sem avisar — "todos" é um segmento MAIS amplo, não neutro), por isso
+  // bloqueiam com mensagem clara em vez de serem silenciosamente convertidas. Enviada/enviando/
+  // cancelada não têm mais nenhum envio futuro a afetar (envios já são um retrato congelado em
+  // email_campanhas_envios no momento do início do disparo) — seguras pra limpar automaticamente.
+  const { data: campanhasVinculadas } = await supabase
+    .from("email_campanhas_marketing")
+    .select("id, nome, status")
+    .eq("curso_id", id);
+
+  const campanhas = campanhasVinculadas ?? [];
+  const campanhasBloqueantes = campanhas.filter((c) => c.status === "rascunho" || c.status === "agendada");
+  if (campanhasBloqueantes.length > 0) {
+    return {
+      error: `Esse curso é o segmento de ${campanhasBloqueantes.length} campanha(s) de e-mail ainda não enviada(s) (ex.: "${campanhasBloqueantes[0].nome}") — altere o segmento dessas campanhas antes de excluir o curso.`,
+    };
+  }
+
+  const campanhasResolvidas = campanhas.filter((c) => c.status === "enviada" || c.status === "enviando" || c.status === "cancelada");
+  if (campanhasResolvidas.length > 0) {
+    const { error: erroCampanhas } = await supabase
+      .from("email_campanhas_marketing")
+      .update({ segmento: "todos", curso_id: null })
+      .in(
+        "id",
+        campanhasResolvidas.map((c) => c.id),
+      );
+    if (erroCampanhas) {
+      console.error("[deleteCurso] erro ao limpar campanhas de e-mail resolvidas:", erroCampanhas);
+      return { error: "Não foi possível desvincular as campanhas de e-mail deste curso. Tente novamente." };
+    }
+  }
+
   const { error } = await supabase.from("cursos").delete().eq("id", id);
 
   if (error) {
     console.error("[deleteCurso] erro Supabase:", error);
     // 23503 = foreign_key_violation — sobrou alguma referência que não previmos acima.
-    if (error.code === "23503") {
+    // 23514 = check_violation — algum "on delete set null" bateu numa CHECK constraint que não
+    // aceita o valor nulo resultante (caso real já visto: email_campanhas_curso_no_segmento).
+    if (error.code === "23503" || error.code === "23514") {
       return { error: "Não é possível excluir: ainda existem registros vinculados a este curso." };
     }
     return { error: "Não foi possível excluir o curso." };
