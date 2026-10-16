@@ -30,6 +30,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  try {
   const admin = createAdminClient();
   // Data em Brasília (UTC-3) — evita detectar atraso na virada de dia em UTC
   const hoje = new Date()
@@ -162,4 +163,8 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ atualizadas });
+  } catch (error) {
+    console.error("[CRON] Erro não tratado:", error);
+    return NextResponse.json({ ok: false, erro: String(error) }, { status: 500 });
+  }
 }

@@ -43,53 +43,58 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const amanha = new Date();
-  amanha.setDate(amanha.getDate() + 1);
-  const amanhaISO = amanha.toISOString().slice(0, 10);
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    const amanhaISO = amanha.toISOString().slice(0, 10);
 
-  const { data: agendamentos } = await admin
-    .from("agendamentos")
-    .select("id, nome, whatsapp, horario, data_agendada, campos_extras, agendamento_paginas(titulo)")
-    .eq("data_agendada", amanhaISO)
-    .eq("status", "confirmado")
-    .eq("lembrete_enviado", false);
+    const { data: agendamentos } = await admin
+      .from("agendamentos")
+      .select("id, nome, whatsapp, horario, data_agendada, campos_extras, agendamento_paginas(titulo)")
+      .eq("data_agendada", amanhaISO)
+      .eq("status", "confirmado")
+      .eq("lembrete_enviado", false);
 
-  const lista = (agendamentos ?? []) as unknown as AgendamentoLembrete[];
+    const lista = (agendamentos ?? []) as unknown as AgendamentoLembrete[];
 
-  for (const agendamento of lista) {
-    // WhatsApp (GênZap/Evolution API). Sequencial — o delay entre chamadas (anti-banimento) é o
-    // próprio comportamento desejado aqui, não um custo a evitar. Nunca lança.
-    await notificarWhatsappAgendamentoLembrete(agendamento.id);
+    for (const agendamento of lista) {
+      // WhatsApp (GênZap/Evolution API). Sequencial — o delay entre chamadas (anti-banimento) é o
+      // próprio comportamento desejado aqui, não um custo a evitar. Nunca lança.
+      await notificarWhatsappAgendamentoLembrete(agendamento.id);
 
-    // Lembrete no Telegram (pro admin, além do WhatsApp ao cliente acima). Best-effort:
-    // sendTelegram nunca lança.
-    await sendTelegram(
-      [
-        "📅 <b>Lembrete de agendamento amanhã:</b>",
-        `👤 Nome: ${escapeHtml(agendamento.nome)}`,
-        `📞 WhatsApp: ${escapeHtml(agendamento.whatsapp)}`,
-        `📚 Interesse: ${escapeHtml(extrairInteresse(agendamento.campos_extras))}`,
-        `🗓️ Dia: ${escapeHtml(dataComDiaSemana(agendamento.data_agendada))}`,
-        `⏰ Horário: ${escapeHtml(agendamento.horario)}`,
-        `📋 Página: ${escapeHtml(agendamento.agendamento_paginas?.titulo ?? "—")}`,
-      ].join("\n"),
+      // Lembrete no Telegram (pro admin, além do WhatsApp ao cliente acima). Best-effort:
+      // sendTelegram nunca lança.
+      await sendTelegram(
+        [
+          "📅 <b>Lembrete de agendamento amanhã:</b>",
+          `👤 Nome: ${escapeHtml(agendamento.nome)}`,
+          `📞 WhatsApp: ${escapeHtml(agendamento.whatsapp)}`,
+          `📚 Interesse: ${escapeHtml(extrairInteresse(agendamento.campos_extras))}`,
+          `🗓️ Dia: ${escapeHtml(dataComDiaSemana(agendamento.data_agendada))}`,
+          `⏰ Horário: ${escapeHtml(agendamento.horario)}`,
+          `📋 Página: ${escapeHtml(agendamento.agendamento_paginas?.titulo ?? "—")}`,
+        ].join("\n"),
+      );
+
+      // SMS do lembrete (template "agendamento_lembrete" da IntegraX). Roda depois da resposta,
+      // nunca lança; com a integração desligada só registra no console (stub).
+      notificarSmsAgendamentoLembrete(agendamento.id);
+
+      await admin.from("agendamentos").update({ lembrete_enviado: true }).eq("id", agendamento.id);
+    }
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    await dispararEvento(
+      "lembretes.agendamentos.resumo",
+      { quantidade: lista.length },
+      `lembretes-agendamentos-${hoje}`,
     );
 
-    // SMS do lembrete (template "agendamento_lembrete" da IntegraX). Roda depois da resposta,
-    // nunca lança; com a integração desligada só registra no console (stub).
-    notificarSmsAgendamentoLembrete(agendamento.id);
-
-    await admin.from("agendamentos").update({ lembrete_enviado: true }).eq("id", agendamento.id);
+    return NextResponse.json({ quantidade: lista.length });
+  } catch (error) {
+    console.error("[CRON] Erro não tratado:", error);
+    return NextResponse.json({ ok: false, erro: String(error) }, { status: 500 });
   }
-
-  const hoje = new Date().toISOString().slice(0, 10);
-  await dispararEvento(
-    "lembretes.agendamentos.resumo",
-    { quantidade: lista.length },
-    `lembretes-agendamentos-${hoje}`,
-  );
-
-  return NextResponse.json({ quantidade: lista.length });
 }

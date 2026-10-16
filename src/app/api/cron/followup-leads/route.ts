@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  try {
   const admin = createAdminClient();
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -80,4 +81,8 @@ export async function GET(request: Request) {
   );
 
   return NextResponse.json({ contatados, aguardamAcaoManual });
+  } catch (error) {
+    console.error("[CRON] Erro não tratado:", error);
+    return NextResponse.json({ ok: false, erro: String(error) }, { status: 500 });
+  }
 }

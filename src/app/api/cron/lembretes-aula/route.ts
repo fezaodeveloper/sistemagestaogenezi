@@ -19,33 +19,38 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-  const amanha = amanhaISO();
+  try {
+    const admin = createAdminClient();
+    const amanha = amanhaISO();
 
-  const { data: turmas } = await admin.from("turmas").select("id, horario_aula").eq("status", "ativa");
+    const { data: turmas } = await admin.from("turmas").select("id, horario_aula").eq("status", "ativa");
 
-  let mensagensDisparadas = 0;
+    let mensagensDisparadas = 0;
 
-  for (const turma of turmas ?? []) {
-    const { data: calendario } = await admin.rpc("calendario_aulas_turma", { p_turma_id: turma.id });
-    const aulasAmanha = ((calendario ?? []) as { aula_id: string; data_liberacao: string }[]).filter(
-      (c) => c.data_liberacao === amanha,
-    );
-    if (aulasAmanha.length === 0) continue;
+    for (const turma of turmas ?? []) {
+      const { data: calendario } = await admin.rpc("calendario_aulas_turma", { p_turma_id: turma.id });
+      const aulasAmanha = ((calendario ?? []) as { aula_id: string; data_liberacao: string }[]).filter(
+        (c) => c.data_liberacao === amanha,
+      );
+      if (aulasAmanha.length === 0) continue;
 
-    const { data: matriculas } = await admin
-      .from("matriculas")
-      .select("id")
-      .eq("turma_id", turma.id)
-      .eq("status", "ativa");
+      const { data: matriculas } = await admin
+        .from("matriculas")
+        .select("id")
+        .eq("turma_id", turma.id)
+        .eq("status", "ativa");
 
-    for (const aula of aulasAmanha) {
-      for (const matricula of matriculas ?? []) {
-        await enviarMensagemLembreteAula(matricula.id, aula.aula_id, amanha, turma.horario_aula);
-        mensagensDisparadas++;
+      for (const aula of aulasAmanha) {
+        for (const matricula of matriculas ?? []) {
+          await enviarMensagemLembreteAula(matricula.id, aula.aula_id, amanha, turma.horario_aula);
+          mensagensDisparadas++;
+        }
       }
     }
-  }
 
-  return NextResponse.json({ ok: true, data: amanha, mensagensDisparadas });
+    return NextResponse.json({ ok: true, data: amanha, mensagensDisparadas });
+  } catch (error) {
+    console.error("[CRON] Erro não tratado:", error);
+    return NextResponse.json({ ok: false, erro: String(error) }, { status: 500 });
+  }
 }
