@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
   AlertTriangle, Award, CreditCard, LayoutGrid, Mail, Banknote, BarChart2, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
-  LayoutDashboard, ListChecks, Lock, MapPin, Megaphone, MessageCircle, MessagesSquare, Monitor, Package, Palette, PlayCircle, PlusCircle, Presentation, Receipt,
+  LayoutDashboard, ListChecks, Lock, MapPin, Megaphone, MessageCircle, MessageSquare, MessagesSquare, Monitor, Package, Palette, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Shield, Star, Tags, Target, TrendingDown, Truck, UserPlus, Users, Workflow, Wrench, Zap,
 } from "lucide-react";
 import { BadgeChatNaoLidas } from "@/components/chat/badge-chat-nao-lidas";
@@ -70,6 +70,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/automacoes", label: "Log de Automações", icon: Zap },
     { href: "/admin/mensagens", label: "Automações", icon: MessageCircle },
     { href: "/admin/whatsapp-fluxos", label: "Fluxos de WhatsApp", icon: Workflow },
+    { href: "/admin/whatsapp-mensagens", label: "Mensagens WhatsApp", icon: MessageSquare },
     { href: "/admin/contrato", label: "Template de Contrato", icon: FileText },
     { href: "/admin/treinamentos", label: "Treinamentos", icon: PlayCircle },
     { href: "/admin/api", label: "API & Integrações", icon: Code2 },

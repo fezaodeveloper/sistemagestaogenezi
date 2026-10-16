@@ -45,13 +45,20 @@ create index whatsapp_mensagens_recebidas_telefone_idx
 
 alter table public.whatsapp_mensagens_recebidas enable row level security;
 
+-- Painel /admin/whatsapp-mensagens (lê com createClient(), não service_role) — mesmo padrão de
+-- log_webhooks_asaas/eventos_automacao: policy de select pra admin + grant de select pra
+-- authenticated (só policy não basta, grant de tabela acontece ANTES da RLS ser avaliada).
+create policy "Admins podem ver mensagens recebidas"
+  on public.whatsapp_mensagens_recebidas for select using (public.is_admin());
+
 -- service_role bypassa RLS, mas NÃO bypassa grants de tabela (ver CLAUDE.md) — sem isso, o
 -- webhook (que grava com createAdminClient, service_role) falharia com "permission denied for
 -- table" em todo insert/update, exatamente o bug já documentado pra turmas/cursos/matriculas.
--- Sem grant para "authenticated" de propósito: por ora só o service_role acessa (comentário
--- original acima) — nenhuma tela admin lê/escreve essas tabelas ainda.
+-- whatsapp_sessoes continua sem grant pra "authenticated": nenhuma tela admin lê/escreve essa
+-- tabela ainda (diferente de whatsapp_mensagens_recebidas, que agora tem o painel acima).
 grant select, insert, update, delete on public.whatsapp_sessoes to service_role;
 grant select, insert, update, delete on public.whatsapp_mensagens_recebidas to service_role;
+grant select on public.whatsapp_mensagens_recebidas to authenticated;
 
 -- Coluna na tabela de execuções para marcar que está aguardando resposta do contato
 alter table public.whatsapp_fluxos_execucoes
