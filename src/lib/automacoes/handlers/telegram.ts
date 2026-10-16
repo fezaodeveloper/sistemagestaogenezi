@@ -33,8 +33,16 @@ function formatarData(data: unknown): string {
 // recusar a mensagem INTEIRA com 400 — e como o envio é best-effort (nunca lança), isso falhava
 // em silêncio, sem nenhum aviso. Era o único ponto em todo este arquivo que não escapava valor
 // vindo do banco antes de interpolar (ver o mesmo aviso em src/lib/telegram.ts, escapeHtml).
+//
+// Bug encontrado nesta função (corrigido junto): o check `typeof valor === "string"` descartava
+// pra "—" qualquer payload numérico (ex.: payload.numero_parcela, payload.frequencia,
+// payload.estoque, payload.dias, ...) — EventoPayload é Record<string, unknown> e esses campos
+// chegam como number de verdade, nunca como string. escapeHtml já aceita unknown (faz
+// String(valor) por dentro), então basta deixar passar qualquer valor que não seja
+// nulo/undefined/string vazia.
 function texto(valor: unknown): string {
-  return typeof valor === "string" && valor.length > 0 ? escapeHtml(valor) : "—";
+  if (valor === null || valor === undefined || valor === "") return "—";
+  return escapeHtml(valor);
 }
 
 export async function notificarPagamentoRecebido(payload: Record<string, unknown>): Promise<boolean> {
