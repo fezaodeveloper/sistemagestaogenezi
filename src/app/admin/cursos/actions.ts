@@ -175,11 +175,35 @@ export async function deleteCurso(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 
   const supabase = await createClient();
+
+  // "turmas" e "leads" são as únicas FKs "on delete restrict" pra cursos.id (as demais —
+  // aulas/modulos: cascade; resgates/calendario_academico/medalha_recompensas/campanhas_paginas/
+  // email_marketing: set null — nunca bloqueiam). Checar as duas ANTES de tentar o delete, pra
+  // dar a mensagem certa: o catch genérico de 23503 (abaixo) assumia que todo erro de FK vinha de
+  // turma, mas um curso sem turma ainda pode ter leads com "curso de interesse" apontando pra ele
+  // e falhar com o MESMO código de erro — nesse caso a mensagem antiga ("exclua as turmas
+  // primeiro") seria enganosa, porque não haveria turma nenhuma pra excluir.
+  const [{ count: turmasCount }, { count: leadsCount }] = await Promise.all([
+    supabase.from("turmas").select("id", { count: "exact", head: true }).eq("curso_id", id),
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("curso_id", id),
+  ]);
+
+  if (turmasCount) {
+    return { error: "Esse curso tem turmas cadastradas — exclua as turmas primeiro." };
+  }
+  if (leadsCount) {
+    return {
+      error: "Esse curso tem leads vinculados (curso de interesse) — não é possível excluir enquanto houver leads apontando para ele.",
+    };
+  }
+
   const { error } = await supabase.from("cursos").delete().eq("id", id);
 
   if (error) {
+    console.error("[deleteCurso] erro Supabase:", error);
+    // 23503 = foreign_key_violation — sobrou alguma referência que não previmos acima.
     if (error.code === "23503") {
-      return { error: "Esse curso tem turmas cadastradas — exclua as turmas primeiro." };
+      return { error: "Não é possível excluir: ainda existem registros vinculados a este curso." };
     }
     return { error: "Não foi possível excluir o curso." };
   }
