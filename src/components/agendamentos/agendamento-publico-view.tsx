@@ -144,6 +144,7 @@ export function AgendamentoPublicoView({
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null);
   const [nome, setNome] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+  const [email, setEmail] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [camposExtras, setCamposExtras] = useState<Record<string, string>>({});
   const [aceite, setAceite] = useState(false);
@@ -479,6 +480,19 @@ export function AgendamentoPublicoView({
               )}
             </div>
 
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="email">
+                E-mail <span className="text-muted-foreground">(opcional)</span>
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </div>
+
             {pagina.campos_extras.map((campo) => (
               <div key={campo.nome} className="flex flex-col gap-2">
                 <Label htmlFor={`campo-${campo.nome}`}>{campo.nome}</Label>
@@ -583,6 +597,7 @@ export function AgendamentoPublicoView({
             <form action={handleSubmit} className="flex gap-2">
               <input type="hidden" name="nome" value={nome} />
               <input type="hidden" name="whatsapp" value={whatsapp} />
+              <input type="hidden" name="email" value={email} />
               <input type="hidden" name="aceite_whatsapp" value={aceite ? "on" : ""} />
               <Button type="button" variant="outline" onClick={() => setPasso(2)} disabled={isPending}>
                 Voltar

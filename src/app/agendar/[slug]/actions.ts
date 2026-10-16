@@ -35,6 +35,7 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     campos_extras: camposExtrasRaw ? JSON.parse(String(camposExtrasRaw)) : undefined,
     mensagem: formData.get("mensagem") || undefined,
     aceite_whatsapp: formData.get("aceite_whatsapp") === "on",
+    email: formData.get("email") || undefined,
   });
 
   if (!parsed.success) {
@@ -57,13 +58,21 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     return { error: "Esse horário acabou de lotar. Escolha outra data ou horário.", slotIndisponivel: true };
   }
 
+  // E-mail opcional: não é um campo extra configurado pelo admin (pagina.campos_extras), mas
+  // precisa cair dentro de campos_extras (jsonb) pra notificarEmailAgendamento achar com o
+  // regex de e-mail (src/lib/email/eventos.ts) — sem coluna nova na tabela.
+  const camposExtrasComEmail = {
+    ...parsed.data.campos_extras,
+    ...(parsed.data.email?.trim() ? { email: parsed.data.email.trim() } : {}),
+  };
+
   const dadosBase = {
     pagina_id: pagina.id,
     nome: parsed.data.nome,
     whatsapp: parsed.data.whatsapp,
     data_agendada: parsed.data.data_agendada,
     horario: parsed.data.horario,
-    campos_extras: parsed.data.campos_extras ?? {},
+    campos_extras: camposExtrasComEmail,
   };
 
   // A mensagem só entra no insert quando o visitante escreveu algo — e se a
@@ -125,10 +134,11 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     // Best-effort — o agendamento já foi confirmado com sucesso acima.
   }
 
-  // E-mail de confirmação (só sai se a página tiver um campo extra com e-mail).
+  // E-mail de confirmação (só sai se o visitante informou e-mail, ou se a página tiver um campo
+  // extra com e-mail).
   notificarEmailAgendamento({
     nome: parsed.data.nome,
-    camposExtras: parsed.data.campos_extras,
+    camposExtras: camposExtrasComEmail,
     dataISO: parsed.data.data_agendada,
     horario: parsed.data.horario,
     tituloPagina: pagina.titulo,

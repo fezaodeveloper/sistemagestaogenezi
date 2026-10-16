@@ -155,6 +155,9 @@ export const agendamentoPublicoSchema = z.object({
   data_agendada: z.string({ error: "Selecione uma data." }).trim().min(1, { error: "Selecione uma data." }),
   horario: z.string({ error: "Selecione um horário." }).trim().min(1, { error: "Selecione um horário." }),
   campos_extras: z.record(z.string(), z.string()).optional(),
+  // Opcional: só existe pra notificarEmailAgendamento (src/lib/email/eventos.ts) achar um e-mail
+  // pra enviar a confirmação — o formulário não tem campo de e-mail fixo por padrão.
+  email: z.union([z.literal(""), z.email({ error: "E-mail inválido." })]).optional(),
   mensagem: z.string().trim().max(500, { error: "A mensagem pode ter no máximo 500 caracteres." }).optional(),
   aceite_whatsapp: z.literal(true, { error: "É preciso concordar em receber mensagens pelo WhatsApp." }),
 });
