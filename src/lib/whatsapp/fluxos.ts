@@ -79,10 +79,22 @@ async function processarAPartirDe(admin: Admin, execucao: ExecucaoBase, nos: NoF
     }
 
     if (no.tipo === "aguardar_resposta") {
-      await admin
-        .from("whatsapp_fluxos_execucoes")
-        .update({ no_atual: no.proximos[0] ?? null, aguardando_resposta: true, retomar_em: null })
-        .eq("id", execucao.id);
+      const timeoutHoras = Number(no.dados.timeout_horas) || 0;
+      const atualizacao: Record<string, unknown> = {
+        no_atual: no.proximos[0] ?? null,
+        aguardando_resposta: true,
+        retomar_em: null,
+      };
+      if (timeoutHoras > 0) {
+        // __timeout_no: bookkeeping interno (não é placeholder de mensagem) — guardado aqui
+        // porque, a essa altura, no_atual JÁ foi avançado pro destino de SUCESSO (proximos[0]),
+        // não pro próprio nó "aguardar_resposta" de onde viria dados.no_timeout. Removido de
+        // volta em retomarExecucaoPorTimeout, antes de seguir o fluxo.
+        atualizacao.retomar_em = new Date(Date.now() + timeoutHoras * 3_600_000).toISOString();
+        atualizacao.variaveis = { ...execucao.variaveis, __timeout_no: no.dados.no_timeout ?? "" };
+      }
+
+      await admin.from("whatsapp_fluxos_execucoes").update(atualizacao).eq("id", execucao.id);
 
       // Vincula a sessão do contato a esta execução — o webhook de entrada
       // (src/app/api/webhooks/evolution/route.ts) usa isso pra saber qual execução retomar
@@ -97,7 +109,7 @@ async function processarAPartirDe(admin: Admin, execucao: ExecucaoBase, nos: NoF
         { onConflict: "telefone" },
       );
 
-      return; // pausa — webhook-entrada.ts retoma quando chegar resposta
+      return; // pausa — webhook-entrada.ts retoma na resposta, ou o cron retoma no timeout.
     }
 
     if (no.tipo === "condicao" && no.dados.campo && no.dados.operador) {
@@ -186,6 +198,51 @@ export async function retomarExecucaoFluxo(execucaoId: string): Promise<void> {
   }
 }
 
+// Retoma uma execução parada num "aguardar_resposta" cujo timeout (dados.timeout_horas) venceu
+// sem resposta do contato. Diferente de retomarExecucaoFluxo (que resume pelo caminho de
+// RESPOSTA recebida, a partir de execucao.no_atual): aqui o destino é __timeout_no, guardado em
+// `variaveis` no momento da pausa — ver comentário em processarAPartirDe. Nunca lança.
+export async function retomarExecucaoPorTimeout(execucaoId: string): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data: execucao } = await admin
+      .from("whatsapp_fluxos_execucoes")
+      .select("id, fluxo_id, telefone, variaveis, status")
+      .eq("id", execucaoId)
+      .maybeSingle();
+    if (!execucao || execucao.status !== "em_andamento") return;
+
+    const variaveis = { ...((execucao.variaveis as Record<string, string>) ?? {}) };
+    const noTimeoutId = variaveis.__timeout_no || null;
+    delete variaveis.__timeout_no;
+
+    await admin
+      .from("whatsapp_fluxos_execucoes")
+      .update({ aguardando_resposta: false, retomar_em: null, variaveis })
+      .eq("id", execucaoId);
+    await admin
+      .from("whatsapp_sessoes")
+      .update({ execucao_id: null, aguardando_resposta: false })
+      .eq("execucao_id", execucaoId);
+
+    const { data: fluxo } = await admin.from("whatsapp_fluxos").select("nos").eq("id", execucao.fluxo_id).maybeSingle();
+    if (!fluxo) {
+      await admin
+        .from("whatsapp_fluxos_execucoes")
+        .update({ status: "erro", erro_detalhe: "Fluxo não encontrado (pode ter sido excluído)." })
+        .eq("id", execucaoId);
+      return;
+    }
+
+    const nos = parseNos(fluxo.nos);
+    // noTimeoutId null: processarAPartirDe com noInicialId null não entra no while e cai direto
+    // no "sem próximo nó" (marca concluído) — mesmo efeito do nó "fim".
+    await processarAPartirDe(admin, { id: execucao.id, telefone: execucao.telefone, variaveis }, nos, noTimeoutId);
+  } catch (erro) {
+    console.error("[whatsapp:fluxos] falha ao processar timeout de aguardar_resposta", erro);
+  }
+}
+
 // Chamado nos pontos de disparo do sistema (src/lib/whatsapp/eventos.ts e os pontos de
 // criação/confirmação equivalentes fora dele — ver relatório) além do envio automático já
 // existente. `variaveis.telefone` é obrigatório (sem telefone não há como enviar); os fluxos
@@ -210,20 +267,41 @@ export async function dispararFluxosPorGatilho(
   }
 }
 
-// Chamado pelo cron diário: retoma toda execução "em_andamento" cujo retomar_em já passou.
+// Chamado pelo cron: retoma toda execução "em_andamento" cujo retomar_em já passou — duas
+// categorias, mutuamente exclusivas por aguardando_resposta, que exigem destinos diferentes:
+// aguardando_resposta=false é o nó "aguardar" (por tempo, retoma em no_atual/proximos[0]);
+// aguardando_resposta=true é o "aguardar_resposta" com timeout vencido (retoma em no_timeout).
 export async function retomarExecucoesPendentes(limite = 200): Promise<{ retomadas: number }> {
   const admin = createAdminClient();
-  const { data } = await admin
+  const agora = new Date().toISOString();
+
+  const { data: porTempo } = await admin
     .from("whatsapp_fluxos_execucoes")
     .select("id")
     .eq("status", "em_andamento")
+    .eq("aguardando_resposta", false)
     .not("retomar_em", "is", null)
-    .lte("retomar_em", new Date().toISOString())
+    .lte("retomar_em", agora)
     .limit(limite);
 
-  const pendentes = (data ?? []) as { id: string }[];
-  for (const execucao of pendentes) {
+  const { data: porTimeout } = await admin
+    .from("whatsapp_fluxos_execucoes")
+    .select("id")
+    .eq("status", "em_andamento")
+    .eq("aguardando_resposta", true)
+    .not("retomar_em", "is", null)
+    .lte("retomar_em", agora)
+    .limit(limite);
+
+  const pendentesPorTempo = (porTempo ?? []) as { id: string }[];
+  for (const execucao of pendentesPorTempo) {
     await retomarExecucaoFluxo(execucao.id);
   }
-  return { retomadas: pendentes.length };
+
+  const pendentesPorTimeout = (porTimeout ?? []) as { id: string }[];
+  for (const execucao of pendentesPorTimeout) {
+    await retomarExecucaoPorTimeout(execucao.id);
+  }
+
+  return { retomadas: pendentesPorTempo.length + pendentesPorTimeout.length };
 }

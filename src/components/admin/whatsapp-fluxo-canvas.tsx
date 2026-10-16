@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -515,6 +516,19 @@ function PainelNo({
   }
 
   if (no.tipo === "aguardar_resposta") {
+    const timeoutAtivo = no.dados.timeout_horas !== undefined && no.dados.timeout_horas !== null;
+
+    function alternarTimeout(ativo: boolean) {
+      if (ativo) {
+        onDadosChange({ ...no.dados, timeout_horas: 24 });
+        return;
+      }
+      const semTimeout = { ...no.dados };
+      delete semTimeout.timeout_horas;
+      delete semTimeout.no_timeout;
+      onDadosChange(semTimeout);
+    }
+
     return (
       <div className="flex flex-col gap-4">
         <h3 className="text-sm font-semibold">⏸️ Aguardar resposta</h3>
@@ -523,8 +537,42 @@ function PainelNo({
             Pausa o fluxo até o contato responder. A resposta fica disponível como{" "}
             <code className="bg-muted rounded px-1 text-xs">{"{resposta}"}</code> nos nós seguintes.
           </p>
-          <p className="text-muted-foreground text-xs">Se o contato não responder, o fluxo fica pausado indefinidamente.</p>
+          <p className="text-muted-foreground text-xs">
+            {timeoutAtivo
+              ? "Se o contato não responder dentro do prazo, o fluxo segue pelo nó de timeout abaixo."
+              : "Se o contato não responder, o fluxo fica pausado indefinidamente."}
+          </p>
         </div>
+
+        <label className="flex items-center justify-between gap-3 border-t pt-3">
+          <span className="flex flex-col">
+            <span className="text-sm font-medium">Ativar timeout</span>
+            <span className="text-muted-foreground text-xs">Segue pra outro nó se o contato não responder a tempo.</span>
+          </span>
+          <Switch checked={timeoutAtivo} onCheckedChange={alternarTimeout} />
+        </label>
+
+        {timeoutAtivo && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`no-timeout-horas-${no.id}`}>Timeout (horas)</Label>
+              <Input
+                id={`no-timeout-horas-${no.id}`}
+                type="number"
+                min={1}
+                value={no.dados.timeout_horas ?? 24}
+                onChange={(e) => onDadosChange({ ...no.dados, timeout_horas: Math.max(1, Number(e.target.value) || 1) })}
+              />
+            </div>
+            <SeletorProximo
+              label="Nó em caso de timeout"
+              valor={no.dados.no_timeout ?? ""}
+              opcoes={opcoes}
+              onChange={(v) => onDadosChange({ ...no.dados, no_timeout: v || undefined })}
+            />
+          </>
+        )}
+
         <SeletorProximo label="Depois da resposta, vai para" valor={no.proximos[0] ?? ""} opcoes={opcoes} onChange={(v) => onProximosChange(v ? [v] : [])} />
       </div>
     );

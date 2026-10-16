@@ -78,13 +78,21 @@ export const CONDICAO_OPERADOR_LABELS: Record<CondicaoOperador, string> = {
 };
 export type DadosCondicao = { campo: string; operador: CondicaoOperador; valor: string };
 
-export type DadosNo = DadosGatilho | DadosMensagem | DadosAguardar | DadosCondicao | Record<string, never>;
+// timeout_horas indefinido = sem timeout (pausa indefinidamente até a resposta, comportamento
+// original). no_timeout = id do nó destino quando o timeout vence sem resposta; indefinido =
+// conclui o fluxo (mesmo efeito do nó "fim").
+export interface DadosAguardarResposta {
+  timeout_horas?: number;
+  no_timeout?: string;
+}
+
+export type DadosNo = DadosGatilho | DadosMensagem | DadosAguardar | DadosAguardarResposta | DadosCondicao | Record<string, never>;
 
 export type NoFluxo = {
   id: string;
   tipo: TipoNo;
   posicao: Posicao;
-  dados: Partial<DadosGatilho & DadosMensagem & DadosAguardar & DadosCondicao>;
+  dados: Partial<DadosGatilho & DadosMensagem & DadosAguardar & DadosAguardarResposta & DadosCondicao>;
   // "mensagem"/"aguardar"/"gatilho": proximos[0] é o próximo nó (sequencial).
   // "condicao": proximos[0] = destino se VERDADEIRO, proximos[1] = destino se FALSO.
   // "fim": sempre [].
