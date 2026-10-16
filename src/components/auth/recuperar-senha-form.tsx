@@ -1,21 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { solicitarRecuperacaoSenhaAction } from "@/app/recuperar-senha/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-// Mesmo fallback usado em outros pontos do código pra essa mesma variável (ver
-// src/lib/email/eventos.ts e outros). NEXT_PUBLIC_* é embutida no bundle do client no build.
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(
-  /\/+$/,
-  "",
-);
-
-// Mensagem é SEMPRE a mesma, exista ou não conta com esse e-mail (ou se o Supabase errar, ex.:
-// rate limit) — resetPasswordForEmail já não revela se o e-mail existe por conta própria; manter
-// uma única mensagem aqui evita reabrir essa brecha no formulário.
+// Mensagem é SEMPRE a mesma, exista ou não conta com esse e-mail — solicitarRecuperacaoSenhaAction
+// já não revela se o e-mail existe por conta própria; manter uma única mensagem aqui evita
+// reabrir essa brecha no formulário.
 const MENSAGEM_SUCESSO = "Se este e-mail estiver cadastrado, você receberá um link em instantes.";
 
 export function RecuperarSenhaForm() {
@@ -32,20 +25,7 @@ export function RecuperarSenhaForm() {
     }
 
     startTransition(async () => {
-      // Chamado do BROWSER de propósito, não de uma Server Action: o fluxo PKCE do Supabase
-      // guarda o code_verifier no storage do client que inicia o resetPasswordForEmail — pra
-      // o exchangeCodeForSession de /nova-senha (nova-senha-form.tsx) achar esse verifier
-      // depois, precisa ser o MESMO client (o do browser), não o client de servidor de uma
-      // Server Action, que grava em cookies que o client do browser pode não conseguir ler de
-      // volta. Foi exatamente essa inconsistência que causava "Link inválido ou expirado" (o
-      // exchange falhava em silêncio, sem lançar erro nenhum no console).
-      const supabase = createClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${SITE_URL}/nova-senha`,
-      });
-      if (error) {
-        console.error("[recuperar-senha] erro ao pedir reset:", error.message);
-      }
+      await solicitarRecuperacaoSenhaAction(email.trim());
       setSucesso(true);
     });
   }
