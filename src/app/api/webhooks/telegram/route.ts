@@ -13,6 +13,12 @@ export const maxDuration = 60;
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
+// Whitelist de chat IDs autorizados a usar o bot — sem isso, qualquer pessoa que descobrisse
+// @genezi_educacao_bot e mandasse /avisar conseguiria disparar WhatsApp em massa pra alunos
+// reais. 8473682147 é o chat pessoal do @genezidev; TELEGRAM_CHAT_ID (grupo/chat do Fernando)
+// vem do .env.
+const ALLOWED_CHAT_IDS = new Set([8473682147, Number(process.env.TELEGRAM_CHAT_ID ?? "0")].filter(Boolean));
+
 type TelegramUpdate = {
   update_id: number;
   message?: {
@@ -112,6 +118,11 @@ const TECLADO_RESGATES: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄
 const TECLADO_AGENDA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "agenda:atualizar" }]] };
 const TECLADO_FREQUENCIA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "frequencia:atualizar" }]] };
 const TECLADO_ESTOQUE: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "estoque:atualizar" }]] };
+
+// Anexado em toda etapa do /avisar que só aceita texto livre (aguardando_mensagem) — sem isso,
+// cancelar só era possível digitando "/cancelar" nessas etapas, diferente das demais (que já têm
+// o botão via montarTecladoSelecao).
+const TECLADO_CANCELAR_AVISAR: TelegramReplyMarkup = { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "avisar:cancelar" }]] };
 
 // Teclado fixo (ReplyKeyboardMarkup) — substitui o teclado do celular por botões de atalho.
 // Clicar num desses botões não dispara callback_query (isso só existe pra inline_keyboard);
@@ -723,6 +734,7 @@ async function selecionarTodosAlunos(admin: AdminClient, chatId: number): Promis
       "(ou /cancelar para abortar)",
     ].join("\n"),
     String(chatId),
+    { reply_markup: TECLADO_CANCELAR_AVISAR },
   );
   estadosAvisar.set(chatId, {
     etapa: "aguardando_mensagem",
@@ -764,6 +776,7 @@ async function selecionarItemAvisar(admin: AdminClient, chatId: number, estado: 
     await enviarMensagemTelegram(
       `✅ <b>Destinatário:</b> ${escapeHtml(item.nome)}\n📞 1 número encontrado\n\n✍️ Digite agora a mensagem a enviar via WhatsApp.\n(ou /cancelar para abortar)`,
       String(chatId),
+      { reply_markup: TECLADO_CANCELAR_AVISAR },
     );
     estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_mensagem", telefones: [item.telefone], destinoNome: item.nome });
     return;
@@ -794,6 +807,7 @@ async function selecionarItemAvisar(admin: AdminClient, chatId: number, estado: 
   await enviarMensagemTelegram(
     `✅ <b>Destinatário:</b> ${escapeHtml(destinoNome)}\n📞 ${telefones.length} número(s) encontrado(s)\n\n✍️ Digite agora a mensagem a enviar via WhatsApp.\n(ou /cancelar para abortar)`,
     String(chatId),
+    { reply_markup: TECLADO_CANCELAR_AVISAR },
   );
   estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_mensagem", telefones, destinoNome });
 }
@@ -857,9 +871,24 @@ async function processarEstadoAvisar(chatId: number, texto: string): Promise<voi
   }
 
   const enviadas = await enviarParaTelefones(estado.telefones, texto);
+  const destinoNome = estado.destinoNome ?? "destinatário(s)";
   estadosAvisar.delete(chatId);
-  const preview = texto.length > 80 ? `${texto.slice(0, 80)}...` : texto;
-  await enviarMensagemTelegram(`✅ Mensagem enviada para ${enviadas} contato(s)!\n📝 "${escapeHtml(preview)}"`, String(chatId));
+
+  if (enviadas === 0 && estado.telefones.length > 0) {
+    await enviarMensagemTelegram(
+      "⚠️ Nenhuma mensagem foi entregue. Verifique se o GênZap está conectado em Configurações → WhatsApp.",
+      String(chatId),
+      { reply_markup: REPLY_KEYBOARD },
+    );
+    return;
+  }
+
+  const preview = texto.length > 120 ? `${texto.slice(0, 120)}...` : texto;
+  await enviarMensagemTelegram(
+    `✅ Mensagem enviada para <b>${escapeHtml(destinoNome)}</b>!\n📨 ${enviadas} contato(s) notificado(s)\n\n📋 Mensagem enviada:\n<i>${escapeHtml(preview)}</i>`,
+    String(chatId),
+    { reply_markup: REPLY_KEYBOARD },
+  );
 }
 
 // ===== callback_query (botões inline) =====
@@ -876,7 +905,11 @@ async function processarCallback(chatId: number, data: string): Promise<void> {
 
   if (data === "avisar:cancelar") {
     estadosAvisar.delete(chatId);
-    await enviarMensagemTelegram("❌ Operação cancelada.", String(chatId));
+    await enviarMensagemTelegram(
+      "❌ Operação cancelada.\n\nUse /avisar para começar novamente ou escolha uma opção abaixo:",
+      String(chatId),
+      { reply_markup: REPLY_KEYBOARD },
+    );
     return;
   }
 
@@ -1003,8 +1036,11 @@ export async function POST(request: Request): Promise<Response> {
   const callbackQuery = update?.callback_query;
   if (callbackQuery) {
     await responderCallbackQuery(callbackQuery.id).catch(() => false);
-    const cbChatId = callbackQuery.message?.chat?.id;
+    const cbChatId = callbackQuery.message?.chat?.id ?? callbackQuery.from?.id;
     const cbData = callbackQuery.data;
+    if (cbChatId && !ALLOWED_CHAT_IDS.has(cbChatId)) {
+      return new Response("OK", { status: 200 });
+    }
     if (cbChatId && cbData) {
       try {
         await processarCallback(cbChatId, cbData);
@@ -1019,13 +1055,21 @@ export async function POST(request: Request): Promise<Response> {
   const chatId = message?.chat?.id;
   const texto = message?.text?.trim();
 
+  if (chatId && !ALLOWED_CHAT_IDS.has(chatId)) {
+    return new Response("OK", { status: 200 });
+  }
+
   try {
     // Estado ativo de /avisar tem prioridade sobre o switch de comandos — qualquer texto do
     // usuário nessa janela é resposta ao passo atual do fluxo, não um comando novo.
     if (chatId && texto && estadosAvisar.has(chatId)) {
       if (texto.toLowerCase() === "/cancelar") {
         estadosAvisar.delete(chatId);
-        await enviarMensagemTelegram("❌ Operação cancelada.", String(chatId));
+        await enviarMensagemTelegram(
+          "❌ Operação cancelada.\n\nUse /avisar para começar novamente ou escolha uma opção abaixo:",
+          String(chatId),
+          { reply_markup: REPLY_KEYBOARD },
+        );
       } else {
         await processarEstadoAvisar(chatId, texto);
       }
@@ -1082,6 +1126,7 @@ export async function POST(request: Request): Promise<Response> {
                   { text: "🏫 Turma inteira", callback_data: "avisar:turma" },
                 ],
                 [{ text: "📢 Todos os alunos", callback_data: "avisar:todos" }],
+                [{ text: "❌ Cancelar", callback_data: "avisar:cancelar" }],
               ],
             },
           },
@@ -1089,6 +1134,11 @@ export async function POST(request: Request): Promise<Response> {
         break;
       case "/menu":
         await enviarMensagemTelegram("📋 <b>Menu — Gênezi</b>\n\nEscolha uma opção abaixo:", String(chatId), { reply_markup: REPLY_KEYBOARD });
+        break;
+      case "/cancelar":
+        // Só chega aqui quando NÃO há estado de /avisar ativo — o bloco acima (estadosAvisar.has)
+        // já intercepta e trata "/cancelar" antes do switch sempre que há algo em andamento.
+        await enviarMensagemTelegram("Nenhuma ação em andamento.", String(chatId));
         break;
       case "/inadimplencia": {
         const msg = await inadimplencia();
