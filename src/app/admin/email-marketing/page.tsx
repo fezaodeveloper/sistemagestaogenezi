@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmailCampanhaLinhaAcoes } from "@/components/admin/email-campanha-linha-acoes";
 
 type LinhaCampanha = {
   id: string;
@@ -130,6 +131,7 @@ export default async function EmailMarketingPage({
                 <TableHead className="text-right">Destinatários</TableHead>
                 <TableHead className="text-right">Enviados</TableHead>
                 <TableHead className="text-right">Erros</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -161,6 +163,9 @@ export default async function EmailMarketingPage({
                     <TableCell className="text-right tabular-nums">{campanha.total_enviados}</TableCell>
                     <TableCell className={`text-right tabular-nums ${campanha.total_erros > 0 ? "text-destructive font-medium" : ""}`}>
                       {campanha.total_erros}
+                    </TableCell>
+                    <TableCell>
+                      <EmailCampanhaLinhaAcoes id={campanha.id} nome={campanha.nome} status={status} />
                     </TableCell>
                   </TableRow>
                 );
