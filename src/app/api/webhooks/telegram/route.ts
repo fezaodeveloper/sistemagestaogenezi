@@ -1,7 +1,7 @@
 import "server-only";
 
 import { escapeHtml } from "@/lib/telegram";
-import { enviarMensagemTelegram } from "@/lib/telegram/client";
+import { enviarMensagemTelegram, responderCallbackQuery, type TelegramReplyMarkup } from "@/lib/telegram/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { carregarConfigWhatsapp } from "@/lib/whatsapp/config";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
@@ -20,6 +20,12 @@ type TelegramUpdate = {
     from?: { id: number; username?: string; first_name?: string };
     chat: { id: number; type: string };
     text?: string;
+  };
+  callback_query?: {
+    id: string;
+    from: { id: number; username?: string; first_name?: string };
+    message?: { chat: { id: number } };
+    data?: string;
   };
 };
 
@@ -81,6 +87,28 @@ const MENSAGEM_AJUDA = [
   "/status — Verifica se o bot está online",
   "/ajuda — Exibe esta mensagem",
 ].join("\n");
+
+const TECLADO_RESUMO: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "resumo:atualizar" }]] };
+const TECLADO_ALUNOS_AMANHA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "alunos:atualizar" }]] };
+
+// Máximo de botões de seleção por lista — Telegram aceita até 100 botões por mensagem, mas a
+// UX piora com muitos; listas maiores continuam disponíveis como texto numerado (ver
+// enviarListaParaSelecao), então digitar o número de qualquer item sempre funciona, botão ou não.
+const MAX_BOTOES_LISTA = 8;
+
+function montarTecladoSelecao(lista: ItemLista[], prefixo: "aluno" | "turma", porLinha: 1 | 2): TelegramReplyMarkup {
+  const visiveis = lista.slice(0, MAX_BOTOES_LISTA);
+  const linhas: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < visiveis.length; i += porLinha) {
+    const linha = visiveis.slice(i, i + porLinha).map((item, offset) => ({
+      text: item.nome.length > 40 ? `${item.nome.slice(0, 40)}…` : item.nome,
+      callback_data: `avisar:${prefixo}:${i + offset}`,
+    }));
+    linhas.push(linha);
+  }
+  linhas.push([{ text: "❌ Cancelar", callback_data: "avisar:cancelar" }]);
+  return { inline_keyboard: linhas };
+}
 
 // ===== /resumo =====
 
@@ -292,6 +320,93 @@ async function enviarParaTelefones(telefones: string[], mensagem: string): Promi
   return enviadas;
 }
 
+// ===== /avisar — busca de listas e envio da mensagem (compartilhado entre texto e botões) =====
+
+async function buscarAlunosParaAvisar(admin: AdminClient): Promise<ItemLista[]> {
+  const { data } = await admin
+    .from("alunos")
+    .select("id, telefone, profiles!alunos_id_fkey(full_name)")
+    .not("telefone", "is", null)
+    .limit(200);
+
+  return (
+    (data ?? []) as unknown as { id: string; telefone: string | null; profiles: { full_name: string | null } | null }[]
+  )
+    .map((a) => ({ id: a.id, nome: a.profiles?.full_name ?? "aluno(a)", telefone: a.telefone }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+    .slice(0, 30);
+}
+
+async function buscarTurmasParaAvisar(admin: AdminClient): Promise<ItemLista[]> {
+  const { data } = await admin.from("turmas").select("id, nome").eq("status", "ativa").order("nome");
+  return ((data ?? []) as { id: string; nome: string }[]).map((t) => ({ id: t.id, nome: t.nome, telefone: null }));
+}
+
+// Lista numerada em texto (sempre) + botões pros 8 primeiros (UX de um toque) — digitar o
+// número de QUALQUER item da lista sempre funciona, botão ou não (fallback de compatibilidade).
+async function enviarListaParaSelecao(
+  chatId: number,
+  lista: ItemLista[],
+  prefixo: "aluno" | "turma",
+  titulo: string,
+  porLinha: 1 | 2,
+): Promise<void> {
+  const linhas = [
+    titulo,
+    ...lista.map((item, i) => `${i + 1}. ${escapeHtml(item.nome)}${item.telefone ? ` — ${item.telefone}` : ""}`),
+  ];
+  if (lista.length > MAX_BOTOES_LISTA) {
+    linhas.push("", `Toque num botão (${MAX_BOTOES_LISTA} primeiros) ou digite o número de qualquer item da lista.`);
+  }
+  await enviarMensagemTelegram(linhas.join("\n"), String(chatId), { reply_markup: montarTecladoSelecao(lista, prefixo, porLinha) });
+}
+
+// Resolve o item escolhido (por texto digitado OU por botão clicado) pro destino final —
+// mesma lógica nos dois caminhos, sem duplicar.
+async function selecionarItemAvisar(admin: AdminClient, chatId: number, estado: EstadoAvisar, item: ItemLista): Promise<void> {
+  if (estado.destinoTipo === "aluno") {
+    if (!item.telefone) {
+      estadosAvisar.delete(chatId);
+      await enviarMensagemTelegram("Esse aluno não tem telefone cadastrado.", String(chatId));
+      return;
+    }
+    await enviarMensagemTelegram(
+      `✅ <b>Destinatário:</b> ${escapeHtml(item.nome)}\n📞 1 número encontrado\n\n✍️ Digite agora a mensagem a enviar via WhatsApp.\n(ou /cancelar para abortar)`,
+      String(chatId),
+    );
+    estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_mensagem", telefones: [item.telefone], destinoNome: item.nome });
+    return;
+  }
+
+  // destinoTipo === "turma"
+  const { data: matriculasTurma } = await admin
+    .from("matriculas")
+    .select("alunos(telefone)")
+    .eq("turma_id", item.id)
+    .eq("status", "ativa");
+
+  const telefones = [
+    ...new Set(
+      ((matriculasTurma ?? []) as unknown as { alunos: { telefone: string | null } | null }[])
+        .map((m) => m.alunos?.telefone)
+        .filter((t): t is string => !!t),
+    ),
+  ];
+
+  if (telefones.length === 0) {
+    estadosAvisar.delete(chatId);
+    await enviarMensagemTelegram("Essa turma não tem alunos com telefone cadastrado.", String(chatId));
+    return;
+  }
+
+  const destinoNome = `${item.nome} (${telefones.length} alunos)`;
+  await enviarMensagemTelegram(
+    `✅ <b>Destinatário:</b> ${escapeHtml(destinoNome)}\n📞 ${telefones.length} número(s) encontrado(s)\n\n✍️ Digite agora a mensagem a enviar via WhatsApp.\n(ou /cancelar para abortar)`,
+    String(chatId),
+  );
+  estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_mensagem", telefones, destinoNome });
+}
+
 async function processarEstadoAvisar(chatId: number, texto: string): Promise<void> {
   const estado = estadosAvisar.get(chatId);
   if (!estado) return;
@@ -299,45 +414,26 @@ async function processarEstadoAvisar(chatId: number, texto: string): Promise<voi
 
   if (estado.etapa === "aguardando_destino") {
     if (texto === "1") {
-      const { data } = await admin
-        .from("alunos")
-        .select("id, telefone, profiles!alunos_id_fkey(full_name)")
-        .not("telefone", "is", null)
-        .limit(200);
-
-      const lista: ItemLista[] = (
-        (data ?? []) as unknown as { id: string; telefone: string | null; profiles: { full_name: string | null } | null }[]
-      )
-        .map((a) => ({ id: a.id, nome: a.profiles?.full_name ?? "aluno(a)", telefone: a.telefone }))
-        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-        .slice(0, 30);
-
+      const lista = await buscarAlunosParaAvisar(admin);
       if (lista.length === 0) {
         estadosAvisar.delete(chatId);
         await enviarMensagemTelegram("Nenhum aluno com telefone cadastrado encontrado.", String(chatId));
         return;
       }
-
-      const linhas = ["👤 <b>Selecione o aluno pelo número:</b>", ...lista.map((a, i) => `${i + 1}. ${escapeHtml(a.nome)} — ${a.telefone ?? "—"}`)];
-      if (lista.length === 30) linhas.push("", "Mostrando os primeiros 30.");
-      await enviarMensagemTelegram(linhas.join("\n"), String(chatId));
       estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_selecao", destinoTipo: "aluno", lista });
+      await enviarListaParaSelecao(chatId, lista, "aluno", "👤 <b>Selecione o aluno:</b>", 2);
       return;
     }
 
     if (texto === "2") {
-      const { data } = await admin.from("turmas").select("id, nome").eq("status", "ativa").order("nome");
-      const lista: ItemLista[] = ((data ?? []) as { id: string; nome: string }[]).map((t) => ({ id: t.id, nome: t.nome, telefone: null }));
-
+      const lista = await buscarTurmasParaAvisar(admin);
       if (lista.length === 0) {
         estadosAvisar.delete(chatId);
         await enviarMensagemTelegram("Nenhuma turma ativa encontrada.", String(chatId));
         return;
       }
-
-      const linhas = ["🏫 <b>Selecione a turma pelo número:</b>", ...lista.map((t, i) => `${i + 1}. ${escapeHtml(t.nome)}`)];
-      await enviarMensagemTelegram(linhas.join("\n"), String(chatId));
       estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_selecao", destinoTipo: "turma", lista });
+      await enviarListaParaSelecao(chatId, lista, "turma", "🏫 <b>Selecione a turma:</b>", 1);
       return;
     }
 
@@ -351,49 +447,7 @@ async function processarEstadoAvisar(chatId: number, texto: string): Promise<voi
       await enviarMensagemTelegram("Número inválido. Tente novamente.", String(chatId));
       return;
     }
-    const item = estado.lista[n - 1];
-
-    if (estado.destinoTipo === "aluno") {
-      if (!item.telefone) {
-        estadosAvisar.delete(chatId);
-        await enviarMensagemTelegram("Esse aluno não tem telefone cadastrado.", String(chatId));
-        return;
-      }
-      await enviarMensagemTelegram(
-        `✅ <b>Destinatário:</b> ${escapeHtml(item.nome)}\n📞 1 número encontrado\n\n✍️ Digite agora a mensagem a enviar via WhatsApp.\n(ou /cancelar para abortar)`,
-        String(chatId),
-      );
-      estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_mensagem", telefones: [item.telefone], destinoNome: item.nome });
-      return;
-    }
-
-    // destinoTipo === "turma"
-    const { data: matriculasTurma } = await admin
-      .from("matriculas")
-      .select("alunos(telefone)")
-      .eq("turma_id", item.id)
-      .eq("status", "ativa");
-
-    const telefones = [
-      ...new Set(
-        ((matriculasTurma ?? []) as unknown as { alunos: { telefone: string | null } | null }[])
-          .map((m) => m.alunos?.telefone)
-          .filter((t): t is string => !!t),
-      ),
-    ];
-
-    if (telefones.length === 0) {
-      estadosAvisar.delete(chatId);
-      await enviarMensagemTelegram("Essa turma não tem alunos com telefone cadastrado.", String(chatId));
-      return;
-    }
-
-    const destinoNome = `${item.nome} (${telefones.length} alunos)`;
-    await enviarMensagemTelegram(
-      `✅ <b>Destinatário:</b> ${escapeHtml(destinoNome)}\n📞 ${telefones.length} número(s) encontrado(s)\n\n✍️ Digite agora a mensagem a enviar via WhatsApp.\n(ou /cancelar para abortar)`,
-      String(chatId),
-    );
-    estadosAvisar.set(chatId, { ...estado, etapa: "aguardando_mensagem", telefones, destinoNome });
+    await selecionarItemAvisar(admin, chatId, estado, estado.lista[n - 1]);
     return;
   }
 
@@ -410,6 +464,74 @@ async function processarEstadoAvisar(chatId: number, texto: string): Promise<voi
   estadosAvisar.delete(chatId);
   const preview = texto.length > 80 ? `${texto.slice(0, 80)}...` : texto;
   await enviarMensagemTelegram(`✅ Mensagem enviada para ${enviadas} contato(s)!\n📝 "${escapeHtml(preview)}"`, String(chatId));
+}
+
+// ===== callback_query (botões inline) =====
+//
+// avisar:aluno / avisar:turma -> escolha inicial de destino (equivalente a digitar "1"/"2").
+// avisar:aluno:{i} / avisar:turma:{i} -> seleção de um item da lista pelo índice.
+// avisar:cancelar -> aborta o fluxo. resumo:atualizar / alunos:atualizar -> recarrega a mensagem.
+//
+// Estado é inicializado aqui "se não existir" (defensivo — na prática /avisar já inicializa ao
+// mostrar os botões, então isso só importa se o Map tiver perdido o estado entre o envio dos
+// botões e o clique, ver limitação documentada no topo do arquivo).
+async function processarCallback(chatId: number, data: string): Promise<void> {
+  const admin = createAdminClient();
+
+  if (data === "avisar:cancelar") {
+    estadosAvisar.delete(chatId);
+    await enviarMensagemTelegram("❌ Operação cancelada.", String(chatId));
+    return;
+  }
+
+  if (data === "resumo:atualizar") {
+    const msg = await resumoDoDia();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_RESUMO });
+    return;
+  }
+
+  if (data === "alunos:atualizar") {
+    const msg = await alunosAmanha();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_ALUNOS_AMANHA });
+    return;
+  }
+
+  if (data === "avisar:aluno" || data === "avisar:turma") {
+    const destinoTipo = data === "avisar:aluno" ? "aluno" : "turma";
+    const base = estadosAvisar.get(chatId) ?? { etapa: "aguardando_destino" as const, destinoTipo: null, lista: [], telefones: [], destinoNome: null };
+    const lista = destinoTipo === "aluno" ? await buscarAlunosParaAvisar(admin) : await buscarTurmasParaAvisar(admin);
+
+    if (lista.length === 0) {
+      estadosAvisar.delete(chatId);
+      await enviarMensagemTelegram(
+        destinoTipo === "aluno" ? "Nenhum aluno com telefone cadastrado encontrado." : "Nenhuma turma ativa encontrada.",
+        String(chatId),
+      );
+      return;
+    }
+
+    estadosAvisar.set(chatId, { ...base, etapa: "aguardando_selecao", destinoTipo, lista });
+    await enviarListaParaSelecao(
+      chatId,
+      lista,
+      destinoTipo,
+      destinoTipo === "aluno" ? "👤 <b>Selecione o aluno:</b>" : "🏫 <b>Selecione a turma:</b>",
+      destinoTipo === "aluno" ? 2 : 1,
+    );
+    return;
+  }
+
+  const matchSelecao = /^avisar:(aluno|turma):(\d+)$/.exec(data);
+  if (matchSelecao) {
+    const destinoTipo = matchSelecao[1] as "aluno" | "turma";
+    const indice = Number(matchSelecao[2]);
+    const estado = estadosAvisar.get(chatId);
+    if (!estado || estado.destinoTipo !== destinoTipo || !estado.lista[indice]) {
+      await enviarMensagemTelegram("Essa seleção expirou. Use /avisar de novo.", String(chatId));
+      return;
+    }
+    await selecionarItemAvisar(admin, chatId, estado, estado.lista[indice]);
+  }
 }
 
 // Webhook de ENTRADA do bot @genezi_educacao_bot (Fase 3.1 + 3.2) — mesmo padrão de
@@ -429,6 +551,27 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const update = (await request.json().catch(() => null)) as TelegramUpdate | null;
+
+  // callback_query (botão inline clicado) tem prioridade sobre mensagem de texto — um update só
+  // traz um ou outro, nunca os dois. responderCallbackQuery SEMPRE roda primeiro e incondicional
+  // (mesmo se faltar data/chat), senão o botão fica "carregando" pra sempre no app do usuário —
+  // mais robusto que só responder dentro do "if data && chat", que deixaria passar batido
+  // qualquer callback_query malformado.
+  const callbackQuery = update?.callback_query;
+  if (callbackQuery) {
+    await responderCallbackQuery(callbackQuery.id).catch(() => false);
+    const cbChatId = callbackQuery.message?.chat?.id;
+    const cbData = callbackQuery.data;
+    if (cbChatId && cbData) {
+      try {
+        await processarCallback(cbChatId, cbData);
+      } catch (err) {
+        console.error("[telegram:webhook] erro ao processar callback_query:", err);
+      }
+    }
+    return new Response("OK", { status: 200 });
+  }
+
   const message = update?.message;
   const chatId = message?.chat?.id;
   const texto = message?.text?.trim();
@@ -469,20 +612,29 @@ export async function POST(request: Request): Promise<Response> {
         break;
       case "/resumo": {
         const msg = await resumoDoDia();
-        await enviarMensagemTelegram(msg, String(chatId));
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_RESUMO });
         break;
       }
       case "/alunos_amanha": {
         const msg = await alunosAmanha();
-        await enviarMensagemTelegram(msg, String(chatId));
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_ALUNOS_AMANHA });
         break;
       }
       case "/avisar":
+        // Estado é inicializado JÁ AQUI (não só no clique do botão): o fluxo de texto (digitar
+        // "1"/"2") precisa continuar funcionando em paralelo aos botões — se só inicializasse no
+        // callback, quem digitasse "1" sem clicar em nada não teria estado algum ativo.
         estadosAvisar.set(chatId, { etapa: "aguardando_destino", destinoTipo: null, lista: [], telefones: [], destinoNome: null });
-        await enviarMensagemTelegram(
-          "📣 <b>Avisar — Passo 1/3</b>\n\nPara quem deseja enviar?\n1️⃣ Para um aluno específico\n2️⃣ Para uma turma inteira\n\nResponda com 1 ou 2.",
-          String(chatId),
-        );
+        await enviarMensagemTelegram("📣 <b>Avisar — Para quem deseja enviar?</b>\n\n(ou digite 1 para aluno / 2 para turma)", String(chatId), {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "👤 Aluno específico", callback_data: "avisar:aluno" },
+                { text: "🏫 Turma inteira", callback_data: "avisar:turma" },
+              ],
+            ],
+          },
+        });
         break;
       default:
         await enviarMensagemTelegram("Comando não reconhecido. Use /ajuda para ver os disponíveis.", String(chatId));

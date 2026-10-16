@@ -8,7 +8,15 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? "";
 // lança exceção: falha de rede ou token ausente só retorna false, porque
 // notificação é sempre um efeito colateral best-effort, nunca deve derrubar
 // o fluxo principal que a disparou.
-export async function enviarMensagemTelegram(mensagem: string, chatId?: string): Promise<boolean> {
+export type TelegramReplyMarkup = {
+  inline_keyboard: { text: string; callback_data: string }[][];
+};
+
+export async function enviarMensagemTelegram(
+  mensagem: string,
+  chatId?: string,
+  opcoes?: { reply_markup?: TelegramReplyMarkup },
+): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) return false;
 
   try {
@@ -19,6 +27,28 @@ export async function enviarMensagemTelegram(mensagem: string, chatId?: string):
         chat_id: chatId ?? TELEGRAM_CHAT_ID,
         text: mensagem,
         parse_mode: "HTML",
+        ...(opcoes?.reply_markup ? { reply_markup: opcoes.reply_markup } : {}),
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Obrigatório depois de todo callback_query recebido (botão inline clicado) — sem isso, o botão
+// fica com o ícone de "carregando" pra sempre no app do usuário, mesmo que o resto da lógica
+// já tenha rodado normalmente.
+export async function responderCallbackQuery(callbackQueryId: string, texto?: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) return false;
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text: texto ?? "",
+        show_alert: false,
       }),
     });
     return response.ok;
