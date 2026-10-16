@@ -1,11 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
+import { Send } from "lucide-react";
 import { salvarWhatsappNotificacoes, type WhatsappNotificacoesFormState } from "@/app/admin/configuracoes/actions";
+import { testarWhatsappNotificacaoAction } from "@/app/admin/configuracoes/notificacoes/actions";
 import type { WhatsappNotifConfig } from "@/lib/configuracoes/schema";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 // Padrão idêntico ao TelegramNotificacoesForm — useActionState + botão Salvar
 // (não auto-save, pois sonner não está instalado no projeto).
@@ -124,6 +127,18 @@ export function WhatsappNotificacoesForm({ defaultValues }: Props) {
     salvarWhatsappNotificacoes,
     undefined,
   );
+  const [telefoneTeste, setTelefoneTeste] = useState("");
+  const [resultadoTeste, setResultadoTeste] = useState<string | null>(null);
+  const [isPendingTeste, startTransitionTeste] = useTransition();
+
+  function handleTestar() {
+    if (!telefoneTeste) return;
+    setResultadoTeste(null);
+    startTransitionTeste(async () => {
+      const res = await testarWhatsappNotificacaoAction(telefoneTeste);
+      setResultadoTeste(res.ok ? "✅ Mensagem enviada no WhatsApp!" : `❌ ${res.erro}`);
+    });
+  }
 
   return (
     <form action={action} className="flex flex-col gap-6">
@@ -158,6 +173,27 @@ export function WhatsappNotificacoesForm({ defaultValues }: Props) {
       <Button type="submit" disabled={pending} className="w-fit">
         {pending ? "Salvando…" : "Salvar preferências"}
       </Button>
+
+      <div className="mt-2 border-t pt-4">
+        <p className="mb-2 text-sm font-medium">Testar notificação</p>
+        <p className="text-muted-foreground mb-3 text-xs">
+          Envia uma mensagem de teste para o número informado usando a conexão GênZap configurada.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            type="tel"
+            placeholder="(99) 99999-9999"
+            value={telefoneTeste}
+            onChange={(e) => setTelefoneTeste(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button type="button" variant="outline" size="sm" disabled={isPendingTeste || !telefoneTeste} onClick={handleTestar}>
+            <Send />
+            {isPendingTeste ? "Enviando…" : "Testar"}
+          </Button>
+        </div>
+        {resultadoTeste && <p className="mt-2 text-sm">{resultadoTeste}</p>}
+      </div>
     </form>
   );
 }

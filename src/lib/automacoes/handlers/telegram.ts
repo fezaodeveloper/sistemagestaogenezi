@@ -4,6 +4,7 @@ import { enviarAlertaTelegram } from "@/lib/telegram/client";
 import { enviarPushAdmin } from "@/lib/push/enviar";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { escapeHtml, sendTelegram } from "@/lib/telegram";
+import { telegramNotifHabilitada } from "@/lib/telegram/verificar-toggle";
 import { notificarWhatsappContratoAssinado } from "@/lib/whatsapp/eventos";
 
 const LINK_FINANCEIRO = "https://sistemagestaogenezi.vercel.app/admin/financeiro";
@@ -37,6 +38,7 @@ function texto(valor: unknown): string {
 }
 
 export async function notificarPagamentoRecebido(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_pagamento_confirmado"))) return true;
   const resultado = await enviarAlertaTelegram(
     "Pagamento Recebido",
     [
@@ -56,6 +58,7 @@ export async function notificarPagamentoRecebido(payload: Record<string, unknown
 }
 
 export async function notificarPagamentoAtrasado(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_pagamento_atrasado"))) return true;
   return enviarAlertaTelegram(
     "Pagamento em Atraso",
     [
@@ -69,6 +72,7 @@ export async function notificarPagamentoAtrasado(payload: Record<string, unknown
 }
 
 export async function notificarMatriculaCriada(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_matricula_criada"))) return true;
   const resultado = await enviarAlertaTelegram(
     "Nova Matrícula",
     [
@@ -88,6 +92,7 @@ export async function notificarMatriculaCriada(payload: Record<string, unknown>)
 }
 
 export async function notificarCertificadoEmitido(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_certificado_gerado"))) return true;
   return enviarAlertaTelegram(
     "Certificado Emitido",
     [
@@ -100,6 +105,7 @@ export async function notificarCertificadoEmitido(payload: Record<string, unknow
 }
 
 export async function notificarLeadNovo(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_lead_criado"))) return true;
   const resultado = await enviarAlertaTelegram(
     "Novo Lead",
     [
@@ -139,6 +145,7 @@ export async function notificarAulaConcluida(payload: Record<string, unknown>): 
 }
 
 export async function notificarCursoConcluido(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_curso_concluido"))) return true;
   return enviarAlertaTelegram(
     "Curso Concluído!",
     [
@@ -175,6 +182,7 @@ export async function notificarEvasaoRisco(payload: Record<string, unknown>): Pr
 }
 
 export async function notificarPremioEstoqueBaixo(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_estoque_baixo"))) return true;
   return enviarAlertaTelegram(
     "Estoque Baixo",
     [
@@ -187,6 +195,7 @@ export async function notificarPremioEstoqueBaixo(payload: Record<string, unknow
 }
 
 export async function notificarBaixaFrequencia(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_frequencia_baixa"))) return true;
   const alunosAbaixo = Array.isArray(payload.alunos_abaixo) ? payload.alunos_abaixo : [];
   const linhasAlunos = alunosAbaixo.map((item) => {
     const aluno = item as { nome: string; percentual: number };
@@ -250,6 +259,7 @@ export async function notificarContratoPendente(payload: Record<string, unknown>
 }
 
 export async function notificarLeadSemContato(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_lead_sem_followup"))) return true;
   return enviarAlertaTelegram(
     "Lead sem contato",
     [
@@ -274,6 +284,7 @@ export async function notificarParcelaVencendoAmanha(payload: Record<string, unk
 }
 
 export async function notificarNovoResgate(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_premio_resgatado"))) return true;
   return enviarAlertaTelegram(
     "Novo Resgate de Prêmio",
     [
@@ -424,6 +435,7 @@ export async function notificarFollowupLeadsResumo(payload: Record<string, unkno
 // ===== Sistema de agendamentos (roadmap, item 2) =====
 
 export async function notificarAgendamentoCriado(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_agendamento_criado"))) return true;
   return enviarAlertaTelegram(
     "Novo Agendamento",
     [
@@ -442,6 +454,7 @@ export async function notificarAgendamentoCriado(payload: Record<string, unknown
 }
 
 export async function notificarLembretesAgendamentosResumo(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_lembrete_agendamento"))) return true;
   return enviarAlertaTelegram(
     "Lembretes D-1 de Agendamentos",
     [`📅 ${texto(payload.quantidade)} agendamento(s) para amanhã`],
