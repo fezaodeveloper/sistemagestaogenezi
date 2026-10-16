@@ -91,6 +91,28 @@ const MENSAGEM_AJUDA = [
 const TECLADO_RESUMO: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "resumo:atualizar" }]] };
 const TECLADO_ALUNOS_AMANHA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "alunos:atualizar" }]] };
 
+// Teclado fixo (ReplyKeyboardMarkup) — substitui o teclado do celular por botões de atalho.
+// Clicar num desses botões não dispara callback_query (isso só existe pra inline_keyboard);
+// o Telegram só envia o texto do botão como mensagem normal, por isso o mapeamento MAP_BOTAO
+// mais abaixo, que traduz esse texto de volta pro comando correspondente.
+const REPLY_KEYBOARD: TelegramReplyMarkup = {
+  keyboard: [
+    [{ text: "📊 Resumo do Dia" }, { text: "📚 Alunos Amanhã" }],
+    [{ text: "📣 Avisar" }, { text: "✅ Status" }],
+    [{ text: "❓ Ajuda" }],
+  ],
+  resize_keyboard: true,
+  persistent: true,
+};
+
+const MAP_BOTAO: Record<string, string> = {
+  "📊 resumo do dia": "/resumo",
+  "📚 alunos amanhã": "/alunos_amanha",
+  "📣 avisar": "/avisar",
+  "✅ status": "/status",
+  "❓ ajuda": "/ajuda",
+};
+
 // Máximo de botões de seleção por lista — Telegram aceita até 100 botões por mensagem, mas a
 // UX piora com muitos; listas maiores continuam disponíveis como texto numerado (ver
 // enviarListaParaSelecao), então digitar o número de qualquer item sempre funciona, botão ou não.
@@ -593,15 +615,18 @@ export async function POST(request: Request): Promise<Response> {
 
     // Normaliza comando — grupos enviam "/cmd@nomedobot".
     const cmd = texto.split("@")[0].toLowerCase();
-    if (!cmd.startsWith("/")) return new Response("OK", { status: 200 });
+    // Clique num botão do teclado fixo chega como texto puro (não começa com "/") — traduz
+    // de volta pro comando antes de exigir o prefixo "/".
+    const cmdFinal = MAP_BOTAO[texto.toLowerCase()] ?? cmd;
+    if (!cmdFinal.startsWith("/")) return new Response("OK", { status: 200 });
 
     const username = message?.from?.username ?? message?.from?.first_name ?? "usuário";
-    console.log(`[telegram:webhook] comando "${cmd}" de ${username} (chat ${chatId})`);
+    console.log(`[telegram:webhook] comando "${cmdFinal}" de ${username} (chat ${chatId})`);
 
-    switch (cmd) {
+    switch (cmdFinal) {
       case "/start":
       case "/ajuda":
-        await enviarMensagemTelegram(MENSAGEM_AJUDA, String(chatId));
+        await enviarMensagemTelegram(MENSAGEM_AJUDA, String(chatId), { reply_markup: REPLY_KEYBOARD });
         break;
       case "/status":
         // Data + hora completos (não só a hora) — mesmo formato da Fase 3.1, mantido sem mudança.

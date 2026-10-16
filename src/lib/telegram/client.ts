@@ -8,9 +8,15 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID ?? "";
 // lança exceção: falha de rede ou token ausente só retorna false, porque
 // notificação é sempre um efeito colateral best-effort, nunca deve derrubar
 // o fluxo principal que a disparou.
-export type TelegramReplyMarkup = {
-  inline_keyboard: { text: string; callback_data: string }[][];
-};
+export type TelegramReplyMarkup =
+  | {
+      inline_keyboard: { text: string; callback_data: string }[][];
+    }
+  | {
+      keyboard: { text: string }[][];
+      resize_keyboard: boolean;
+      persistent: boolean;
+    };
 
 export async function enviarMensagemTelegram(
   mensagem: string,
