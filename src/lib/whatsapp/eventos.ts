@@ -497,9 +497,18 @@ export function notificarWhatsappCobrancaAtrasada(parcelaId: string, diasAtraso:
       await enviarWhatsApp(aluno.telefone, mensagem);
 
       // Fluxos personalizados (Fase 3) com gatilho "cobranca_atrasada", além do template acima.
+      // curso: já vinha no join de carregarParcelaParaCobranca (matriculas.turmas.cursos.nome,
+      // ver LinhaParcelaCobranca) — só não entrava no objeto de variáveis até agora.
       await dispararFluxosPorGatilho(
         "cobranca_atrasada",
-        { telefone: aluno.telefone, nome, valor: reais(parcela.valor), vencimento: dataBR(parcela.data_vencimento), dias_atraso: String(diasAtraso) },
+        {
+          telefone: aluno.telefone,
+          nome,
+          valor: reais(parcela.valor),
+          vencimento: dataBR(parcela.data_vencimento),
+          dias_atraso: String(diasAtraso),
+          curso: parcela.matriculas?.turmas?.cursos?.nome ?? "",
+        },
         { tipo: "aluno", id: aluno.id },
       );
     } catch (erro) {

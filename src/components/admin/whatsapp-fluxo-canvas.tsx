@@ -28,6 +28,7 @@ import {
   type NoFluxo,
   type TipoNo,
 } from "@/lib/whatsapp/fluxos-tipos";
+import { VARIAVEIS_POR_GATILHO } from "@/lib/whatsapp/variaveis";
 import { SmsCampoMensagem } from "@/components/admin/sms-campo-mensagem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -450,6 +452,27 @@ function PainelNo({
               onChange={(e) => onDadosChange({ ...no.dados, palavras: e.target.value })}
             />
             <p className="text-muted-foreground text-xs">Separadas por vírgula. Dispara se a mensagem contiver qualquer uma.</p>
+          </div>
+        )}
+        {VARIAVEIS_POR_GATILHO[gatilho]?.length > 0 && (
+          <div className="mt-1 rounded-md border border-dashed p-3">
+            <p className="text-muted-foreground mb-2 text-xs font-medium">Variáveis disponíveis neste fluxo:</p>
+            <div className="flex flex-wrap gap-1">
+              {VARIAVEIS_POR_GATILHO[gatilho].map((v) => (
+                <TooltipProvider key={v.nome}>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <code className="bg-muted cursor-default rounded px-1.5 py-0.5 text-xs">
+                          {`{{${v.nome}}}`}
+                        </code>
+                      }
+                    />
+                    <TooltipContent>{v.descricao}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
           </div>
         )}
       </div>

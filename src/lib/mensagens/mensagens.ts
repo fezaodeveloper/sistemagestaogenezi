@@ -176,6 +176,9 @@ export async function enviarMensagemMatriculaCriada(
         nome: matricula.alunos.profiles?.full_name ?? "aluno(a)",
         curso: matricula.turmas.cursos?.nome ?? "",
         turma: matricula.turmas.nome,
+        // Já vinha no join (turmas(nome, horario_aula, cursos(nome))) — só não entrava no
+        // objeto de variáveis até agora.
+        horario: matricula.turmas.horario_aula ?? "",
       },
       { tipo: "aluno", id: matricula.alunos.id },
     );
