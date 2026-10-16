@@ -77,19 +77,41 @@ function formatarBRL(valor: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valor);
 }
 
+// Converte "YYYY-MM-DD" (campo "date" do Postgres, sem hora/timezone) pra "DD/MM/YYYY" por
+// manipulação de string — nunca via Date(), que reinterpretaria o valor no timezone do runtime.
+function formatarDataBR(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
 const MENSAGEM_AJUDA = [
   "🤖 <b>Bot da Gênezi</b>",
   "",
   "Comandos disponíveis:",
+  "/menu — Exibe o teclado de atalhos",
   "/resumo — Resumo do dia (matrículas, financeiro, aulas)",
   "/alunos_amanha — Alunos com aula amanhã + telefones",
-  "/avisar — Enviar WhatsApp para aluno ou turma",
+  "/inadimplencia — Alunos com parcelas atrasadas",
+  "/vencendo — Parcelas vencendo amanhã",
+  "/leads — Leads sem contato",
+  "/resgates — Resgates pendentes de entrega",
+  "/agenda — Agendamentos de hoje",
+  "/frequencia — Alunos com baixa frequência (últimas 4 semanas)",
+  "/estoque — Itens com estoque baixo",
+  "/avisar — Enviar WhatsApp para aluno, turma ou todos",
   "/status — Verifica se o bot está online",
   "/ajuda — Exibe esta mensagem",
 ].join("\n");
 
 const TECLADO_RESUMO: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "resumo:atualizar" }]] };
 const TECLADO_ALUNOS_AMANHA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "alunos:atualizar" }]] };
+const TECLADO_INADIMPLENCIA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "inadimplencia:atualizar" }]] };
+const TECLADO_VENCENDO: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "vencendo:atualizar" }]] };
+const TECLADO_LEADS: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "leads:atualizar" }]] };
+const TECLADO_RESGATES: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "resgates:atualizar" }]] };
+const TECLADO_AGENDA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "agenda:atualizar" }]] };
+const TECLADO_FREQUENCIA: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "frequencia:atualizar" }]] };
+const TECLADO_ESTOQUE: TelegramReplyMarkup = { inline_keyboard: [[{ text: "🔄 Atualizar", callback_data: "estoque:atualizar" }]] };
 
 // Teclado fixo (ReplyKeyboardMarkup) — substitui o teclado do celular por botões de atalho.
 // Clicar num desses botões não dispara callback_query (isso só existe pra inline_keyboard);
@@ -98,8 +120,11 @@ const TECLADO_ALUNOS_AMANHA: TelegramReplyMarkup = { inline_keyboard: [[{ text: 
 const REPLY_KEYBOARD: TelegramReplyMarkup = {
   keyboard: [
     [{ text: "📊 Resumo do Dia" }, { text: "📚 Alunos Amanhã" }],
-    [{ text: "📣 Avisar" }, { text: "✅ Status" }],
-    [{ text: "❓ Ajuda" }],
+    [{ text: "💸 Inadimplência" }, { text: "📋 Vencendo Amanhã" }],
+    [{ text: "🎯 Leads" }, { text: "🏆 Resgates" }],
+    [{ text: "📅 Agenda Hoje" }, { text: "📊 Frequência" }],
+    [{ text: "📦 Estoque" }, { text: "📣 Avisar" }],
+    [{ text: "✅ Status" }, { text: "❓ Ajuda" }],
   ],
   resize_keyboard: true,
   persistent: true,
@@ -108,6 +133,13 @@ const REPLY_KEYBOARD: TelegramReplyMarkup = {
 const MAP_BOTAO: Record<string, string> = {
   "📊 resumo do dia": "/resumo",
   "📚 alunos amanhã": "/alunos_amanha",
+  "💸 inadimplência": "/inadimplencia",
+  "📋 vencendo amanhã": "/vencendo",
+  "🎯 leads": "/leads",
+  "🏆 resgates": "/resgates",
+  "📅 agenda hoje": "/agenda",
+  "📊 frequência": "/frequencia",
+  "📦 estoque": "/estoque",
   "📣 avisar": "/avisar",
   "✅ status": "/status",
   "❓ ajuda": "/ajuda",
@@ -323,6 +355,303 @@ async function alunosAmanha(): Promise<string> {
   }
 }
 
+// ===== /inadimplencia =====
+
+type ParcelaComAluno = {
+  valor: number;
+  alunos: { telefone: string | null; profiles: { full_name: string | null } | null } | null;
+};
+
+async function inadimplencia(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    // Coluna real é "data_vencimento" (não "vencimento") — ver 20260911100000_modulo_financeiro.sql.
+    const { data } = await admin
+      .from("parcelas")
+      .select("valor, data_vencimento, alunos(telefone, profiles!alunos_id_fkey(full_name))")
+      .eq("status", "atrasado")
+      .order("data_vencimento", { ascending: true })
+      .limit(50);
+
+    const linhas = (data ?? []) as unknown as (ParcelaComAluno & { data_vencimento: string })[];
+    if (linhas.length === 0) return "✅ Nenhuma parcela em atraso no momento.";
+
+    type Agrupado = { nome: string; telefone: string | null; qtd: number; soma: number };
+    const porAluno = new Map<string, Agrupado>();
+    for (const p of linhas) {
+      const nome = p.alunos?.profiles?.full_name ?? "aluno(a)";
+      const telefone = p.alunos?.telefone ?? null;
+      const chave = `${nome}|${telefone ?? ""}`;
+      const atual = porAluno.get(chave) ?? { nome, telefone, qtd: 0, soma: 0 };
+      atual.qtd += 1;
+      atual.soma += Number(p.valor);
+      porAluno.set(chave, atual);
+    }
+
+    const alunos = [...porAluno.values()].sort((a, b) => b.soma - a.soma);
+    const somaGeral = alunos.reduce((s, a) => s + a.soma, 0);
+
+    return [
+      "💸 <b>Inadimplência</b>",
+      `📅 ${dataExtenso()}`,
+      "",
+      `${alunos.length} aluno(s) com parcelas em atraso:`,
+      "",
+      ...alunos.flatMap((a) => [
+        `- <b>${escapeHtml(a.nome)}</b> — ${a.qtd} parcela(s) — ${formatarBRL(a.soma)}`,
+        `  📞 ${a.telefone ? escapeHtml(a.telefone) : "(sem telefone)"}`,
+      ]),
+      "",
+      `Total em atraso: ${formatarBRL(somaGeral)}`,
+      "",
+      `🕐 ${horaBrasilia()} (Brasília)`,
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em inadimplencia", erro);
+    return "⚠️ Não foi possível buscar a inadimplência. Tente novamente.";
+  }
+}
+
+// ===== /vencendo =====
+
+async function vencendoAmanha(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    const amanha = amanhaISO();
+    const { data } = await admin
+      .from("parcelas")
+      .select("valor, alunos(telefone, profiles!alunos_id_fkey(full_name))")
+      .eq("status", "pendente")
+      .eq("data_vencimento", amanha)
+      .order("valor", { ascending: false });
+
+    const linhas = (data ?? []) as unknown as ParcelaComAluno[];
+    if (linhas.length === 0) return "✅ Nenhuma parcela vence amanhã.";
+
+    const soma = linhas.reduce((s, p) => s + Number(p.valor), 0);
+
+    return [
+      "📋 <b>Vencendo Amanhã</b>",
+      "",
+      `${linhas.length} parcela(s) vencem amanhã (${formatarDataBR(amanha)}):`,
+      "",
+      ...linhas.flatMap((p) => [
+        `- <b>${escapeHtml(p.alunos?.profiles?.full_name ?? "aluno(a)")}</b> — ${formatarBRL(Number(p.valor))}`,
+        `  📞 ${p.alunos?.telefone ? escapeHtml(p.alunos.telefone) : "(sem telefone)"}`,
+      ]),
+      "",
+      `Total: ${formatarBRL(soma)}`,
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em vencendoAmanha", erro);
+    return "⚠️ Não foi possível buscar as parcelas de amanhã. Tente novamente.";
+  }
+}
+
+// ===== /leads =====
+
+// "leads" não tem coluna "convertido" (confirmado antes de implementar) — "sem contato" é
+// status === "novo" (ainda não contatado), primeiro estágio do enum real de leads.status.
+async function leadsSemContato(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("leads")
+      .select("nome, telefone, created_at")
+      .eq("status", "novo")
+      .order("created_at", { ascending: true })
+      .limit(15);
+
+    const linhas = (data ?? []) as { nome: string; telefone: string; created_at: string }[];
+    if (linhas.length === 0) return "✅ Nenhum lead pendente de contato.";
+
+    const agora = Date.now();
+    return [
+      "🎯 <b>Leads sem Contato</b>",
+      "",
+      `${linhas.length} lead(s) aguardando contato:`,
+      "",
+      ...linhas.flatMap((l) => {
+        const dias = Math.max(0, Math.floor((agora - new Date(l.created_at).getTime()) / 86_400_000));
+        return [`- <b>${escapeHtml(l.nome)}</b> — ${dias} dia(s)`, `  📞 ${escapeHtml(l.telefone)}`];
+      }),
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em leadsSemContato", erro);
+    return "⚠️ Não foi possível buscar os leads. Tente novamente.";
+  }
+}
+
+// ===== /resgates =====
+
+async function resgatesPendentes(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    // Só "premio_fisico": "curso_bonus" é liberado automaticamente, sem entrega física pra
+    // rastrear — mesmo filtro usado pelo balão do dashboard admin (getNotificacaoResgatesPendentes,
+    // src/lib/creditos/resgates.ts).
+    const { data } = await admin
+      .from("resgates")
+      .select("item_nome, created_at, profiles!resgates_aluno_id_fkey(full_name)")
+      .eq("status", "pendente")
+      .eq("tipo", "premio_fisico")
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    const linhas = (data ?? []) as unknown as {
+      item_nome: string;
+      created_at: string;
+      profiles: { full_name: string | null } | null;
+    }[];
+
+    if (linhas.length === 0) return "✅ Nenhum resgate pendente.";
+
+    return [
+      "🏆 <b>Resgates Pendentes</b>",
+      "",
+      `${linhas.length} resgate(s) aguardando entrega:`,
+      "",
+      ...linhas.flatMap((r) => [
+        `- <b>${escapeHtml(r.profiles?.full_name ?? "aluno(a)")}</b> — ${escapeHtml(r.item_nome)}`,
+        `  📅 Solicitado em: ${formatarDataBR(r.created_at)}`,
+      ]),
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em resgatesPendentes", erro);
+    return "⚠️ Não foi possível buscar os resgates. Tente novamente.";
+  }
+}
+
+// ===== /agenda =====
+
+async function agendaHoje(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    const hoje = hojeISO();
+    // "agendamentos" não tem coluna "tipo"/"titulo" própria — o título pertence à página
+    // (agendamento_paginas), referenciada por pagina_id.
+    const { data } = await admin
+      .from("agendamentos")
+      .select("nome, whatsapp, horario, agendamento_paginas(titulo)")
+      .eq("data_agendada", hoje)
+      .eq("status", "confirmado")
+      .order("horario", { ascending: true });
+
+    const linhas = (data ?? []) as unknown as {
+      nome: string;
+      whatsapp: string;
+      horario: string;
+      agendamento_paginas: { titulo: string } | null;
+    }[];
+
+    if (linhas.length === 0) return "📅 Nenhum agendamento para hoje.";
+
+    return [
+      "📅 <b>Agenda de Hoje</b>",
+      dataExtenso(),
+      "",
+      `${linhas.length} agendamento(s):`,
+      "",
+      ...linhas.flatMap((a) => [
+        `- <b>${escapeHtml(a.nome)}</b> — ${escapeHtml(a.horario)}`,
+        `  📋 ${escapeHtml(a.agendamento_paginas?.titulo ?? "—")}`,
+        `  📞 ${escapeHtml(a.whatsapp)}`,
+      ]),
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em agendaHoje", erro);
+    return "⚠️ Não foi possível buscar a agenda de hoje. Tente novamente.";
+  }
+}
+
+// ===== /frequencia =====
+
+async function baixaFrequencia(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    const dataLimite = new Date();
+    dataLimite.setDate(dataLimite.getDate() - 28);
+    const dataLimiteISO = dataLimite.toISOString().slice(0, 10);
+
+    // "presencas" não tem aluno_id/presente boolean direto — é matricula_id + status (enum
+    // presente|falta|justificada|reposicao), e o aluno só é alcançado via matriculas.alunos.
+    const { data } = await admin
+      .from("presencas")
+      .select("matricula_id, status, matriculas(alunos(telefone, profiles!alunos_id_fkey(full_name)))")
+      .gte("data", dataLimiteISO);
+
+    const linhas = (data ?? []) as unknown as {
+      matricula_id: string;
+      status: string;
+      matriculas: { alunos: { telefone: string | null; profiles: { full_name: string | null } | null } | null } | null;
+    }[];
+
+    type Agregado = { nome: string; telefone: string | null; presentes: number; total: number };
+    const porMatricula = new Map<string, Agregado>();
+    for (const p of linhas) {
+      const nome = p.matriculas?.alunos?.profiles?.full_name ?? "aluno(a)";
+      const telefone = p.matriculas?.alunos?.telefone ?? null;
+      const atual = porMatricula.get(p.matricula_id) ?? { nome, telefone, presentes: 0, total: 0 };
+      atual.total += 1;
+      // "reposicao" conta como presença — mesmo critério de buscarDadosFrequenciaTurma
+      // (src/lib/relatorios/frequencia-turma.ts).
+      if (p.status === "presente" || p.status === "reposicao") atual.presentes += 1;
+      porMatricula.set(p.matricula_id, atual);
+    }
+
+    const abaixoDe75 = [...porMatricula.values()]
+      .map((a) => ({ ...a, percentual: a.total > 0 ? Math.round((a.presentes / a.total) * 100) : 0 }))
+      .filter((a) => a.percentual < 75)
+      .sort((a, b) => a.percentual - b.percentual)
+      .slice(0, 15);
+
+    if (abaixoDe75.length === 0) return "✅ Todos os alunos com frequência adequada.";
+
+    return [
+      "📊 <b>Baixa Frequência</b>",
+      "(últimas 4 semanas)",
+      "",
+      `${abaixoDe75.length} aluno(s) abaixo de 75%:`,
+      "",
+      ...abaixoDe75.flatMap((a) => [
+        `- <b>${escapeHtml(a.nome)}</b> — ${a.percentual}% (${a.presentes}/${a.total} aulas)`,
+        `  📞 ${a.telefone ? escapeHtml(a.telefone) : "(sem telefone)"}`,
+      ]),
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em baixaFrequencia", erro);
+    return "⚠️ Não foi possível buscar a frequência. Tente novamente.";
+  }
+}
+
+// ===== /estoque =====
+
+async function estoqueBaixo(): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    // Coluna real é "quantidade_atual" (não "quantidade"/"estoque"), com limiar por item em
+    // "quantidade_minima" — não um valor fixo (ver src/lib/estoque/schema.ts).
+    const { data } = await admin.from("estoque_itens").select("nome, quantidade_atual, quantidade_minima, unidade");
+
+    const linhas = ((data ?? []) as { nome: string; quantidade_atual: number; quantidade_minima: number; unidade: string }[])
+      .filter((i) => i.quantidade_atual <= i.quantidade_minima)
+      .sort((a, b) => a.quantidade_atual - b.quantidade_atual);
+
+    if (linhas.length === 0) return "✅ Estoque normalizado.";
+
+    return [
+      "📦 <b>Estoque Baixo</b>",
+      "",
+      `${linhas.length} item(ns) com estoque crítico:`,
+      "",
+      ...linhas.map((i) => `- <b>${escapeHtml(i.nome)}</b> — ${i.quantidade_atual} ${escapeHtml(i.unidade)}`),
+    ].join("\n");
+  } catch (erro) {
+    console.error("[telegram:webhook] erro em estoqueBaixo", erro);
+    return "⚠️ Não foi possível buscar o estoque. Tente novamente.";
+  }
+}
+
 // ===== /avisar =====
 
 // enviarWhatsApp (não um fetch cru à Evolution API): normaliza telefone, lê a config real
@@ -362,6 +691,46 @@ async function buscarAlunosParaAvisar(admin: AdminClient): Promise<ItemLista[]> 
 async function buscarTurmasParaAvisar(admin: AdminClient): Promise<ItemLista[]> {
   const { data } = await admin.from("turmas").select("id, nome").eq("status", "ativa").order("nome");
   return ((data ?? []) as { id: string; nome: string }[]).map((t) => ({ id: t.id, nome: t.nome, telefone: null }));
+}
+
+// Opção "3" do /avisar — todos os alunos com matrícula ativa, não um item de lista escolhido por
+// índice (não passa por selecionarItemAvisar, que espera um ItemLista).
+async function selecionarTodosAlunos(admin: AdminClient, chatId: number): Promise<void> {
+  const { data: matriculasAtivas } = await admin.from("matriculas").select("alunos(telefone)").eq("status", "ativa");
+
+  const telefones = [
+    ...new Set(
+      ((matriculasAtivas ?? []) as unknown as { alunos: { telefone: string | null } | null }[])
+        .map((m) => m.alunos?.telefone)
+        .filter((t): t is string => !!t),
+    ),
+  ];
+
+  if (telefones.length === 0) {
+    estadosAvisar.delete(chatId);
+    await enviarMensagemTelegram("Nenhum aluno ativo com telefone cadastrado.", String(chatId));
+    return;
+  }
+
+  await enviarMensagemTelegram(
+    [
+      "✅ <b>Destinatário:</b> Todos os alunos",
+      `📞 ${telefones.length} número(s) encontrado(s)`,
+      "",
+      "⚠️ <b>Aviso:</b> Esta mensagem será enviada para TODOS os alunos ativos.",
+      "",
+      "✍️ Digite a mensagem a enviar via WhatsApp.",
+      "(ou /cancelar para abortar)",
+    ].join("\n"),
+    String(chatId),
+  );
+  estadosAvisar.set(chatId, {
+    etapa: "aguardando_mensagem",
+    destinoTipo: null,
+    lista: [],
+    telefones,
+    destinoNome: `Todos os alunos (${telefones.length})`,
+  });
 }
 
 // Lista numerada em texto (sempre) + botões pros 8 primeiros (UX de um toque) — digitar o
@@ -459,7 +828,12 @@ async function processarEstadoAvisar(chatId: number, texto: string): Promise<voi
       return;
     }
 
-    await enviarMensagemTelegram("Responda com 1 (aluno) ou 2 (turma).", String(chatId));
+    if (texto === "3") {
+      await selecionarTodosAlunos(admin, chatId);
+      return;
+    }
+
+    await enviarMensagemTelegram("Responda com 1 (aluno), 2 (turma) ou 3 (todos os alunos).", String(chatId));
     return;
   }
 
@@ -515,6 +889,53 @@ async function processarCallback(chatId: number, data: string): Promise<void> {
   if (data === "alunos:atualizar") {
     const msg = await alunosAmanha();
     await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_ALUNOS_AMANHA });
+    return;
+  }
+
+  if (data === "inadimplencia:atualizar") {
+    const msg = await inadimplencia();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_INADIMPLENCIA });
+    return;
+  }
+
+  if (data === "vencendo:atualizar") {
+    const msg = await vencendoAmanha();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_VENCENDO });
+    return;
+  }
+
+  if (data === "leads:atualizar") {
+    const msg = await leadsSemContato();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_LEADS });
+    return;
+  }
+
+  if (data === "resgates:atualizar") {
+    const msg = await resgatesPendentes();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_RESGATES });
+    return;
+  }
+
+  if (data === "agenda:atualizar") {
+    const msg = await agendaHoje();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_AGENDA });
+    return;
+  }
+
+  if (data === "frequencia:atualizar") {
+    const msg = await baixaFrequencia();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_FREQUENCIA });
+    return;
+  }
+
+  if (data === "estoque:atualizar") {
+    const msg = await estoqueBaixo();
+    await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_ESTOQUE });
+    return;
+  }
+
+  if (data === "avisar:todos") {
+    await selecionarTodosAlunos(admin, chatId);
     return;
   }
 
@@ -650,17 +1071,60 @@ export async function POST(request: Request): Promise<Response> {
         // "1"/"2") precisa continuar funcionando em paralelo aos botões — se só inicializasse no
         // callback, quem digitasse "1" sem clicar em nada não teria estado algum ativo.
         estadosAvisar.set(chatId, { etapa: "aguardando_destino", destinoTipo: null, lista: [], telefones: [], destinoNome: null });
-        await enviarMensagemTelegram("📣 <b>Avisar — Para quem deseja enviar?</b>\n\n(ou digite 1 para aluno / 2 para turma)", String(chatId), {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: "👤 Aluno específico", callback_data: "avisar:aluno" },
-                { text: "🏫 Turma inteira", callback_data: "avisar:turma" },
+        await enviarMensagemTelegram(
+          "📣 <b>Avisar — Para quem deseja enviar?</b>\n\n(ou digite 1 para aluno / 2 para turma / 3 para todos)",
+          String(chatId),
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: "👤 Aluno específico", callback_data: "avisar:aluno" },
+                  { text: "🏫 Turma inteira", callback_data: "avisar:turma" },
+                ],
+                [{ text: "📢 Todos os alunos", callback_data: "avisar:todos" }],
               ],
-            ],
+            },
           },
-        });
+        );
         break;
+      case "/menu":
+        await enviarMensagemTelegram("📋 <b>Menu — Gênezi</b>\n\nEscolha uma opção abaixo:", String(chatId), { reply_markup: REPLY_KEYBOARD });
+        break;
+      case "/inadimplencia": {
+        const msg = await inadimplencia();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_INADIMPLENCIA });
+        break;
+      }
+      case "/vencendo": {
+        const msg = await vencendoAmanha();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_VENCENDO });
+        break;
+      }
+      case "/leads": {
+        const msg = await leadsSemContato();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_LEADS });
+        break;
+      }
+      case "/resgates": {
+        const msg = await resgatesPendentes();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_RESGATES });
+        break;
+      }
+      case "/agenda": {
+        const msg = await agendaHoje();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_AGENDA });
+        break;
+      }
+      case "/frequencia": {
+        const msg = await baixaFrequencia();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_FREQUENCIA });
+        break;
+      }
+      case "/estoque": {
+        const msg = await estoqueBaixo();
+        await enviarMensagemTelegram(msg, String(chatId), { reply_markup: TECLADO_ESTOQUE });
+        break;
+      }
       default:
         await enviarMensagemTelegram("Comando não reconhecido. Use /ajuda para ver os disponíveis.", String(chatId));
     }
