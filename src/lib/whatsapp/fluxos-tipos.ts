@@ -2,7 +2,7 @@
 // de propósito: importado pelo editor visual (client component) e pelo executor (server-only,
 // em src/lib/whatsapp/fluxos.ts) — mesmo motivo da separação em src/lib/whatsapp/templates.ts.
 
-export const TIPOS_NO = ["gatilho", "mensagem", "aguardar", "aguardar_resposta", "condicao", "fim"] as const;
+export const TIPOS_NO = ["gatilho", "mensagem", "aguardar", "aguardar_resposta", "menu", "condicao", "fim"] as const;
 export type TipoNo = (typeof TIPOS_NO)[number];
 
 export const TIPO_NO_INFO: Record<TipoNo, { label: string; emoji: string; cor: string }> = {
@@ -13,6 +13,7 @@ export const TIPO_NO_INFO: Record<TipoNo, { label: string; emoji: string; cor: s
   // dois tipos, o que os tornaria visualmente indistinguíveis no canvas/dropdown — justamente o
   // que esse campo existe para evitar.
   aguardar_resposta: { label: "Aguardar resposta", emoji: "⏸️", cor: "#06b6d4" },
+  menu: { label: "Menu de opções", emoji: "📋", cor: "#f59e0b" },
   condicao: { label: "Condição", emoji: "❓", cor: "#a855f7" },
   fim: { label: "Fim", emoji: "🏁", cor: "#6b7280" },
 };
@@ -86,13 +87,30 @@ export interface DadosAguardarResposta {
   no_timeout?: string;
 }
 
-export type DadosNo = DadosGatilho | DadosMensagem | DadosAguardar | DadosAguardarResposta | DadosCondicao | Record<string, never>;
+export type OpcaoMenu = { numero: number; label: string; proximo_id: string };
+
+// reenviar_invalido: true = reenvia a mensagem do menu se a resposta não casar com nenhuma
+// opção; false = segue direto por opcoes[0].proximo_id (ou conclui o fluxo, se nem isso existir).
+export interface DadosMenu {
+  texto: string;
+  opcoes: OpcaoMenu[];
+  reenviar_invalido: boolean;
+}
+
+export type DadosNo =
+  | DadosGatilho
+  | DadosMensagem
+  | DadosAguardar
+  | DadosAguardarResposta
+  | DadosMenu
+  | DadosCondicao
+  | Record<string, never>;
 
 export type NoFluxo = {
   id: string;
   tipo: TipoNo;
   posicao: Posicao;
-  dados: Partial<DadosGatilho & DadosMensagem & DadosAguardar & DadosAguardarResposta & DadosCondicao>;
+  dados: Partial<DadosGatilho & DadosMensagem & DadosAguardar & DadosAguardarResposta & DadosMenu & DadosCondicao>;
   // "mensagem"/"aguardar"/"gatilho": proximos[0] é o próximo nó (sequencial).
   // "condicao": proximos[0] = destino se VERDADEIRO, proximos[1] = destino se FALSO.
   // "fim": sempre [].
@@ -134,6 +152,15 @@ export function encontrarNo(nos: NoFluxo[], id: string | null | undefined): NoFl
 // some silenciosamente.
 export function renderizarTextoFluxo(texto: string, variaveis: Record<string, string>): string {
   return texto.replace(/\{(\w+)\}/g, (inteiro, chave: string) => (chave in variaveis ? variaveis[chave] : inteiro));
+}
+
+// Monta o texto do nó "menu" (mensagem + opções numeradas) já com as variáveis substituídas —
+// usado tanto no envio inicial (fluxos.ts) quanto no reenvio por resposta inválida
+// (webhook-entrada.ts), pra não duplicar a formatação nos dois lugares.
+export function renderizarTextoMenu(dados: Partial<DadosMenu>, variaveis: Record<string, string>): string {
+  const opcoesTexto = (dados.opcoes ?? []).map((opcao) => `${opcao.numero} - ${opcao.label}`).join("\n");
+  const bruto = opcoesTexto ? `${dados.texto ?? ""}\n\n${opcoesTexto}` : dados.texto ?? "";
+  return renderizarTextoFluxo(bruto, variaveis).trim();
 }
 
 export function avaliarCondicao(dados: DadosCondicao, variaveis: Record<string, string>): boolean {

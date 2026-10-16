@@ -1,8 +1,9 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 import { dispararFluxosPorGatilho, executarFluxo, retomarExecucaoFluxo } from "@/lib/whatsapp/fluxos";
-import { parseNos, type NoFluxo } from "@/lib/whatsapp/fluxos-tipos";
+import { encontrarNo, parseNos, renderizarTextoMenu, type DadosMenu, type NoFluxo } from "@/lib/whatsapp/fluxos-tipos";
 
 // Tipo pra evitar import circular — admin vem de fora pra facilitar teste.
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -57,26 +58,37 @@ export async function processarMensagemRecebida(
   if (sessao.execucao_id && sessao.aguardando_resposta) {
     const { data: execucao } = await admin
       .from("whatsapp_fluxos_execucoes")
-      .select("variaveis")
+      .select("variaveis, no_atual, fluxo_id")
       .eq("id", sessao.execucao_id)
       .maybeSingle();
 
-    if (execucao) {
-      const novasVariaveis = { ...((execucao.variaveis as Record<string, string>) ?? {}), resposta: texto };
-      await admin
-        .from("whatsapp_fluxos_execucoes")
-        .update({
-          resposta_recebida: texto,
-          aguardando_resposta: false,
-          variaveis: novasVariaveis,
-          retomar_em: null,
-        })
-        .eq("id", sessao.execucao_id);
+    let limparSessao = true;
 
-      await retomarExecucaoFluxo(sessao.execucao_id);
+    if (execucao) {
+      const variaveisAtuais = (execucao.variaveis as Record<string, string>) ?? {};
+      const noAtual = await buscarNo(admin, execucao.fluxo_id, execucao.no_atual);
+
+      if (noAtual?.tipo === "menu") {
+        limparSessao = await processarRespostaMenu(admin, sessao.execucao_id, telefone, noAtual, variaveisAtuais, texto);
+      } else {
+        const novasVariaveis = { ...variaveisAtuais, resposta: texto };
+        await admin
+          .from("whatsapp_fluxos_execucoes")
+          .update({
+            resposta_recebida: texto,
+            aguardando_resposta: false,
+            variaveis: novasVariaveis,
+            retomar_em: null,
+          })
+          .eq("id", sessao.execucao_id);
+
+        await retomarExecucaoFluxo(sessao.execucao_id);
+      }
     }
 
-    await admin.from("whatsapp_sessoes").update({ execucao_id: null, aguardando_resposta: false }).eq("id", sessao.id);
+    if (limparSessao) {
+      await admin.from("whatsapp_sessoes").update({ execucao_id: null, aguardando_resposta: false }).eq("id", sessao.id);
+    }
   } else {
     await verificarGatilhos(admin, telefone, nomeContato, texto);
   }
@@ -87,6 +99,83 @@ export async function processarMensagemRecebida(
       .update({ processado: true, processado_em: new Date().toISOString() })
       .eq("id", logId);
   }
+}
+
+async function buscarNo(admin: AdminClient, fluxoId: string, noId: string | null): Promise<NoFluxo | null> {
+  if (!noId) return null;
+  const { data: fluxo } = await admin.from("whatsapp_fluxos").select("nos").eq("id", fluxoId).maybeSingle();
+  if (!fluxo) return null;
+  return encontrarNo(parseNos(fluxo.nos), noId) ?? null;
+}
+
+// Roteia a resposta de um nó "menu" (ver src/lib/whatsapp/fluxos.ts): número reconhecido avança
+// pro proximo_id da opção; número não reconhecido reenvia o menu (fica pausado, sessão mantida)
+// ou segue pela primeira opção/conclui, conforme dados.reenviar_invalido. Retorna se a sessão
+// deve ser limpa depois (false só no caso de reenvio — o fluxo continua esperando resposta).
+async function processarRespostaMenu(
+  admin: AdminClient,
+  execucaoId: string,
+  telefone: string,
+  noMenu: NoFluxo,
+  variaveisAtuais: Record<string, string>,
+  texto: string,
+): Promise<boolean> {
+  const dadosMenu = noMenu.dados as DadosMenu;
+  const opcoes = dadosMenu.opcoes ?? [];
+  const numero = Number.parseInt(texto.trim(), 10);
+  const opcaoEscolhida = opcoes.find((o) => o.numero === numero);
+
+  if (opcaoEscolhida) {
+    await admin
+      .from("whatsapp_fluxos_execucoes")
+      .update({
+        resposta_recebida: texto,
+        no_atual: opcaoEscolhida.proximo_id,
+        aguardando_resposta: false,
+        variaveis: { ...variaveisAtuais, resposta: texto, menu_escolha: opcaoEscolhida.label },
+        retomar_em: null,
+      })
+      .eq("id", execucaoId);
+
+    await retomarExecucaoFluxo(execucaoId);
+    return true;
+  }
+
+  if (dadosMenu.reenviar_invalido) {
+    const textoMenu = renderizarTextoMenu(dadosMenu, variaveisAtuais);
+    if (textoMenu) await enviarWhatsApp(telefone, textoMenu);
+    return false; // mantém pausado — não limpa a sessão, não avança no_atual.
+  }
+
+  // reenviar_invalido=false: segue pela primeira opção configurada ou conclui o fluxo, se nem
+  // isso existir (opcoes vazio ou proximo_id da 1ª opção em branco).
+  const destinoPadrao = opcoes[0]?.proximo_id || null;
+  if (destinoPadrao) {
+    await admin
+      .from("whatsapp_fluxos_execucoes")
+      .update({
+        resposta_recebida: texto,
+        no_atual: destinoPadrao,
+        aguardando_resposta: false,
+        variaveis: { ...variaveisAtuais, resposta: texto },
+        retomar_em: null,
+      })
+      .eq("id", execucaoId);
+
+    await retomarExecucaoFluxo(execucaoId);
+  } else {
+    await admin
+      .from("whatsapp_fluxos_execucoes")
+      .update({
+        resposta_recebida: texto,
+        status: "concluido",
+        aguardando_resposta: false,
+        variaveis: { ...variaveisAtuais, resposta: texto },
+        retomar_em: null,
+      })
+      .eq("id", execucaoId);
+  }
+  return true;
 }
 
 // Sem execução de fluxo pendente: verifica se a mensagem dispara algum fluxo com gatilho

@@ -8,6 +8,7 @@ import {
   encontrarNo,
   parseNos,
   renderizarTextoFluxo,
+  renderizarTextoMenu,
   type FluxoGatilho,
   type NoFluxo,
 } from "@/lib/whatsapp/fluxos-tipos";
@@ -15,9 +16,9 @@ import {
 // Executor dos fluxos personalizados do GênZap. Roda os nós EM SÉRIE (nunca em paralelo: um
 // "mensagem" já embute o delay anti-banimento de enviarWhatsApp) até bater num nó "aguardar"
 // (pausa por tempo — quem retoma é o cron, ver retomarExecucoesPendentes), num "aguardar_resposta"
-// (pausa esperando o contato responder — quem retoma é o webhook de entrada, ver
-// src/app/api/webhooks/evolution/route.ts), num "fim" (conclui) ou num erro (marca "erro", nunca
-// lança pro chamador).
+// ou "menu" (pausa esperando o contato responder — quem retoma é o webhook de entrada, ver
+// src/app/api/webhooks/evolution/route.ts e src/lib/whatsapp/webhook-entrada.ts), num "fim"
+// (conclui) ou num erro (marca "erro", nunca lança pro chamador).
 //
 // LIMITAÇÃO CONHECIDA — granularidade do "aguardar" (por tempo, não "aguardar_resposta"): o cron
 // que retoma execuções paradas roda 1x/dia (ver src/app/api/cron/whatsapp-fluxos/route.ts —
@@ -110,6 +111,35 @@ async function processarAPartirDe(admin: Admin, execucao: ExecucaoBase, nos: NoF
       );
 
       return; // pausa — webhook-entrada.ts retoma na resposta, ou o cron retoma no timeout.
+    }
+
+    if (no.tipo === "menu") {
+      const textoFinal = renderizarTextoMenu(no.dados, execucao.variaveis);
+      if (textoFinal && execucao.telefone) {
+        await enviarWhatsApp(execucao.telefone, textoFinal);
+      }
+
+      // no_atual aponta pro PRÓPRIO nó "menu" (diferente de "aguardar_resposta", que avança pra
+      // proximos[0]) — o webhook de entrada precisa achar dados.opcoes ao processar a resposta, e
+      // só consegue se no_atual ainda for o id deste nó. Setado explicitamente (não "fica de
+      // carona" do valor anterior): um nó intermediário passado no mesmo loop (ex.: uma
+      // "mensagem" antes deste "menu") nunca persiste no_atual até um ponto de pausa de verdade.
+      await admin
+        .from("whatsapp_fluxos_execucoes")
+        .update({ no_atual: no.id, aguardando_resposta: true, retomar_em: null })
+        .eq("id", execucao.id);
+
+      await admin.from("whatsapp_sessoes").upsert(
+        {
+          telefone: execucao.telefone,
+          execucao_id: execucao.id,
+          aguardando_resposta: true,
+          ultima_mensagem_em: new Date().toISOString(),
+        },
+        { onConflict: "telefone" },
+      );
+
+      return; // pausa — webhook-entrada.ts roteia a resposta pra opção escolhida.
     }
 
     if (no.tipo === "condicao" && no.dados.campo && no.dados.operador) {

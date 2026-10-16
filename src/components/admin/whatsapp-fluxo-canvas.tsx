@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus as PlusIcon, Send, Trash2 } from "lucide-react";
+import { Minus, Plus as PlusIcon, Send, Trash2, X } from "lucide-react";
 import { salvarNosFluxo, testarFluxo } from "@/app/admin/whatsapp-fluxos/actions";
 import {
   CONDICAO_OPERADORES,
@@ -23,6 +23,7 @@ import {
   TIPO_NO_INFO,
   novoId,
   type CondicaoOperador,
+  type DadosMenu,
   type FluxoGatilho,
   type NoFluxo,
   type TipoNo,
@@ -34,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +60,7 @@ const TELA_ALTURA = 1100;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.5;
 
-const TIPOS_ADICIONAVEIS: TipoNo[] = ["mensagem", "aguardar", "aguardar_resposta", "condicao", "fim"];
+const TIPOS_ADICIONAVEIS: TipoNo[] = ["mensagem", "aguardar", "aguardar_resposta", "menu", "condicao", "fim"];
 
 function previewNo(no: NoFluxo, gatilho: FluxoGatilho): string {
   switch (no.tipo) {
@@ -73,6 +75,8 @@ function previewNo(no: NoFluxo, gatilho: FluxoGatilho): string {
     }
     case "aguardar_resposta":
       return "Aguarda resposta do contato...";
+    case "menu":
+      return `Menu: ${(no.dados.opcoes ?? []).length} opções`;
     case "condicao":
       return no.dados.campo ? `{${no.dados.campo}} ${CONDICAO_OPERADOR_LABELS[no.dados.operador ?? "igual"]} ${no.dados.valor ?? ""}` : "(configure a condição)";
     case "fim":
@@ -145,7 +149,15 @@ export function WhatsappFluxoCanvas({
     const id = novoId(nos);
     const base = selecionado ? { x: selecionado.posicao.x + 260, y: selecionado.posicao.y } : { x: 60, y: 60 + nos.length * 30 };
     const dadosPadrao: NoFluxo["dados"] =
-      tipo === "mensagem" ? { texto: "" } : tipo === "aguardar" ? { segundos: 3600 } : tipo === "condicao" ? { campo: "", operador: "igual", valor: "" } : {};
+      tipo === "mensagem"
+        ? { texto: "" }
+        : tipo === "aguardar"
+          ? { segundos: 3600 }
+          : tipo === "menu"
+            ? { texto: "", opcoes: [], reenviar_invalido: false }
+            : tipo === "condicao"
+              ? { campo: "", operador: "igual", valor: "" }
+              : {};
     const novo: NoFluxo = { id, tipo, posicao: base, dados: dadosPadrao, proximos: [] };
     setNos((atual) => [...atual, novo]);
     setSelecionadoId(id);
@@ -574,6 +586,93 @@ function PainelNo({
         )}
 
         <SeletorProximo label="Depois da resposta, vai para" valor={no.proximos[0] ?? ""} opcoes={opcoes} onChange={(v) => onProximosChange(v ? [v] : [])} />
+      </div>
+    );
+  }
+
+  if (no.tipo === "menu") {
+    const dadosMenu = no.dados as DadosMenu;
+    const opcoesMenu = dadosMenu.opcoes ?? [];
+
+    function atualizarOpcoes(novasOpcoes: DadosMenu["opcoes"]) {
+      onDadosChange({ ...no.dados, opcoes: novasOpcoes });
+    }
+
+    function adicionarOpcao() {
+      atualizarOpcoes([...opcoesMenu, { numero: opcoesMenu.length + 1, label: "", proximo_id: "" }]);
+    }
+
+    function removerOpcao(indice: number) {
+      atualizarOpcoes(
+        opcoesMenu.filter((_, i) => i !== indice).map((opcao, i) => ({ ...opcao, numero: i + 1 })),
+      );
+    }
+
+    function atualizarOpcao(indice: number, parcial: Partial<DadosMenu["opcoes"][number]>) {
+      atualizarOpcoes(opcoesMenu.map((opcao, i) => (i === indice ? { ...opcao, ...parcial } : opcao)));
+    }
+
+    return (
+      <div className="flex flex-col gap-4">
+        <h3 className="text-sm font-semibold">📋 Menu de opções</h3>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`no-menu-texto-${no.id}`}>Mensagem com as opções</Label>
+          <Textarea
+            id={`no-menu-texto-${no.id}`}
+            rows={3}
+            value={dadosMenu.texto ?? ""}
+            onChange={(e) => onDadosChange({ ...no.dados, texto: e.target.value })}
+          />
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Label>Opções</Label>
+          {opcoesMenu.map((opcao, indice) => (
+            <div key={indice} className="flex flex-col gap-2 rounded-md border p-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground w-5 shrink-0 text-sm font-semibold">{opcao.numero}</span>
+                <Input
+                  value={opcao.label}
+                  placeholder="Texto da opção"
+                  onChange={(e) => atualizarOpcao(indice, { label: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remover opção ${opcao.numero}`}
+                  onClick={() => removerOpcao(indice)}
+                >
+                  <X />
+                </Button>
+              </div>
+              <SeletorProximo
+                label="Vai para"
+                valor={opcao.proximo_id}
+                opcoes={opcoes}
+                onChange={(v) => atualizarOpcao(indice, { proximo_id: v })}
+              />
+            </div>
+          ))}
+          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={adicionarOpcao}>
+            <PlusIcon />
+            Adicionar opção
+          </Button>
+        </div>
+
+        <label className="flex items-center justify-between gap-3 border-t pt-3">
+          <span className="flex flex-col">
+            <span className="text-sm font-medium">Reenviar menu se resposta inválida</span>
+            <span className="text-muted-foreground text-xs">
+              Se o contato responder algo que não é nenhuma opção, envia o menu de novo.
+            </span>
+          </span>
+          <Switch
+            checked={dadosMenu.reenviar_invalido ?? false}
+            onCheckedChange={(ativo) => onDadosChange({ ...no.dados, reenviar_invalido: ativo })}
+          />
+        </label>
       </div>
     );
   }
