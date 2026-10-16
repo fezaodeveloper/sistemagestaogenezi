@@ -30,6 +30,7 @@ export type FluxoCardView = {
   gatilho: FluxoGatilho;
   ativo: boolean;
   totalExecucoes: number;
+  execucoesPorStatus: { em_andamento: number; concluido: number; erro: number; cancelado: number };
 };
 
 export function WhatsappFluxoCard({ fluxo }: { fluxo: FluxoCardView }) {
@@ -95,9 +96,26 @@ export function WhatsappFluxoCard({ fluxo }: { fluxo: FluxoCardView }) {
 
         {fluxo.descricao && <p className="text-muted-foreground line-clamp-2 text-xs">{fluxo.descricao}</p>}
 
-        <p className="text-muted-foreground text-xs">
-          {fluxo.totalExecucoes} {fluxo.totalExecucoes === 1 ? "execução" : "execuções"}
-        </p>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">
+            {fluxo.totalExecucoes} {fluxo.totalExecucoes === 1 ? "execução" : "execuções"}
+          </span>
+          {fluxo.execucoesPorStatus.em_andamento > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {fluxo.execucoesPorStatus.em_andamento} em andamento
+            </Badge>
+          )}
+          {fluxo.execucoesPorStatus.concluido > 0 && (
+            <Badge className="bg-green-500/10 text-xs text-green-600 dark:bg-green-500/15 dark:text-green-400">
+              {fluxo.execucoesPorStatus.concluido} concluído{fluxo.execucoesPorStatus.concluido > 1 ? "s" : ""}
+            </Badge>
+          )}
+          {fluxo.execucoesPorStatus.erro > 0 && (
+            <Badge variant="destructive" className="text-xs">
+              {fluxo.execucoesPorStatus.erro} erro{fluxo.execucoesPorStatus.erro > 1 ? "s" : ""}
+            </Badge>
+          )}
+        </div>
 
         {erro && (
           <p role="alert" className="text-destructive text-xs">

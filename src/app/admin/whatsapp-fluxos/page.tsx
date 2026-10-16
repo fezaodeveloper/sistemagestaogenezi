@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { isFluxoGatilho } from "@/lib/whatsapp/fluxos-tipos";
+import { contarExecucoes } from "@/app/admin/whatsapp-fluxos/actions";
 import { WhatsappFluxoCard, type FluxoCardView } from "@/components/admin/whatsapp-fluxo-card";
 import { WhatsappFluxoNovoDialog } from "@/components/admin/whatsapp-fluxo-novo-dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,24 +19,29 @@ export default async function WhatsappFluxosPage() {
 
   const linhas = ((data ?? []) as LinhaFluxo[]).filter((f) => isFluxoGatilho(f.gatilho));
 
-  // Contagem de execuções por fluxo — poucos fluxos esperados, uma query por linha é aceitável
-  // (mesmo critério já usado em outras listagens admin do projeto, ex.: conquistas).
-  const totais = await Promise.all(
+  // Contagem de execuções por status, por fluxo — poucos fluxos esperados, 4 queries count-only
+  // por linha é aceitável (mesmo critério já usado em outras listagens admin do projeto, ex.:
+  // conquistas; antes era 1 query por linha, sem quebra por status — ver contarExecucoes).
+  const contagens = await Promise.all(
     linhas.map(async (f) => {
-      const { count } = await supabase.from("whatsapp_fluxos_execucoes").select("id", { count: "exact", head: true }).eq("fluxo_id", f.id);
-      return [f.id, count ?? 0] as const;
+      const resultado = await contarExecucoes(f.id);
+      return [f.id, "error" in resultado ? { em_andamento: 0, concluido: 0, erro: 0, cancelado: 0 } : resultado] as const;
     }),
   );
-  const totaisPorFluxo = new Map(totais);
+  const contagensPorFluxo = new Map(contagens);
 
-  const fluxos: FluxoCardView[] = linhas.map((f) => ({
-    id: f.id,
-    nome: f.nome,
-    descricao: f.descricao,
-    gatilho: f.gatilho as FluxoCardView["gatilho"],
-    ativo: f.ativo,
-    totalExecucoes: totaisPorFluxo.get(f.id) ?? 0,
-  }));
+  const fluxos: FluxoCardView[] = linhas.map((f) => {
+    const porStatus = contagensPorFluxo.get(f.id) ?? { em_andamento: 0, concluido: 0, erro: 0, cancelado: 0 };
+    return {
+      id: f.id,
+      nome: f.nome,
+      descricao: f.descricao,
+      gatilho: f.gatilho as FluxoCardView["gatilho"],
+      ativo: f.ativo,
+      totalExecucoes: porStatus.em_andamento + porStatus.concluido + porStatus.erro + porStatus.cancelado,
+      execucoesPorStatus: porStatus,
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6">

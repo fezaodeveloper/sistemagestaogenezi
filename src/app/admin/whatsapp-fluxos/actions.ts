@@ -212,6 +212,32 @@ export async function listarExecucoes(fluxoId: string, status?: string): Promise
   }));
 }
 
+export type ContagemExecucoes = { em_andamento: number; concluido: number; erro: number; cancelado: number };
+
+const STATUSES_EXECUCAO = ["em_andamento", "concluido", "erro", "cancelado"] as const;
+
+// 4 queries count-only (head: true), uma por status, em vez de uma única query trazendo linhas
+// (ou reaproveitar listarExecucoes) pra agrupar no cliente — listarExecucoes tem .limit(200), que
+// tornaria a contagem imprecisa pra qualquer fluxo com mais execuções que isso. head:true nunca
+// traz linha nenhuma, então o custo não cresce com o volume de execuções do fluxo.
+export async function contarExecucoes(fluxoId: string): Promise<ContagemExecucoes | { error: string }> {
+  await requireRole("admin");
+  if (!z.uuid().safeParse(fluxoId).success) return { error: "Fluxo inválido." };
+
+  const supabase = await createClient();
+  const resultados = await Promise.all(
+    STATUSES_EXECUCAO.map((status) =>
+      supabase.from("whatsapp_fluxos_execucoes").select("id", { count: "exact", head: true }).eq("fluxo_id", fluxoId).eq("status", status),
+    ),
+  );
+
+  const contagem: ContagemExecucoes = { em_andamento: 0, concluido: 0, erro: 0, cancelado: 0 };
+  STATUSES_EXECUCAO.forEach((status, indice) => {
+    contagem[status] = resultados[indice].count ?? 0;
+  });
+  return contagem;
+}
+
 export async function cancelarExecucao(execucaoId: string): Promise<Resultado> {
   await requireRole("admin");
   if (!z.uuid().safeParse(execucaoId).success) return { error: "Execução inválida." };

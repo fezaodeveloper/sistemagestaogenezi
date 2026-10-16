@@ -4,10 +4,18 @@
 // cancelamento.
 
 import { useEffect, useState, useTransition } from "react";
-import { cancelarExecucao, listarExecucoes, type ExecucaoView } from "@/app/admin/whatsapp-fluxos/actions";
+import { Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
+import {
+  cancelarExecucao,
+  contarExecucoes,
+  listarExecucoes,
+  type ContagemExecucoes,
+  type ExecucaoView,
+} from "@/app/admin/whatsapp-fluxos/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ResumoCard } from "@/components/admin/resumo-card";
 
 const STATUSES = ["", "em_andamento", "concluido", "erro", "cancelado"] as const;
 const STATUS_LABEL: Record<string, string> = {
@@ -42,6 +50,7 @@ export function WhatsappFluxoExecucoes({ fluxoId }: { fluxoId: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [versao, setVersao] = useState(0);
   const [cancelando, startCancelar] = useTransition();
+  const [contagem, setContagem] = useState<ContagemExecucoes | null>(null);
 
   // Busca direto no corpo do effect (sem setState síncrono antes do await) — mesmo padrão de
   // src/hooks/useConquistas.ts: só atualiza estado dentro do .then(), depois que a resposta chega.
@@ -62,6 +71,20 @@ export function WhatsappFluxoExecucoes({ fluxoId }: { fluxoId: string }) {
     };
   }, [fluxoId, status, versao]);
 
+  // Faixa de resumo: SEMPRE os totais reais (não os da lista filtrada/truncada em 200 por
+  // listarExecucoes) — por isso uma busca própria, independente do filtro de status da lista
+  // abaixo, e refeita quando `versao` muda (ex.: depois de cancelar uma execução).
+  useEffect(() => {
+    let cancelado = false;
+    contarExecucoes(fluxoId).then((r) => {
+      if (cancelado || "error" in r) return;
+      setContagem(r);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [fluxoId, versao]);
+
   function cancelar(id: string) {
     startCancelar(async () => {
       const r = await cancelarExecucao(id);
@@ -74,7 +97,16 @@ export function WhatsappFluxoExecucoes({ fluxoId }: { fluxoId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      {contagem && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <ResumoCard label="Em andamento" valor={contagem.em_andamento} icon={Clock} cor="amber" />
+          <ResumoCard label="Concluídos" valor={contagem.concluido} icon={CheckCircle2} cor="green" />
+          <ResumoCard label="Erros" valor={contagem.erro} icon={XCircle} cor="red" />
+          <ResumoCard label="Cancelados" valor={contagem.cancelado} icon={Ban} cor="slate" />
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtrar execuções por status">
         {STATUSES.map((s) => (
           <button
