@@ -545,6 +545,29 @@ export async function cancelarParcela(parcelaId: string): Promise<ParcelaActionR
   return { success: true };
 }
 
+// Exclusão definitiva — só permitida pra parcelas já canceladas (nenhuma FK referencia
+// parcelas.id em todo o schema, então o DELETE em si nunca é bloqueado por integridade
+// referencial; o guard de status abaixo é a única proteção real, pra não apagar parcela
+// em aberto/paga por engano).
+export async function excluirParcela(parcelaId: string): Promise<ParcelaActionResult> {
+  await requireRole("admin");
+  const supabase = await createClient();
+
+  const { data: parcela } = await supabase.from("parcelas").select("id, status").eq("id", parcelaId).single();
+
+  if (!parcela) return { error: "Parcela não encontrada." };
+  if (parcela.status !== "cancelado") {
+    return { error: "Apenas parcelas canceladas podem ser excluídas." };
+  }
+
+  const { error } = await supabase.from("parcelas").delete().eq("id", parcelaId);
+
+  if (error) return { error: "Não foi possível excluir a parcela." };
+
+  revalidatePath("/admin/financeiro");
+  return { success: true };
+}
+
 // Baixa manual (dinheiro, cartão na Infinipay, ou até um boleto/Pix do
 // Asaas pago presencialmente): quando a parcela já tem cobrança no Asaas,
 // dá baixa lá também (POST /receiveInCash) pra manter os dois lados

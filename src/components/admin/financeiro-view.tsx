@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, MessageCircle, Paperclip, Plus, Printer, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, Loader2, MessageCircle, Paperclip, Plus, Printer, Send, Trash2 } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
@@ -12,6 +12,7 @@ import {
   enviarCobrancaWhatsappAction,
   enviarComprovantePagamentoWhatsappAction,
   estornarParcela,
+  excluirParcela,
   gerarCarne,
   gerarCobranca,
   getFinanceiroDados,
@@ -536,6 +537,7 @@ function AcoesParcela({
   const [mensagemWhatsapp, setMensagemWhatsapp] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
   const [confirmandoEstorno, setConfirmandoEstorno] = useState(false);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const [pagamentoDialogOpen, setPagamentoDialogOpen] = useState(false);
   const [gerandoCarne, setGerandoCarne] = useState(false);
 
@@ -592,6 +594,19 @@ function AcoesParcela({
         return;
       }
       setConfirmandoCancelamento(false);
+      onAtualizada();
+    });
+  }
+
+  function handleExcluir() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await excluirParcela(parcela.id);
+      if ("error" in resultado) {
+        setError(resultado.error);
+        return;
+      }
+      setConfirmandoExclusao(false);
       onAtualizada();
     });
   }
@@ -781,6 +796,34 @@ function AcoesParcela({
                 <AlertDialogCancel>Voltar</AlertDialogCancel>
                 <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleCancelar}>
                   {isPending ? "Cancelando..." : "Cancelar parcela"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+        {parcela.status === "cancelado" && (
+          <AlertDialog open={confirmandoExclusao} onOpenChange={setConfirmandoExclusao}>
+            <AlertDialogTrigger
+              render={
+                <Button variant="ghost" size="sm" className="text-destructive" disabled={isPending}>
+                  {isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  Excluir
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir cobrança cancelada?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação remove permanentemente a parcela {parcela.numero_parcela} de &quot;
+                  {parcela.alunos?.full_name ?? "—"}&quot; do sistema. Ela já está cancelada e não pode ser
+                  revertida.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isPending}>Voltar</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+                  {isPending ? "Excluindo..." : "Excluir permanentemente"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
