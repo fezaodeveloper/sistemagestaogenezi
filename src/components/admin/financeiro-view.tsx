@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, Loader2, MessageCircle, Paperclip, Plus, Printer, Send, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileText, Loader2, MessageCircle, Paperclip, Plus, Printer, Receipt, Send, Trash2 } from "lucide-react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
@@ -710,6 +710,17 @@ function AcoesParcela({
           >
             <MessageCircle />
             {enviandoWhatsapp === "comprovante" ? "Enviando..." : "Enviar comprovante"}
+          </Button>
+        )}
+        {parcela.status === "pago" && (
+          <Button
+            render={<a href={`/api/comprovantes/parcela/${parcela.id}/pdf`} target="_blank" rel="noopener noreferrer" />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+          >
+            <Receipt />
+            Recibo
           </Button>
         )}
         {parcela.asaas_invoice_url && (
