@@ -50,6 +50,9 @@ async function enviarMensagem(params: {
   telefoneAlunoBruto: string;
   variaveis: Record<string, string>;
   criadoPor: string | null;
+  // Anexado ao final do texto renderizado (não substitui o template admin-editável em
+  // whatsapp_templates) — usado hoje só pelo link do comprovante em matricula_criada.
+  sufixoTexto?: string;
 }): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -65,7 +68,9 @@ async function enviarMensagem(params: {
 
     // Texto do template: whatsapp_templates (GênZap Fase 2) — ativo lá, senão o padrão do
     // código; nunca lança (ver renderTemplate).
-    const mensagemTexto = await renderTemplate(TEMPLATE_ID_POR_TIPO[params.tipo], params.variaveis);
+    const mensagemTexto = params.sufixoTexto
+      ? `${await renderTemplate(TEMPLATE_ID_POR_TIPO[params.tipo], params.variaveis)}\n\n${params.sufixoTexto}`
+      : await renderTemplate(TEMPLATE_ID_POR_TIPO[params.tipo], params.variaveis);
 
     const registrar = (status: MensagemStatus, telefoneDestino: string, erroDetalhe: string | null) =>
       admin.from("mensagens_enviadas").insert({
@@ -150,6 +155,11 @@ export async function enviarMensagemMatriculaCriada(
       (a, b) => a.numero_sessao - b.numero_sessao,
     )[0];
 
+    // Mesmo domínio/fallback já usado em todo o projeto pra link de portal (ver urlPortal() em
+    // src/lib/whatsapp/eventos.ts, duplicado aqui pra não precisar exportar/importar entre
+    // arquivos só por isso) — nunca o domínio literal de uma tarefa, que não existe no projeto.
+    const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(/\/+$/, "");
+
     await enviarMensagem({
       tipo: "matricula_criada",
       matriculaId,
@@ -164,6 +174,7 @@ export async function enviarMensagemMatriculaCriada(
         data_aula: primeiraAula ? formatarDataBR(primeiraAula.data_liberacao) : "a definir",
         horario_aula: matricula.turmas.horario_aula ? formatarHorario(matricula.turmas.horario_aula) : "a definir",
       },
+      sufixoTexto: `📄 Baixe seu comprovante de matrícula: ${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
     });
 
     // GênZap Fase 3 — fluxos personalizados com gatilho "matricula_criada", além do template
