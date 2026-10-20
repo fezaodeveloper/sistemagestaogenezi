@@ -10,6 +10,7 @@ import { PendenciasResumo } from "@/components/admin/pendencias-resumo";
 import { DashboardKpisFinanceiros } from "@/components/admin/dashboard-kpis-financeiros";
 import { DashboardGraficos } from "@/components/admin/dashboard-graficos";
 import { getDadosGraficosDashboard } from "@/lib/relatorios/dashboard-graficos";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
 function saudacaoPorHorario(): string {
@@ -24,11 +25,16 @@ function StatTile({
   valor,
   label,
   cor,
+  detalhes,
 }: {
   icone: typeof Users;
   valor: number | string;
   label: string;
   cor: "blue" | "cyan" | "violet";
+  // Quebra opcional do valor principal (ex.: alunos ativos por status) — exibida como badges
+  // dentro do mesmo card, sem criar uma nova célula no grid de 3 colunas (loading.tsx tem um
+  // skeleton genérico de 3 cards, então evitar mudar a quantidade de cards no grid real).
+  detalhes?: { label: string; valor: number }[];
 }) {
   const corTexto: Record<string, string> = {
     blue: "#2196F3",
@@ -50,6 +56,15 @@ function StatTile({
         <span className="gz-num text-[27px]" style={{ color: corTexto[cor] }}>
           {valor}
         </span>
+        {detalhes && detalhes.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {detalhes.map((d) => (
+              <Badge key={d.label} variant="outline" className="text-[11px]">
+                {d.label}: {d.valor}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -66,7 +81,10 @@ export default async function AdminDashboardPage() {
   const fimMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(ultimoDiaMes).padStart(2, "0")}`;
 
   const [
-    { count: totalAlunos },
+    { count: totalAtivos },
+    { count: totalInativos },
+    { count: totalTrancados },
+    { count: totalFormados },
     { count: cursosAtivos },
     { count: turmasEmAndamento },
     { count: matriculasAtivas },
@@ -75,7 +93,10 @@ export default async function AdminDashboardPage() {
     { data: avulsosMesData },
     graficos,
   ] = await Promise.all([
-    supabase.from("alunos").select("*", { count: "exact", head: true }),
+    supabase.from("alunos").select("*", { count: "exact", head: true }).eq("status_aluno", "ativo"),
+    supabase.from("alunos").select("*", { count: "exact", head: true }).eq("status_aluno", "inativo"),
+    supabase.from("alunos").select("*", { count: "exact", head: true }).eq("status_aluno", "trancado"),
+    supabase.from("alunos").select("*", { count: "exact", head: true }).eq("status_aluno", "formado"),
     supabase.from("cursos").select("*", { count: "exact", head: true }).eq("status", "ativo"),
     supabase.from("turmas").select("*", { count: "exact", head: true }).eq("status", "ativa"),
     supabase.from("matriculas").select("*", { count: "exact", head: true }).eq("status", "ativa"),
@@ -89,6 +110,10 @@ export default async function AdminDashboardPage() {
     supabase.from("pagamentos_avulsos").select("valor").gte("data_pagamento", inicioMes).lte("data_pagamento", fimMes),
     getDadosGraficosDashboard(supabase),
   ]);
+
+  // Mantida como soma dos 4 status — qualquer lógica existente que espere o total geral de
+  // alunos (sem distinção de status_aluno) continua recebendo o mesmo número de antes.
+  const totalAlunos = (totalAtivos ?? 0) + (totalInativos ?? 0) + (totalTrancados ?? 0) + (totalFormados ?? 0);
 
   const receitaMes =
     ((parcelasPagasMesData ?? []) as { valor: number }[]).reduce((soma, p) => soma + Number(p.valor), 0) +
@@ -106,7 +131,18 @@ export default async function AdminDashboardPage() {
       <div>
         <h2 className="text-muted-foreground mb-3 text-sm font-medium">Resumo geral</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatTile icone={Users} valor={totalAlunos ?? 0} label="Alunos" cor="cyan" />
+          <StatTile
+            icone={Users}
+            valor={totalAtivos ?? 0}
+            label="Alunos Ativos"
+            cor="cyan"
+            detalhes={[
+              { label: "Inativos", valor: totalInativos ?? 0 },
+              { label: "Trancados", valor: totalTrancados ?? 0 },
+              { label: "Formados", valor: totalFormados ?? 0 },
+              { label: "Total", valor: totalAlunos },
+            ]}
+          />
           <StatTile icone={GraduationCap} valor={cursosAtivos ?? 0} label="Cursos ativos" cor="blue" />
           <StatTile icone={School} valor={turmasEmAndamento ?? 0} label="Turmas em andamento" cor="violet" />
         </div>
