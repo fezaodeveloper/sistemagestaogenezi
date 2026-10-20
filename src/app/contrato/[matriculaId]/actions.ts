@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isMinor, onlyDigits } from "@/lib/alunos/schema";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { gerarContratoPdf } from "@/lib/contratos/pdf";
 
 // Assinatura SEM login — validação por CPF em vez de sessão. Por isso sem requireRole() (não há
 // usuário autenticado neste fluxo) e sempre via createAdminClient() (service_role bypassa a RLS
@@ -29,7 +30,7 @@ export async function assinarContratoPorCpf(
 
   const { data: aluno } = await admin
     .from("alunos")
-    .select("id, cpf, data_nascimento")
+    .select("id, full_name, cpf, data_nascimento")
     .eq("id", contrato.aluno_id)
     .maybeSingle();
 
@@ -41,20 +42,25 @@ export async function assinarContratoPorCpf(
   const menor = isMinor(aluno.data_nascimento);
 
   let tipoAssinante: "aluno" | "responsavel";
+  // Nome exibido no rodapé de assinatura do PDF regenerado abaixo — do aluno, ou do responsável
+  // específico cujo CPF bateu (não "um responsável qualquer").
+  let nomeAssinante: string;
 
   if (!menor) {
     if (cpfNormalizado !== onlyDigits(aluno.cpf)) {
       return { error: "CPF não confere com o cadastro do aluno." };
     }
     tipoAssinante = "aluno";
+    nomeAssinante = aluno.full_name ?? "aluno(a)";
   } else {
-    const { data: responsaveis } = await admin.from("responsaveis").select("cpf").eq("aluno_id", aluno.id);
+    const { data: responsaveis } = await admin.from("responsaveis").select("nome, cpf").eq("aluno_id", aluno.id);
 
-    const bateComAlgumResponsavel = (responsaveis ?? []).some((r) => onlyDigits(r.cpf) === cpfNormalizado);
-    if (!bateComAlgumResponsavel) {
+    const responsavelEncontrado = (responsaveis ?? []).find((r) => onlyDigits(r.cpf) === cpfNormalizado);
+    if (!responsavelEncontrado) {
       return { error: "CPF não confere com nenhum responsável cadastrado." };
     }
     tipoAssinante = "responsavel";
+    nomeAssinante = responsavelEncontrado.nome;
   }
 
   const headersList = await headers();
@@ -79,6 +85,21 @@ export async function assinarContratoPorCpf(
   // — mesma idempotency_key (matriculaId), então os dois caminhos nunca disparam o evento em
   // duplicidade pra uma mesma matrícula.
   await dispararEvento("contrato.assinado", { matriculaId }, `contrato-assinado-${matriculaId}`);
+
+  // Best-effort: regenera o PDF com o rodapé de aceite digital, mesmo padrão de
+  // assinarContrato() em src/app/aluno/contrato/actions.ts. Se falhar, a assinatura já
+  // registrada acima continua válida — só o PDF ficaria sem o rodapé.
+  try {
+    const agora = new Date();
+    const dataFormatada = `${agora.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} às ${agora.toLocaleTimeString(
+      "pt-BR",
+      { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" },
+    )}`;
+    const pdfBuffer = await gerarContratoPdf(matriculaId, { assinatura: { nome: nomeAssinante, dataFormatada } });
+    await admin.from("contratos_assinados").update({ conteudo_pdf_base64: pdfBuffer.toString("base64") }).eq("id", contrato.id);
+  } catch {
+    // Best-effort — a assinatura já foi registrada com sucesso acima.
+  }
 
   return { success: true };
 }
