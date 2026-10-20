@@ -352,9 +352,11 @@ export async function notificarWhatsappEnviarContrato(
   // src/lib/configuracoes/schema.ts) — enviado sem gate, como pedido explicitamente na tarefa.
   const nome = primeiroNome(aluno.profiles?.full_name) || "aluno(a)";
   const curso = contrato.matriculas?.turmas?.cursos?.nome ?? "seu curso";
-  // Dois links: /aluno/contrato (exige login — é onde o aluno LÊ e ASSINA de verdade, ver
-  // AlunoContratoView) e a rota pública de PDF cru (só leitura/download, sem assinatura).
-  const urlAssinar = `${urlPortal()}/aluno/contrato`;
+  // Dois links: /contrato/[matriculaId]/assinar (público, sem login — validação por CPF, ver
+  // src/app/contrato/[matriculaId]/actions.ts::assinarContratoPorCpf) e a rota pública de PDF
+  // cru (só leitura/download, sem assinatura). O fluxo antigo com login (/aluno/contrato)
+  // continua existindo e intacto, só não é mais o link enviado por WhatsApp.
+  const urlAssinar = `${urlPortal()}/contrato/${matriculaId}/assinar`;
   const urlPdf = `${urlPortal()}/api/contratos/${matriculaId}/pdf`;
   const mensagem =
     `Olá ${nome}! 📄 Seu contrato do curso ${curso} está disponível.\n\n` +
