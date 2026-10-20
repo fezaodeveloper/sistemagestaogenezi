@@ -49,6 +49,7 @@ import {
   buscarModulosAulasCurso,
   buscarTurmasParaWizard,
   createMatricula,
+  getCursosGratuitos,
   type AlunoParaMatricula,
   type CursoParaMatricula,
   type ModulosAulasCurso,
@@ -251,6 +252,33 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
   const [descontoTipo, setDescontoTipo] = useState<DescontoTipo>("sem_bolsa");
   const [descontoFormato, setDescontoFormato] = useState<DescontoFormato | null>(null);
   const [descontoValorInput, setDescontoValorInput] = useState("");
+
+  // Curso Gratuito (checkbox) — ao marcar, busca os cursos com gratuito=true e, ao escolher um
+  // no dropdown, reaproveita handleSelecionarCurso (já carrega turmas/módulos do curso
+  // escolhido, mesma lógica da busca por texto da Etapa 2) e fixa o desconto em bolsa_social
+  // 100%. Desmarcar só volta o desconto ao estado normal — não desfaz o curso/turma já
+  // escolhidos, pra não ser destrutivo além do que foi pedido.
+  const [cursoGratuito, setCursoGratuito] = useState(false);
+  const [cursosGratuitos, setCursosGratuitos] = useState<CursoParaMatricula[]>([]);
+  const [carregandoCursosGratuitos, setCarregandoCursosGratuitos] = useState(false);
+
+  function handleToggleCursoGratuito(marcado: boolean) {
+    setCursoGratuito(marcado);
+    if (marcado) {
+      setDescontoTipo("bolsa_social");
+      setDescontoFormato("porcentagem");
+      setDescontoValorInput("100");
+      setCarregandoCursosGratuitos(true);
+      getCursosGratuitos()
+        .then(setCursosGratuitos)
+        .finally(() => setCarregandoCursosGratuitos(false));
+    } else {
+      setCursosGratuitos([]);
+      setDescontoTipo("sem_bolsa");
+      setDescontoFormato(null);
+      setDescontoValorInput("");
+    }
+  }
   const [numParcelas, setNumParcelas] = useState(1);
   const [dataPrimeiraMensalidade, setDataPrimeiraMensalidade] = useState("");
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(null);
@@ -369,6 +397,8 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
     setDescontoTipo("sem_bolsa");
     setDescontoFormato(null);
     setDescontoValorInput("");
+    setCursoGratuito(false);
+    setCursosGratuitos([]);
     setNumParcelas(1);
     setDataPrimeiraMensalidade("");
     setFormaPagamento(null);
@@ -852,11 +882,55 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
           <Input id="valor_original" readOnly value={formatValor(valorOriginal)} className="max-w-40" />
         </div>
 
+        <div className="flex flex-col gap-2 rounded-md border p-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="curso_gratuito"
+              checked={cursoGratuito}
+              onCheckedChange={(checked) => handleToggleCursoGratuito(checked === true)}
+            />
+            <Label htmlFor="curso_gratuito" className="font-normal">
+              Curso Gratuito
+            </Label>
+          </div>
+          {cursoGratuito && (
+            <div className="flex flex-col gap-2 pt-1">
+              <Label htmlFor="curso_gratuito_select">Selecione o curso gratuito</Label>
+              {carregandoCursosGratuitos ? (
+                <p className="text-muted-foreground text-sm">Carregando cursos gratuitos...</p>
+              ) : cursosGratuitos.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Nenhum curso gratuito disponível.</p>
+              ) : (
+                <Select
+                  items={Object.fromEntries(cursosGratuitos.map((c) => [c.id, c.nome]))}
+                  value={curso && cursosGratuitos.some((c) => c.id === curso.id) ? curso.id : undefined}
+                  onValueChange={(value) => {
+                    const escolhido = cursosGratuitos.find((c) => c.id === value);
+                    if (escolhido) handleSelecionarCurso(escolhido);
+                  }}
+                >
+                  <SelectTrigger id="curso_gratuito_select" className="w-64">
+                    <SelectValue placeholder="Escolha o curso" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cursosGratuitos.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-2">
           <Label htmlFor="desconto_tipo">Tipo de Desconto</Label>
           <Select
             items={DESCONTO_TIPO_LABELS}
             value={descontoTipo}
+            disabled={cursoGratuito}
             onValueChange={(value) => {
               setDescontoTipo(value as DescontoTipo);
               if (value === "sem_bolsa") {

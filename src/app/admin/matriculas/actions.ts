@@ -113,6 +113,25 @@ export async function buscarCursosParaWizard(query: string): Promise<CursoParaMa
   return (data as CursoParaMatricula[] | null) ?? [];
 }
 
+// Cursos gratuitos (checkbox "Curso Gratuito" na Etapa 3 do wizard, ver matricula-wizard.tsx) —
+// lista fechada (sem busca por texto, ao contrário de buscarCursosParaWizard), já que o universo
+// de cursos gratuitos tende a ser pequeno. Mesmo shape de CursoParaMatricula (não só id/nome):
+// o item escolhido aqui é passado direto pra handleSelecionarCurso() no wizard, que já espera
+// tipo/carga_horaria_horas/valor/descricao pra preencher o resumo da Etapa 2.
+export async function getCursosGratuitos(): Promise<CursoParaMatricula[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("cursos")
+    .select("id, nome, tipo, carga_horaria_horas, valor, descricao")
+    .eq("status", "ativo")
+    .eq("gratuito", true)
+    .order("nome");
+
+  return (data as CursoParaMatricula[] | null) ?? [];
+}
+
 // Turmas ativas de um curso já selecionado — busca automática (sem campo
 // de digitação), disparada assim que o admin escolhe o curso na Etapa 2.
 // Sem limit: o filtro por curso_id já é o que mantém isso pequeno (poucas
