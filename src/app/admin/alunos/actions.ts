@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { alunoFormSchema, alunoEditFormSchema, isMinor } from "@/lib/alunos/schema";
+import { alunoFormSchema, alunoEditFormSchema, isMinor, onlyDigits } from "@/lib/alunos/schema";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
@@ -248,6 +248,17 @@ export async function createAluno(
       };
     }
   }
+
+  // Só matrícula disparava notificação no Telegram até aqui — cadastro de aluno (sem matrícula
+  // ainda) ficava invisível pro admin. cpf mascarado (só os últimos 3 dígitos) já no payload,
+  // por privacidade — o handler (notificarAlunoCadastrado) nunca recebe o CPF completo.
+  const cpfDigitos = onlyDigits(data.cpf);
+  const cpfMascarado = cpfDigitos.length >= 3 ? `***.***.***-${cpfDigitos.slice(-3)}` : "—";
+  await dispararEvento(
+    "aluno.cadastrado",
+    { nome_aluno: data.full_name, email: data.email, cpf_mascarado: cpfMascarado, alunoId: userId },
+    `aluno-cadastrado-${userId}`,
+  );
 
   // Modo "senha aleatória": o admin nunca vê a senha, então o e-mail com o acesso é o
   // único caminho. Enviado AQUI (não em segundo plano) pra a tela poder avisar se falhou.

@@ -174,7 +174,9 @@ export async function enviarMensagemMatriculaCriada(
         data_aula: primeiraAula ? formatarDataBR(primeiraAula.data_liberacao) : "a definir",
         horario_aula: matricula.turmas.horario_aula ? formatarHorario(matricula.turmas.horario_aula) : "a definir",
       },
-      sufixoTexto: `📄 Baixe seu comprovante de matrícula: ${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
+      // URL em linha própria: no WhatsApp mobile, texto e link na MESMA linha (só um espaço
+      // entre eles) nem sempre fica clicável — quebrar antes do link resolve isso.
+      sufixoTexto: `📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
     });
 
     // GênZap Fase 3 — fluxos personalizados com gatilho "matricula_criada", além do template
@@ -255,6 +257,23 @@ export async function enviarMensagemLembreteAula(
     if (!(await whatsappToggleHabilitado("wz_lembrete_aula"))) return;
 
     const admin = createAdminClient();
+
+    // Evita lembrete duplicado (ex.: cron reexecutado no mesmo dia): aula_id + matricula_id +
+    // tipo já identifica de forma única "este lembrete, para esta aula, para esta matrícula",
+    // sem depender de janela de data — mais robusto do que checar "já enviado hoje", que
+    // bloquearia incorretamente o lembrete de uma SEGUNDA aula da mesma turma no mesmo dia.
+    // Só um envio com status "enviado" conta como já notificado — uma tentativa anterior com
+    // "falha" não deve bloquear o reenvio.
+    const { data: jaEnviado } = await admin
+      .from("mensagens_enviadas")
+      .select("id")
+      .eq("matricula_id", matriculaId)
+      .eq("aula_id", aulaId)
+      .eq("tipo", "lembrete_aula")
+      .eq("status", "enviado")
+      .maybeSingle();
+
+    if (jaEnviado) return;
 
     const { data } = await admin
       .from("matriculas")

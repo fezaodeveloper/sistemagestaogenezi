@@ -29,6 +29,7 @@ export const EVENTO_AUTOMACAO_TIPOS = [
   "pagamento.recebido",
   "pagamento.atrasado",
   "matricula.criada",
+  "aluno.cadastrado",
   "certificado.emitido",
   "lead.novo",
   "aluno.login",

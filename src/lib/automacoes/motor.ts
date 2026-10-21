@@ -5,6 +5,7 @@ import {
   notificarPagamentoRecebido,
   notificarPagamentoAtrasado,
   notificarMatriculaCriada,
+  notificarAlunoCadastrado,
   notificarCertificadoEmitido,
   notificarLeadNovo,
   notificarAlunoLogin,
@@ -49,6 +50,9 @@ async function executarHandler(tipo: string, payload: EventoPayload): Promise<vo
       return;
     case "matricula.criada":
       await notificarMatriculaCriada(payload);
+      return;
+    case "aluno.cadastrado":
+      await notificarAlunoCadastrado(payload);
       return;
     case "certificado.emitido":
       await notificarCertificadoEmitido(payload);

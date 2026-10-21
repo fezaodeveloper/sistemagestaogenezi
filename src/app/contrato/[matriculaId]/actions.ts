@@ -83,8 +83,29 @@ export async function assinarContratoPorCpf(
 
   // Mesmo evento do fluxo com login (ver assinarContrato em src/app/aluno/contrato/actions.ts)
   // — mesma idempotency_key (matriculaId), então os dois caminhos nunca disparam o evento em
-  // duplicidade pra uma mesma matrícula.
-  await dispararEvento("contrato.assinado", { matriculaId }, `contrato-assinado-${matriculaId}`);
+  // duplicidade pra uma mesma matrícula. nome_aluno/alunoId já estão em escopo (aluno buscado
+  // acima pra validar o CPF) — só nome_curso precisa de uma consulta nova, mesmo padrão da
+  // versão com login.
+  const { data: matriculaInfo } = await admin
+    .from("matriculas")
+    .select("turmas(cursos(nome))")
+    .eq("id", matriculaId)
+    .maybeSingle();
+  const nomeCurso =
+    (matriculaInfo as unknown as { turmas: { cursos: { nome: string } | null } | null } | null)?.turmas?.cursos
+      ?.nome ?? "—";
+
+  await dispararEvento(
+    "contrato.assinado",
+    {
+      nome_aluno: aluno.full_name ?? "—",
+      nome_curso: nomeCurso,
+      matricula_id: matriculaId,
+      matriculaId,
+      alunoId: aluno.id,
+    },
+    `contrato-assinado-${matriculaId}`,
+  );
 
   // Best-effort: regenera o PDF com o rodapé de aceite digital, mesmo padrão de
   // assinarContrato() em src/app/aluno/contrato/actions.ts. Se falhar, a assinatura já

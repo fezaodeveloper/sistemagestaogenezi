@@ -99,6 +99,23 @@ export async function notificarMatriculaCriada(payload: Record<string, unknown>)
   return resultado;
 }
 
+// Sem toggle (telegramNotifHabilitada): não existe coluna de configuração específica pra este
+// evento ainda — criar uma exigiria migration, fora do escopo desta correção. Mesmo padrão de
+// outros handlers sem toggle (ex.: notificarAlunoLogin, notificarAulaConcluida) — envia sempre.
+// cpf já chega mascarado no payload (só os últimos 3 dígitos) — ver createAluno, que monta o
+// payload; o handler nunca recebe o CPF completo.
+export async function notificarAlunoCadastrado(payload: Record<string, unknown>): Promise<boolean> {
+  return enviarAlertaTelegram(
+    "Novo Aluno Cadastrado",
+    [
+      `👤 Nome: ${texto(payload.nome_aluno)}`,
+      `📧 E-mail: ${texto(payload.email)}`,
+      `🪪 CPF: ${texto(payload.cpf_mascarado)}`,
+    ],
+    "👤",
+  );
+}
+
 export async function notificarCertificadoEmitido(payload: Record<string, unknown>): Promise<boolean> {
   if (!(await telegramNotifHabilitada("tg_certificado_gerado"))) return true;
   return enviarAlertaTelegram(
