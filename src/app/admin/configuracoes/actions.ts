@@ -121,6 +121,63 @@ export async function updateCriteriosCertificado(
   return {};
 }
 
+// Painel "Horários de Notificações" — ver migration 20261021200000_config_notificacoes.sql.
+// lembrete_pagamento_* é salvo aqui mas hoje não tem nenhum cron consumindo (não existe cron de
+// lembrete ANTES do vencimento no projeto — só verificar-atrasos, que é DEPOIS do vencimento);
+// os campos ficam reservados pro painel pra quando esse cron existir.
+export type ConfigHorariosNotificacoes = {
+  lembrete_aula_ativo: boolean;
+  lembrete_aula_horas_antes: number;
+  lembrete_aula_hora_envio: number;
+  lembrete_pagamento_ativo: boolean;
+  lembrete_pagamento_dias_antes: number;
+  lembrete_pagamento_hora_envio: number;
+};
+
+function horaValida(hora: number): boolean {
+  return Number.isInteger(hora) && hora >= 0 && hora <= 23;
+}
+
+export async function atualizarConfigNotificacoes(
+  data: ConfigHorariosNotificacoes,
+): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  if (
+    !Number.isInteger(data.lembrete_aula_horas_antes) ||
+    data.lembrete_aula_horas_antes < 1 ||
+    data.lembrete_aula_horas_antes > 48
+  ) {
+    return { error: "Horas antes da aula precisa ser um número inteiro entre 1 e 48." };
+  }
+  if (!horaValida(data.lembrete_aula_hora_envio)) {
+    return { error: "Hora de envio do lembrete de aula precisa ser um número inteiro entre 0 e 23." };
+  }
+  if (
+    !Number.isInteger(data.lembrete_pagamento_dias_antes) ||
+    data.lembrete_pagamento_dias_antes < 1 ||
+    data.lembrete_pagamento_dias_antes > 10
+  ) {
+    return { error: "Dias antes do vencimento precisa ser um número inteiro entre 1 e 10." };
+  }
+  if (!horaValida(data.lembrete_pagamento_hora_envio)) {
+    return { error: "Hora de envio do lembrete de pagamento precisa ser um número inteiro entre 0 e 23." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({ ...data, updated_by: user.id })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
+
 export type EscolaFormValuesEcho = {
   escola_nome: string;
   escola_cnpj: string;

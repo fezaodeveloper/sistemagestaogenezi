@@ -2,6 +2,7 @@ import "server-only";
 
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isMinor } from "@/lib/alunos/schema";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 import { renderTemplate } from "@/lib/whatsapp/render";
 import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
@@ -246,6 +247,41 @@ export async function notificarWhatsappEnviarCobrancaManual(
   return { ok: true };
 }
 
+// Cópia da mesma mensagem pro responsável, quando o aluno é menor de idade — mesmo critério já
+// aplicado em enviarMensagem() (src/lib/mensagens/mensagens.ts, commit a537cb5). Essa function
+// (notificarWhatsappComprovantePagamento) NÃO passa por enviarMensagem() — chama enviarWhatsApp
+// direto — então ficou sem a cópia até aqui; replicado como uma function própria em vez de
+// extrair um helper compartilhado entre os dois arquivos, já que cada um usa um client de envio
+// diferente (enviarWhatsApp daqui vs. o enviarWhatsapp de nível mais baixo em
+// src/lib/mensagens/evolution.ts). Best-effort: erro aqui nunca deve afetar o retorno da function
+// que já confirmou o envio ao aluno.
+async function enviarCopiaComprovanteParaResponsavel(
+  alunoId: string,
+  nomeAluno: string | null,
+  mensagemOriginal: string,
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data: aluno } = await admin.from("alunos").select("data_nascimento").eq("id", alunoId).maybeSingle();
+    if (!aluno || !isMinor(aluno.data_nascimento)) return;
+
+    const { data: responsavel } = await admin
+      .from("responsaveis")
+      .select("telefone")
+      .eq("aluno_id", alunoId)
+      .limit(1)
+      .maybeSingle();
+    if (!responsavel?.telefone) return;
+
+    await enviarWhatsApp(
+      responsavel.telefone,
+      `📋 Cópia para responsável de ${nomeAluno ?? "aluno(a)"}:\n\n${mensagemOriginal}`,
+    );
+  } catch (erro) {
+    console.error("[whatsapp] falha ao enviar cópia do comprovante pro responsável", erro);
+  }
+}
+
 export async function notificarWhatsappComprovantePagamento(
   parcelaId: string,
 ): Promise<{ ok: boolean; erro?: string }> {
@@ -274,6 +310,9 @@ export async function notificarWhatsappComprovantePagamento(
   const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
   if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
   if (!resultado.enviado) return { ok: false, erro: "WhatsApp (GênZap) não está ativo/conectado." };
+
+  await enviarCopiaComprovanteParaResponsavel(aluno.id, aluno.full_name, mensagem);
+
   return { ok: true };
 }
 
