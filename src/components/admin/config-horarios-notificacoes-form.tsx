@@ -66,6 +66,11 @@ export function ConfigHorariosNotificacoesForm({
               onChange={(e) => setValores((v) => ({ ...v, lembrete_aula_hora_envio: Number(e.target.value) }))}
               disabled={!valores.lembrete_aula_ativo}
             />
+            <p className="text-muted-foreground text-xs">
+              Reservado para plano Vercel Pro — no plano Hobby o cron só pode rodar 1x por dia e
+              dispara sempre às 8h, não lê este valor. Salvo pra já ficar pronto quando a escola
+              migrar de plano.
+            </p>
           </div>
         </div>
       </div>

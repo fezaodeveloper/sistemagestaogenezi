@@ -4,11 +4,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarMensagemLembreteAula } from "@/lib/mensagens/mensagens";
 
-// Hora atual em Brasília (0-23) — comparada contra configuracoes.lembrete_aula_hora_envio.
-function horaAtualBRT(): number {
-  return Number(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hourCycle: "h23" }));
-}
-
 // "Quantas horas antes da aula" (configuracoes.lembrete_aula_horas_antes) traduzido pra uma data
 // de calendário: o sistema só rastreia aula por DIA (calendario_aulas_turma + turma.horario_aula,
 // um horário fixo diário recorrente), não por timestamp exato de cada sessão — então a
@@ -16,10 +11,10 @@ function horaAtualBRT(): number {
 // se comportando exatamente como o antigo amanhaISO() fixo.
 //
 // Data de HOJE calculada em BRT (não UTC) via Intl com locale en-CA (formata direto como
-// YYYY-MM-DD) — importante porque este cron agora roda de hora em hora (ver vercel.json), ao
-// contrário da versão antiga que só disparava 1x/dia às 11h UTC (fora da janela de virada de dia
-// BRT, então UTC e BRT sempre bateriam). Resolvido com meio-dia UTC na soma de dias (mesmo
-// truque usado em diaDaSemana, src/lib/whatsapp/eventos.ts) pra nunca escorregar de dia por fuso.
+// YYYY-MM-DD). O cron roda 1x/dia às 11h UTC = 8h BRT (ver vercel.json — fora da janela de
+// virada de dia BRT, então UTC e BRT sempre batem nesse horário fixo). Resolvido com meio-dia
+// UTC na soma de dias (mesmo truque usado em diaDaSemana, src/lib/whatsapp/eventos.ts) pra nunca
+// escorregar de dia por fuso.
 function dataAlvoISO(horasAntes: number): string {
   const hojeBRT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   const [ano, mes, dia] = hojeBRT.split("-").map(Number);
@@ -28,6 +23,13 @@ function dataAlvoISO(horasAntes: number): string {
   return alvo.toISOString().slice(0, 10);
 }
 
+// Disparada 1x/dia pelo Vercel Cron (ver vercel.json), sempre às 11h UTC (08h BRT) — plano Hobby
+// da Vercel não permite cron com frequência maior que 1x/dia, então configuracoes.
+// lembrete_aula_hora_envio (painel "Horários de Notificações") NÃO é lido/comparado aqui: nada
+// no código decide "a que hora rodar" além do schedule fixo em vercel.json, que só muda com um
+// novo deploy. O campo continua salvo no banco e exposto no painel, documentado como reservado
+// pra quando a escola estiver num plano Vercel Pro (permite cron mais granular, ex.: de hora em
+// hora, e aí sim o handler poderia comparar a hora atual contra esse valor).
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -39,7 +41,7 @@ export async function GET(request: Request) {
 
     const { data: config } = await admin
       .from("configuracoes")
-      .select("lembrete_aula_ativo, lembrete_aula_horas_antes, lembrete_aula_hora_envio")
+      .select("lembrete_aula_ativo, lembrete_aula_horas_antes")
       .eq("id", true)
       .maybeSingle();
 
@@ -47,22 +49,6 @@ export async function GET(request: Request) {
     // configuração explícita.
     if (config && !config.lembrete_aula_ativo) {
       return NextResponse.json({ ok: true, message: "lembretes de aula desativados em Configurações" });
-    }
-
-    const horaEnvioConfigurada = config?.lembrete_aula_hora_envio ?? 8;
-    const horaAtual = horaAtualBRT();
-
-    // O cron roda de hora em hora — só a rodada da hora configurada de fato dispara; as outras
-    // 23 rodadas do dia só fazem esta checagem (uma query leve) e saem, sem tocar em
-    // turmas/calendário/mensagens. Evita duplicidade sem depender de um agendamento fixo que só
-    // um novo deploy poderia mudar.
-    if (horaAtual !== horaEnvioConfigurada) {
-      return NextResponse.json({
-        ok: true,
-        message: "fora do horário configurado",
-        horaAtual,
-        horaEnvioConfigurada,
-      });
     }
 
     const dataAlvo = dataAlvoISO(config?.lembrete_aula_horas_antes ?? 24);

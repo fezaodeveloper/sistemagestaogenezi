@@ -49,6 +49,7 @@ const TEMPLATE_ID_POR_TIPO: Record<MensagemTipo, WhatsappTemplateId> = {
 async function enviarCopiaParaResponsavel(
   admin: ReturnType<typeof createAdminClient>,
   alunoId: string,
+  tipo: MensagemTipo,
   mensagemTexto: string,
   evolutionConfig: { url: string; instancia: string; apiKey: string },
 ): Promise<void> {
@@ -66,7 +67,23 @@ async function enviarCopiaParaResponsavel(
   if (!numeroResponsavel) return;
 
   const nomeAluno = aluno.full_name ?? "aluno(a)";
-  await enviarWhatsapp(evolutionConfig, numeroResponsavel, `📋 Cópia para responsável de ${nomeAluno}:\n\n${mensagemTexto}`);
+
+  // Bloco extra SÓ na cópia de matrícula criada (não em lembrete_aula/falta) e SÓ pro
+  // responsável — o aluno não recebe esse trecho, já tem o link de "/aluno" na mensagem
+  // original (ver enviarMensagemMatriculaCriada).
+  let blocoPortalResponsavel = "";
+  if (tipo === "matricula_criada") {
+    const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(/\/+$/, "");
+    blocoPortalResponsavel =
+      `\n\n👨‍👩‍👧 Como responsável, você também tem acesso ao portal:\n${baseUrl}/responsavel/${alunoId}\n\n` +
+      `No portal você acompanha matrículas, parcelas e documentos de ${nomeAluno}.`;
+  }
+
+  await enviarWhatsapp(
+    evolutionConfig,
+    numeroResponsavel,
+    `📋 Cópia para responsável de ${nomeAluno}:\n\n${mensagemTexto}${blocoPortalResponsavel}`,
+  );
 }
 
 // Núcleo do envio: monta o texto a partir do template configurado, valida
@@ -149,7 +166,7 @@ async function enviarMensagem(params: {
     // Cópia pro responsável só depois de confirmar que o aluno é menor — nunca duplica pra
     // aluno maior de idade. Só tenta se o envio ao aluno deu certo.
     if (resultado.ok && params.alunoId) {
-      await enviarCopiaParaResponsavel(admin, params.alunoId, mensagemTexto, evolutionConfig);
+      await enviarCopiaParaResponsavel(admin, params.alunoId, params.tipo, mensagemTexto, evolutionConfig);
     }
   } catch {
     // Rede de segurança final: nenhum erro inesperado aqui pode voltar a
