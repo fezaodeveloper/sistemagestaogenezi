@@ -89,7 +89,7 @@ export async function gerarComprovantePdf(matriculaId: string): Promise<Buffer> 
       : Promise.resolve({ count: 0 }),
     admin
       .from("configuracoes")
-      .select("escola_nome, escola_endereco, escola_telefone, termo_imagem_texto")
+      .select("escola_nome, escola_endereco, escola_telefone, escola_email")
       .eq("id", true)
       .maybeSingle(),
     carregarLogoEscolaParaPdf(),
@@ -150,7 +150,7 @@ export async function gerarComprovantePdf(matriculaId: string): Promise<Buffer> 
     escola_logo_url: escolaLogo,
     escola_endereco: configuracoes?.escola_endereco ?? undefined,
     escola_telefone: configuracoes?.escola_telefone ?? undefined,
-    termo_imagem_texto: configuracoes?.termo_imagem_texto ?? undefined,
+    escola_email: configuracoes?.escola_email ?? undefined,
     responsavelNome: responsavel?.nome,
     responsavelCpf: responsavel?.cpf,
   };

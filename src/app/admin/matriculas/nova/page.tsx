@@ -8,7 +8,7 @@ export default async function NovaMatriculaPage() {
   const supabase = await createClient();
   const { data: configuracoes } = await supabase
     .from("configuracoes")
-    .select("escola_nome, escola_endereco, escola_telefone, termo_imagem_texto")
+    .select("escola_nome, escola_endereco, escola_telefone, escola_email")
     .eq("id", true)
     .maybeSingle();
 
@@ -25,7 +25,7 @@ export default async function NovaMatriculaPage() {
           nome: configuracoes?.escola_nome ?? undefined,
           endereco: configuracoes?.escola_endereco ?? undefined,
           telefone: configuracoes?.escola_telefone ?? undefined,
-          termoImagemTexto: configuracoes?.termo_imagem_texto ?? undefined,
+          email: configuracoes?.escola_email ?? undefined,
         }}
       />
     </div>

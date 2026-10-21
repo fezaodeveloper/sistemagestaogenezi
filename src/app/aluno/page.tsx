@@ -24,7 +24,16 @@ type CursoTipo = (typeof CURSO_TIPOS)[number];
 type MatriculaCursoRow = {
   status: (typeof MATRICULA_STATUSES)[number];
   data_expiracao: string;
-  turmas: { cursos: { id: string; nome: string; tipo: CursoTipo; capa_url: string | null } | null } | null;
+  turmas: {
+    cursos: {
+      id: string;
+      nome: string;
+      tipo: CursoTipo;
+      capa_url: string | null;
+      gratuito: boolean;
+      url_plataforma_externa: string | null;
+    } | null;
+  } | null;
 };
 
 type CursoAluno = {
@@ -35,6 +44,11 @@ type CursoAluno = {
   emAndamento: boolean;
   dataExpiracao: string;
   expirada: boolean;
+  // Curso gratuito hospedado numa plataforma externa (/admin/cursos-gratuitos) — sem conteúdo
+  // (módulos/aulas) nesta plataforma, então o card leva direto pra URL externa em vez da página
+  // interna do curso.
+  gratuito: boolean;
+  urlPlataformaExterna: string | null;
 };
 
 function formatDateBR(isoDate: string) {
@@ -96,6 +110,8 @@ function agruparPorCurso(rows: MatriculaCursoRow[]): CursoAluno[] {
         emAndamento,
         dataExpiracao: row.data_expiracao,
         expirada: row.data_expiracao < hoje,
+        gratuito: curso.gratuito,
+        urlPlataformaExterna: curso.url_plataforma_externa,
       });
     } else if (emAndamento) {
       atual.emAndamento = true;
@@ -113,7 +129,7 @@ export default async function AlunoDashboardPage() {
   const [{ data, error }, meusPontos, statusInadimplencia, saldoCreditos] = await Promise.all([
     supabase
       .from("matriculas")
-      .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url))")
+      .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url, gratuito, url_plataforma_externa))")
       .eq("aluno_id", user.id)
       .in("status", ["ativa", "concluida"])
       .order("created_at", { ascending: false }),
@@ -252,8 +268,15 @@ export default async function AlunoDashboardPage() {
                   ? Math.round((progresso.concluidas / progresso.total) * 100)
                   : 0;
 
+              // Curso gratuito: sem conteúdo (módulos/aulas) nesta plataforma — o card leva
+              // direto pra plataforma externa em nova aba, em vez da página interna do curso.
+              const linkDestino =
+                curso.gratuito && curso.urlPlataformaExterna
+                  ? { href: curso.urlPlataformaExterna, target: "_blank", rel: "noopener noreferrer" as const }
+                  : { href: `/aluno/cursos/${curso.id}` };
+
               return (
-                <Link key={curso.id} href={`/aluno/cursos/${curso.id}`} className="group block">
+                <Link key={curso.id} {...linkDestino} className="group block">
                   <Card
                     className={cn(
                       "gap-0 overflow-hidden py-0 transition duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-foreground/10",
@@ -299,7 +322,7 @@ export default async function AlunoDashboardPage() {
                         </div>
                       )}
                       <span className="flex items-center justify-center rounded-md bg-linear-to-r from-cyan-500 to-blue-600 px-4 py-2 text-sm font-medium text-white transition-opacity group-hover:opacity-90">
-                        Continuar →
+                        {curso.gratuito && curso.urlPlataformaExterna ? "Acessar Curso ↗" : "Continuar →"}
                       </span>
                     </CardContent>
                   </Card>

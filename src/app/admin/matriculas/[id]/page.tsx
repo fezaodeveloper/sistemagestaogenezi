@@ -24,7 +24,7 @@ export default async function MatriculaDetalhesPage({
   const [{ data: configuracoes }, modulosAulas] = await Promise.all([
     supabase
       .from("configuracoes")
-      .select("escola_nome, escola_endereco, escola_telefone, termo_imagem_texto")
+      .select("escola_nome, escola_endereco, escola_telefone, escola_email")
       .eq("id", true)
       .maybeSingle(),
     cursoId ? buscarModulosAulasCurso(cursoId) : Promise.resolve(null),
@@ -38,7 +38,7 @@ export default async function MatriculaDetalhesPage({
           nome: configuracoes?.escola_nome ?? undefined,
           endereco: configuracoes?.escola_endereco ?? undefined,
           telefone: configuracoes?.escola_telefone ?? undefined,
-          termoImagemTexto: configuracoes?.termo_imagem_texto ?? undefined,
+          email: configuracoes?.escola_email ?? undefined,
         }}
         cursoModulosAulas={modulosAulas}
       />

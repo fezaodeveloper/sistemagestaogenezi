@@ -4,8 +4,9 @@
 // sucesso/erro. O resto da página (dados do aluno/curso, preview do PDF) fica no Server
 // Component pai (page.tsx) — só a parte interativa vive aqui, convenção padrão do projeto.
 
-import { useState, useTransition, type FormEvent } from "react";
-import { assinarContratoPorCpf } from "@/app/contrato/[matriculaId]/actions";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { assinarContratoPorCpf, verificarTermoImagemAssinado } from "@/app/contrato/[matriculaId]/actions";
+import { TermoImagemAssinarForm } from "@/components/termo-imagem/termo-imagem-assinar-form";
 import { CpfInput, cpfCompleto } from "@/components/ui/cpf-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +22,22 @@ export function ContratoAssinarForm({
   const [cpf, setCpf] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  // null enquanto verifica (logo depois de assinar o contrato); true/false = resultado real.
+  const [termoJaAssinado, setTermoJaAssinado] = useState<boolean | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Fluxo sequencial: assina contrato → assina Termo de Imagem, sem sair desta página. Checa só
+  // depois de "sucesso" virar true (não precisa verificar antes de o contrato estar assinado).
+  useEffect(() => {
+    if (!sucesso) return;
+    let cancelado = false;
+    verificarTermoImagemAssinado(matriculaId).then((assinado) => {
+      if (!cancelado) setTermoJaAssinado(assinado);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [sucesso, matriculaId]);
 
   function handleSubmit(evento: FormEvent) {
     evento.preventDefault();
@@ -37,16 +53,40 @@ export function ContratoAssinarForm({
   }
 
   if (sucesso) {
+    const botaoPdfContrato = (
+      <Button
+        render={<a href={`/api/contratos/${matriculaId}/pdf`} target="_blank" rel="noopener noreferrer" />}
+        nativeButton={false}
+        variant={termoJaAssinado === false ? "outline" : undefined}
+      >
+        Baixar PDF do contrato
+      </Button>
+    );
+
+    // Termo ainda pendente: mostra o formulário dele embaixo do aviso de contrato assinado, na
+    // mesma página (TermoImagemAssinarForm já mostra sua própria confirmação ao ser assinado).
+    if (termoJaAssinado === false) {
+      return (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+              <p className="text-lg font-medium">✅ Contrato assinado com sucesso!</p>
+              {botaoPdfContrato}
+            </CardContent>
+          </Card>
+          <h2 className="text-lg font-semibold">Agora assine o Termo de Uso de Imagem</h2>
+          <TermoImagemAssinarForm matriculaId={matriculaId} precisaResponsavel={precisaResponsavel} />
+        </div>
+      );
+    }
+
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-          <p className="text-lg font-medium">✅ Contrato assinado com sucesso!</p>
-          <Button
-            render={<a href={`/api/contratos/${matriculaId}/pdf`} target="_blank" rel="noopener noreferrer" />}
-            nativeButton={false}
-          >
-            Baixar PDF do contrato
-          </Button>
+          <p className="text-lg font-medium">
+            {termoJaAssinado === true ? "✅ Contrato e Termo de Imagem já assinados." : "✅ Contrato assinado com sucesso!"}
+          </p>
+          {botaoPdfContrato}
         </CardContent>
       </Card>
     );

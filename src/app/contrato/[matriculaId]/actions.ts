@@ -124,3 +124,16 @@ export async function assinarContratoPorCpf(
 
   return { success: true };
 }
+
+// Usada pelo estado de sucesso de ContratoAssinarForm pra decidir se mostra o formulário do
+// Termo de Imagem em seguida (fluxo sequencial no mesmo link, sem precisar ir pra
+// /termo-imagem/[matriculaId]/assinar) ou a mensagem final de "tudo assinado".
+export async function verificarTermoImagemAssinado(matriculaId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("termos_imagem_assinados")
+    .select("id")
+    .eq("matricula_id", matriculaId)
+    .maybeSingle();
+  return !!data;
+}

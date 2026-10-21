@@ -264,10 +264,12 @@ export async function notificarWhatsappComprovantePagamento(
 
   const curso = parcela.matriculas?.turmas?.cursos?.nome ?? "seu curso";
   const nome = primeiroNome(aluno.full_name) || "aluno(a)";
+  const urlRecibo = `${urlPortal()}/api/comprovantes/parcela/${parcelaId}/pdf`;
   const mensagem =
     `✅ Pagamento confirmado! Olá, ${nome}, recebemos o pagamento da parcela ${rotuloParcela(parcela)} ` +
     `do curso ${curso} no valor de ${reais(parcela.valor)} em ${dataBR(parcela.data_pagamento)}.\n\n` +
-    `Obrigado pela confiança! 🎓`;
+    `Obrigado pela confiança! 🎓\n\n` +
+    `🧾 Baixe seu recibo de pagamento:\n${urlRecibo}`;
 
   const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
   if (!resultado.ok) return { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };

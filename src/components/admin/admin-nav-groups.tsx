@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 import {
-  AlertTriangle, Award, CreditCard, LayoutGrid, Mail, Banknote, BarChart2, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, IdCard,
+  AlertTriangle, Award, CreditCard, LayoutGrid, Mail, Banknote, BarChart2, Bell, Briefcase, Building2, CalendarCheck, CalendarDays, CalendarRange, Camera, ChevronRight, ClipboardCheck, ClipboardList, Code2, FileBadge, FileSignature, FileText, Gift, GraduationCap, Globe, IdCard,
   LayoutDashboard, ListChecks, Lock, MapPin, Megaphone, MessageCircle, MessageSquare, MessagesSquare, Monitor, Package, Palette, PlayCircle, PlusCircle, Presentation, Receipt,
   Settings, Shield, Star, Tags, Target, TrendingDown, Truck, UserPlus, Users, Workflow, Wrench, Zap,
 } from "lucide-react";
@@ -30,6 +30,7 @@ const GROUPS: NavGroup[] = [
   ]},
   { id: "academico", label: "Acadêmico", icon: GraduationCap, items: [
     { href: "/admin/cursos", label: "Cursos", icon: GraduationCap },
+    { href: "/admin/cursos-gratuitos", label: "Cursos Gratuitos", icon: Globe },
     { href: "/admin/certificados", label: "Certificados", icon: FileBadge },
     { href: "/admin/academico/avaliacoes", label: "Avaliações", icon: Star },
     { href: "/admin/academico/resultados", label: "Resultados", icon: ListChecks },

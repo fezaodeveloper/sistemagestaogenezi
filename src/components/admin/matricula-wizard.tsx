@@ -147,7 +147,7 @@ type EscolaInfo = {
   nome?: string;
   endereco?: string;
   telefone?: string;
-  termoImagemTexto?: string;
+  email?: string;
 };
 
 export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
@@ -509,7 +509,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             escola_logo_url: escolaLogo,
             escola_endereco: escola.endereco,
             escola_telefone: escola.telefone,
-            termo_imagem_texto: escola.termoImagemTexto,
+            escola_email: escola.email,
             responsavelNome: responsavel?.nome,
             responsavelCpf: responsavel?.cpf,
           }}

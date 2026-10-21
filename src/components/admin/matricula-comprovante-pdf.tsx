@@ -57,16 +57,19 @@ export type ResumoMatricula = {
   taxaMatriculaPaga?: boolean;
   // Dados da escola (configuracoes) — opcionais: quando ausentes, o header
   // cai no nome fixo "GÊNEZI — Educação Profissional" já usado antes desses
-  // campos existirem, e o Termo de Imagem simplesmente não é impresso.
+  // campos existirem.
   escola_nome?: string;
   // Data URI do logo (configuracoes.escola_logo_url) — ver getLogoEscolaPdf.
   escola_logo_url?: string | null;
   escola_endereco?: string;
   escola_telefone?: string;
-  termo_imagem_texto?: string;
+  escola_email?: string;
   // Preenchidos manualmente pelo admin no momento da impressão (Dialog "aluno
   // é menor de idade?"), não vêm de nenhuma tabela — ver handleImprimirComprovante
-  // em matricula-detalhes.tsx/matricula-wizard.tsx.
+  // em matricula-detalhes.tsx/matricula-wizard.tsx. Reaproveitado aqui só para
+  // exibir o nome do responsável no rodapé (o bloco de assinatura/termo de
+  // imagem que também usava isso foi removido — já existe formulário próprio
+  // de assinatura de termo de imagem).
   responsavelNome?: string;
   responsavelCpf?: string;
 };
@@ -95,9 +98,9 @@ function formatDiasSemana(dias: (typeof DIAS_SEMANA)[number][] | null | undefine
 
 const pdfStyles = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: "Helvetica" },
-  header: { marginBottom: 12, borderBottomWidth: 2, borderBottomColor: "#000000", paddingBottom: 8 },
-  title: { fontSize: 16, fontFamily: "Helvetica-Bold" },
-  subtitle: { fontSize: 12, marginTop: 2 },
+  header: { marginBottom: 12, borderBottomWidth: 2, borderBottomColor: "#000000", paddingBottom: 8, alignItems: "center" },
+  escolaNome: { fontSize: 12, fontFamily: "Helvetica-Bold" },
+  title: { fontSize: 16, fontFamily: "Helvetica-Bold", marginTop: 4, textAlign: "center" },
   meta: { fontSize: 9, color: "#555555", marginTop: 4 },
   section: { marginBottom: 8 },
   sectionTitle: {
@@ -110,20 +113,17 @@ const pdfStyles = StyleSheet.create({
   row: { flexDirection: "row", marginBottom: 1 },
   label: { width: "40%", color: "#555555" },
   value: { width: "60%", fontFamily: "Helvetica-Bold" },
-  footer: { marginTop: 12, fontSize: 9, textAlign: "center", color: "#555555" },
-  escolaContato: { fontSize: 9, color: "#555555", marginTop: 2 },
-  // fontSize 8 (menor que o resto do PDF, 9): o texto do termo é
-  // configurável pelo admin (configuracoes.termo_imagem_texto) e pode ficar
-  // longo — reduzido de propósito pra não ser o parágrafo que empurra o
-  // documento pra uma segunda página.
-  termoTexto: { textAlign: "justify", marginBottom: 8, lineHeight: 1.35, fontSize: 8 },
-  termoData: { marginBottom: 12 },
-  // Mesmo padrão de linha de assinatura já usado no contrato
-  // (src/lib/contratos/pdf.tsx: assinaturaLinha) — borda em vez de
-  // caracteres "_____" literais, que não alinham bem em fontes PDF.
-  assinaturaBloco: { marginTop: 8, width: "70%" },
-  assinaturaLinha: { borderTopWidth: 1, borderTopColor: "#000000", marginBottom: 4 },
-  assinaturaLabel: { fontSize: 9, color: "#555555" },
+  footer: {
+    marginTop: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#000000",
+    alignItems: "center",
+  },
+  footerNome: { fontSize: 10, fontFamily: "Helvetica-Bold", textAlign: "center" },
+  footerResponsavel: { fontSize: 9, color: "#555555", marginTop: 2, textAlign: "center" },
+  footerEscola: { fontSize: 9, fontFamily: "Helvetica-Bold", marginTop: 8, textAlign: "center" },
+  footerEscolaContato: { fontSize: 8, color: "#555555", marginTop: 2, textAlign: "center" },
 });
 
 function LinhaPdf({ label, value }: { label: string; value: string }) {
@@ -158,13 +158,8 @@ export function MatriculaComprovantePdf({
       <Page size="A4" style={pdfStyles.page}>
         <View style={pdfStyles.header}>
           <LogoEscolaPdf logoUrl={resumo.escola_logo_url} />
-          <Text style={pdfStyles.title}>{resumo.escola_nome ?? "GÊNEZI — Educação Profissional"}</Text>
-          <Text style={pdfStyles.subtitle}>Comprovante de Matrícula</Text>
-          {(resumo.escola_endereco || resumo.escola_telefone) && (
-            <Text style={pdfStyles.escolaContato}>
-              {[resumo.escola_endereco, resumo.escola_telefone].filter(Boolean).join(" · ")}
-            </Text>
-          )}
+          <Text style={pdfStyles.escolaNome}>{resumo.escola_nome ?? "GÊNEZI — Educação Profissional"}</Text>
+          <Text style={pdfStyles.title}>COMPROVANTE DE MATRÍCULA</Text>
           <Text style={pdfStyles.meta}>Emitido em {geradoEm}</Text>
         </View>
 
@@ -243,34 +238,18 @@ export function MatriculaComprovantePdf({
           </View>
         )}
 
-        {resumo.termo_imagem_texto && (
-          <View style={pdfStyles.section}>
-            <Text style={pdfStyles.sectionTitle}>AUTORIZAÇÃO DE USO DE IMAGEM E VOZ</Text>
-            <Text style={pdfStyles.termoTexto}>{resumo.termo_imagem_texto}</Text>
-            <Text style={pdfStyles.termoData}>Porto Real do Colégio/AL, ___/___/______</Text>
-
-            <View style={pdfStyles.assinaturaBloco}>
-              <View style={pdfStyles.assinaturaLinha} />
-              <Text style={pdfStyles.assinaturaLabel}>Assinatura do Aluno ou Responsável</Text>
-              <Text style={{ marginTop: 8 }}>Nome completo: {resumo.aluno.full_name ?? "—"}</Text>
-              <Text>CPF: {formatCpf(resumo.aluno.cpf)}</Text>
-            </View>
-
-            {resumo.responsavelNome && (
-              <View style={pdfStyles.assinaturaBloco}>
-                <View style={pdfStyles.assinaturaLinha} />
-                <Text style={pdfStyles.assinaturaLabel}>Assinatura do Responsável</Text>
-                <Text style={{ marginTop: 8 }}>Responsável: {resumo.responsavelNome}</Text>
-                <Text>CPF: {resumo.responsavelCpf ? formatCpf(resumo.responsavelCpf) : "—"}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        <Text style={pdfStyles.footer}>
-          Este comprovante confirma a matrícula do aluno acima e deve ser assinado e devolvido à
-          secretaria da escola.
-        </Text>
+        <View style={pdfStyles.footer}>
+          <Text style={pdfStyles.footerNome}>{resumo.aluno.full_name ?? "—"}</Text>
+          {resumo.responsavelNome && (
+            <Text style={pdfStyles.footerResponsavel}>Responsável: {resumo.responsavelNome}</Text>
+          )}
+          <Text style={pdfStyles.footerEscola}>{resumo.escola_nome ?? "GÊNEZI — Educação Profissional"}</Text>
+          {(resumo.escola_endereco || resumo.escola_telefone || resumo.escola_email) && (
+            <Text style={pdfStyles.footerEscolaContato}>
+              {[resumo.escola_endereco, resumo.escola_telefone, resumo.escola_email].filter(Boolean).join(" · ")}
+            </Text>
+          )}
+        </View>
       </Page>
     </Document>
   );
