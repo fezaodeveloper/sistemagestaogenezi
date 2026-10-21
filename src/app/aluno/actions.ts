@@ -117,3 +117,27 @@ export async function salvarPushSubscriptionAluno(subscription: {
   console.log("[push] subscription salva:", { aluno_id: user.id });
   return {};
 }
+
+// Desativar notificações (toggle no portal) — delete direto por client admin, mesmo racional de
+// salvarPushSubscriptionAluno acima (sempre pelo id do usuário autenticado, nunca um id vindo do
+// cliente). `authenticated` já tem grant de delete em push_subscriptions e a RLS
+// ("Alunos gerenciam a própria subscription push") já restringiria à própria linha mesmo sem
+// o client admin — mas mantém o mesmo client das demais functions deste bloco por consistência.
+export async function removerPushSubscriptionAluno(endpoint: string): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  if (!endpoint) {
+    return { error: "Inscrição push inválida." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("push_subscriptions").delete().eq("endpoint", endpoint).eq("aluno_id", user.id);
+
+  if (error) {
+    console.error("[push] erro ao remover subscription:", { aluno_id: user.id, code: error.code, message: error.message });
+    return { error: "Não foi possível desativar as notificações push." };
+  }
+
+  console.log("[push] subscription removida:", { aluno_id: user.id });
+  return {};
+}

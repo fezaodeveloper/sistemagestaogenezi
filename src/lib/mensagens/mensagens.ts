@@ -2,6 +2,7 @@ import "server-only";
 
 import { MessageCircleWarning } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isMinor } from "@/lib/alunos/schema";
 import { descriptografar } from "@/lib/gateways/crypto";
 import { renderTemplate } from "@/lib/whatsapp/render";
 import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
@@ -25,7 +26,7 @@ function formatarHorario(time: string): string {
 }
 
 type ContextoAluno = {
-  alunos: { telefone: string; profiles: { full_name: string | null } | null } | null;
+  alunos: { id: string; telefone: string; profiles: { full_name: string | null } | null } | null;
 };
 
 // GênZap Fase 2: o TEXTO dos 4 templates migrou de colunas de whatsapp_config pra
@@ -38,6 +39,36 @@ const TEMPLATE_ID_POR_TIPO: Record<MensagemTipo, WhatsappTemplateId> = {
   lead_recontato: "recontato_lead",
 };
 
+// Cópia da mesma mensagem pro responsável, quando o aluno é menor de idade — best-effort,
+// erro aqui nunca deve voltar a afetar o envio ao aluno (já concluído com sucesso antes desta
+// chamada). Reaproveita o config/apiKey já resolvidos em enviarMensagem() pra não buscar
+// whatsapp_config de novo. Não grava em mensagens_enviadas: essa tabela tem grão "uma linha por
+// mensagem ao aluno" — duplicar a linha pra esta cópia quebraria checagens de idempotência que
+// já existem sobre ela (ex.: o guard de lembrete de aula em enviarMensagemLembreteAula, que usa
+// .maybeSingle() e erraria com 2+ linhas).
+async function enviarCopiaParaResponsavel(
+  admin: ReturnType<typeof createAdminClient>,
+  alunoId: string,
+  mensagemTexto: string,
+  evolutionConfig: { url: string; instancia: string; apiKey: string },
+): Promise<void> {
+  const { data: aluno } = await admin.from("alunos").select("full_name, data_nascimento").eq("id", alunoId).maybeSingle();
+  if (!aluno || !isMinor(aluno.data_nascimento)) return;
+
+  const { data: responsavel } = await admin
+    .from("responsaveis")
+    .select("telefone")
+    .eq("aluno_id", alunoId)
+    .limit(1)
+    .maybeSingle();
+
+  const numeroResponsavel = responsavel?.telefone ? normalizarTelefone(responsavel.telefone) : null;
+  if (!numeroResponsavel) return;
+
+  const nomeAluno = aluno.full_name ?? "aluno(a)";
+  await enviarWhatsapp(evolutionConfig, numeroResponsavel, `📋 Cópia para responsável de ${nomeAluno}:\n\n${mensagemTexto}`);
+}
+
 // Núcleo do envio: monta o texto a partir do template configurado, valida
 // telefone/config, chama a Evolution API e sempre grava uma linha no log —
 // nunca lança exceção (política "loga o erro e segue", ver CLAUDE.md/plano
@@ -47,6 +78,9 @@ async function enviarMensagem(params: {
   matriculaId: string | null;
   leadId: string | null;
   aulaId: string | null;
+  // null quando não há aluno envolvido (ex.: lead_recontato) — nesse caso a cópia pro
+  // responsável nunca é tentada.
+  alunoId: string | null;
   telefoneAlunoBruto: string;
   variaveis: Record<string, string>;
   criadoPor: string | null;
@@ -107,13 +141,16 @@ async function enviarMensagem(params: {
       return;
     }
 
-    const resultado = await enviarWhatsapp(
-      { url: config.evolution_api_url, instancia: config.evolution_instance_name, apiKey },
-      numero,
-      mensagemTexto,
-    );
+    const evolutionConfig = { url: config.evolution_api_url, instancia: config.evolution_instance_name, apiKey };
+    const resultado = await enviarWhatsapp(evolutionConfig, numero, mensagemTexto);
 
     await registrar(resultado.ok ? "enviado" : "falha", numero, resultado.ok ? null : resultado.erro);
+
+    // Cópia pro responsável só depois de confirmar que o aluno é menor — nunca duplica pra
+    // aluno maior de idade. Só tenta se o envio ao aluno deu certo.
+    if (resultado.ok && params.alunoId) {
+      await enviarCopiaParaResponsavel(admin, params.alunoId, mensagemTexto, evolutionConfig);
+    }
   } catch {
     // Rede de segurança final: nenhum erro inesperado aqui pode voltar a
     // interromper a matrícula/presença que chamou esta function.
@@ -134,14 +171,14 @@ export async function enviarMensagemMatriculaCriada(
 
     const { data } = await admin
       .from("matriculas")
-      .select("turma_id, alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))")
+      .select("turma_id, alunos(id, telefone, email, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))")
       .eq("id", matriculaId)
       .single();
 
     const matricula = data as unknown as
       | {
           turma_id: string;
-          alunos: { id: string; telefone: string; profiles: { full_name: string | null } | null } | null;
+          alunos: { id: string; telefone: string; email: string; profiles: { full_name: string | null } | null } | null;
           turmas: { nome: string; horario_aula: string | null; cursos: { nome: string } | null } | null;
         }
       | null;
@@ -160,11 +197,25 @@ export async function enviarMensagemMatriculaCriada(
     // arquivos só por isso) — nunca o domínio literal de uma tarefa, que não existe no projeto.
     const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(/\/+$/, "");
 
+    // Credenciais de acesso ao portal — não há senha em texto puro (nem hash) em public.alunos
+    // pra incluir aqui: a senha só existe transitoriamente no navegador do admin no momento da
+    // criação do aluno (ver comentário em createAluno, src/app/admin/alunos/actions.ts) e nunca
+    // é persistida fora do Supabase Auth. Além disso, matrícula é feita sobre um aluno JÁ
+    // existente (buscarAlunosParaWizard busca só entre alunos existentes, a Etapa 1 do wizard
+    // não cria conta nova) — mesmo se a senha fosse salva em algum lugar, não haveria uma "senha
+    // recém-gerada" disponível neste momento. Por isso o fallback seguro: portal + email + a
+    // instrução de usar a senha já cadastrada ou pedir redefinição.
+    const credenciaisTexto =
+      `🎓 Acesse o Portal do Aluno:\n${baseUrl}/aluno\n\n` +
+      `📧 Email de acesso: ${matricula.alunos.email}\n` +
+      `🔑 Use a senha definida no seu cadastro ou solicite redefinição no portal.`;
+
     await enviarMensagem({
       tipo: "matricula_criada",
       matriculaId,
       leadId: null,
       aulaId: null,
+      alunoId: matricula.alunos.id,
       telefoneAlunoBruto: matricula.alunos.telefone,
       criadoPor,
       variaveis: {
@@ -175,8 +226,9 @@ export async function enviarMensagemMatriculaCriada(
         horario_aula: matricula.turmas.horario_aula ? formatarHorario(matricula.turmas.horario_aula) : "a definir",
       },
       // URL em linha própria: no WhatsApp mobile, texto e link na MESMA linha (só um espaço
-      // entre eles) nem sempre fica clicável — quebrar antes do link resolve isso.
-      sufixoTexto: `📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
+      // entre eles) nem sempre fica clicável — quebrar antes do link resolve isso. Credenciais
+      // vêm antes do link do comprovante (ordem pedida na tarefa).
+      sufixoTexto: `${credenciaisTexto}\n\n📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
     });
 
     // GênZap Fase 3 — fluxos personalizados com gatilho "matricula_criada", além do template
@@ -216,7 +268,7 @@ export async function enviarMensagemFalta(
 
     const { data } = await admin
       .from("matriculas")
-      .select("alunos(telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
+      .select("alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
       .eq("id", matriculaId)
       .single();
 
@@ -231,6 +283,7 @@ export async function enviarMensagemFalta(
       matriculaId,
       leadId: null,
       aulaId,
+      alunoId: matricula.alunos.id,
       telefoneAlunoBruto: matricula.alunos.telefone,
       criadoPor,
       variaveis: {
@@ -277,7 +330,7 @@ export async function enviarMensagemLembreteAula(
 
     const { data } = await admin
       .from("matriculas")
-      .select("alunos(telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
+      .select("alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
       .eq("id", matriculaId)
       .single();
 
@@ -292,6 +345,7 @@ export async function enviarMensagemLembreteAula(
       matriculaId,
       leadId: null,
       aulaId,
+      alunoId: matricula.alunos.id,
       telefoneAlunoBruto: matricula.alunos.telefone,
       criadoPor: null,
       variaveis: {
@@ -335,6 +389,8 @@ export async function enviarMensagemLeadRecontato(
       matriculaId: null,
       leadId,
       aulaId: null,
+      // Lead ainda não é aluno — nunca há responsável cadastrado pra ele.
+      alunoId: null,
       telefoneAlunoBruto: lead.telefone,
       criadoPor,
       variaveis: {

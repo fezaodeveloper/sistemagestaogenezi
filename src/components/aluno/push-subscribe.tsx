@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { salvarPushSubscriptionAluno } from "@/app/aluno/actions";
+import { removerPushSubscriptionAluno, salvarPushSubscriptionAluno } from "@/app/aluno/actions";
 import { Button } from "@/components/ui/button";
 
 const LOG = "[push]";
@@ -131,6 +131,30 @@ export function PushSubscribeAluno({ vapidPublicKey }: { vapidPublicKey: string 
     };
   }, [vapidPublicKey]);
 
+  // Desativa: unsubscribe no navegador (sem isso, a permissão continua "granted" e o browser
+  // manteria a subscription ativa) + remove a linha no banco (senão o servidor continuaria
+  // tentando enviar push pra um endpoint que o navegador já descartou).
+  async function handleDesativar() {
+    setErro(null);
+    setProcessando(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        const endpoint = subscription.endpoint;
+        await subscription.unsubscribe();
+        const resultado = await removerPushSubscriptionAluno(endpoint);
+        if (resultado.error) throw new Error(resultado.error);
+      }
+      setEstado("inativo");
+    } catch (falha) {
+      console.error(LOG, "falha ao desativar notificações", falha);
+      setErro("Não foi possível desativar as notificações. Tente novamente.");
+    } finally {
+      setProcessando(false);
+    }
+  }
+
   async function handleAtivar() {
     if (!vapidPublicKey) return;
     setErro(null);
@@ -172,7 +196,21 @@ export function PushSubscribeAluno({ vapidPublicKey }: { vapidPublicKey: string 
     return <p className={textoPequeno}>🔕 Notificações bloqueadas. Libere nas configurações do navegador.</p>;
   }
   if (estado === "ativo") {
-    return <p className={textoPequeno}>🔔 Notificações ativadas</p>;
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="mx-2 mb-1 flex items-center justify-between gap-2">
+          <p className="text-muted-foreground text-[11px]">🔔 Notificações ativadas</p>
+          <Button type="button" variant="ghost" size="sm" disabled={processando} onClick={handleDesativar}>
+            {processando ? "Desativando..." : "Desativar"}
+          </Button>
+        </div>
+        {erro && (
+          <p role="alert" className="text-destructive px-2 pb-1 text-center text-[11px]">
+            {erro}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
