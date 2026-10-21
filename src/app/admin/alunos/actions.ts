@@ -747,6 +747,39 @@ export async function enviarSenhaAlunoWhatsApp(
   return { success: true };
 }
 
+// ===== Portal do Responsável — enviar link por WhatsApp (botão na ficha do aluno) =====
+//
+// AWAITABLE (não emSegundoPlano/fire-and-forget) — diferente de enviarSenhaAlunoWhatsApp acima:
+// o botão precisa mostrar sucesso/erro reais pro admin, não só "disparei e já volto". URL
+// (/responsavel/[alunoId], item 8 desta sessão) usa o mesmo domínio-padrão de todo o projeto.
+export async function enviarLinkPortalResponsavel(
+  alunoId: string,
+  telefoneResponsavel: string,
+): Promise<{ success: true } | { error: string }> {
+  await requireRole("admin");
+
+  if (!telefoneResponsavel) return { error: "Telefone do responsável não informado." };
+
+  const admin = createAdminClient();
+  const { data: aluno } = await admin.from("alunos").select("full_name").eq("id", alunoId).maybeSingle();
+  if (!aluno) return { error: "Aluno não encontrado." };
+
+  const linkPortal = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/responsavel/${alunoId}`;
+  const mensagem = [
+    `Olá! Você é responsável por ${aluno.full_name ?? "um(a) aluno(a)"} na GÊNEZI.`,
+    "",
+    "Acesse o Portal do Responsável pra ver matrículas, contrato, termo de imagem e parcelas:",
+    linkPortal,
+    "",
+    "Você vai precisar informar o CPF cadastrado como responsável pra entrar.",
+  ].join("\n");
+
+  const resultado = await enviarWhatsApp(telefoneResponsavel, mensagem);
+  if (!resultado.ok) return { error: resultado.erro ?? "Falha ao enviar a mensagem." };
+  if (!resultado.enviado) return { error: "WhatsApp (GênZap) não está ativo/conectado." };
+  return { success: true };
+}
+
 // ===== Forçar verificação de conquistas (badges/recompensas pendentes) =====
 //
 // Usado quando um badge foi concedido via SQL (verificar_conquistas_aluno)

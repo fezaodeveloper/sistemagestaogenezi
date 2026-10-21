@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CpfInput } from "@/components/ui/cpf-input";
@@ -15,13 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   formatCep,
   isMinor,
   STATUS_ALUNO_LABELS,
   STATUS_ALUNO_VALUES,
 } from "@/lib/alunos/schema";
-import { updateAluno, type AlunoEditFormState } from "@/app/admin/alunos/actions";
+import { enviarLinkPortalResponsavel, updateAluno, type AlunoEditFormState } from "@/app/admin/alunos/actions";
 import { FotoAlunoUpload } from "@/components/admin/foto-aluno-upload";
 
 function SubmitButton() {
@@ -86,6 +88,28 @@ export function AlunoEditForm({
   const [estado, setEstado] = useState(values.estado ?? "");
   const [responsavelCpf, setResponsavelCpf] = useState(values.responsavel_cpf ?? "");
   const [responsavelTelefone, setResponsavelTelefone] = useState(values.responsavel_telefone ?? "");
+  const [enviandoLinkPortal, startEnvioLinkPortal] = useTransition();
+  const [resultadoLinkPortal, setResultadoLinkPortal] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(
+    null,
+  );
+
+  // Telefone JÁ CADASTRADO (prop original, não o state acima) — "enviar link do portal"
+  // manda pro número salvo no banco, não pro que o admin possa estar digitando sem ter
+  // salvo ainda.
+  const telefoneResponsavelSalvo = values.responsavel_telefone ?? "";
+
+  function handleEnviarLinkPortal() {
+    if (!telefoneResponsavelSalvo) return;
+    setResultadoLinkPortal(null);
+    startEnvioLinkPortal(async () => {
+      const resultado = await enviarLinkPortalResponsavel(id, telefoneResponsavelSalvo);
+      if ("error" in resultado) {
+        setResultadoLinkPortal({ tipo: "erro", texto: resultado.error });
+        return;
+      }
+      setResultadoLinkPortal({ tipo: "sucesso", texto: "Link do portal enviado por WhatsApp." });
+    });
+  }
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState<string | null>(null);
 
@@ -433,6 +457,39 @@ export function AlunoEditForm({
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {telefoneResponsavelSalvo ? (
+              <Button type="button" variant="outline" disabled={enviandoLinkPortal} onClick={handleEnviarLinkPortal}>
+                <Send />
+                {enviandoLinkPortal ? "Enviando..." : "Enviar link do portal"}
+              </Button>
+            ) : (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="inline-flex w-fit">
+                        <Button type="button" variant="outline" disabled>
+                          <Send />
+                          Enviar link do portal
+                        </Button>
+                      </span>
+                    }
+                  />
+                  <TooltipContent>Cadastre um responsável primeiro</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {resultadoLinkPortal && (
+              <p
+                role={resultadoLinkPortal.tipo === "erro" ? "alert" : undefined}
+                className={resultadoLinkPortal.tipo === "erro" ? "text-destructive text-sm" : "text-sm text-green-600 dark:text-green-400"}
+              >
+                {resultadoLinkPortal.texto}
+              </p>
+            )}
           </div>
         </div>
       )}
