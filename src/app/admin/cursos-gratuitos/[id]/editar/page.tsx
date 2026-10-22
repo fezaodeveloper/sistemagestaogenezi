@@ -16,7 +16,7 @@ export default async function EditarCursoGratuitoPage({
   const supabase = await createClient();
   const { data: curso } = await supabase
     .from("cursos")
-    .select("nome, descricao, url_plataforma_externa, status")
+    .select("nome, descricao, url_plataforma_externa, carga_horaria, foto_url, foto_path, status")
     .eq("id", id)
     .eq("gratuito", true)
     .maybeSingle();
@@ -27,6 +27,7 @@ export default async function EditarCursoGratuitoPage({
     nome: curso.nome,
     descricao: curso.descricao ?? undefined,
     url_plataforma_externa: curso.url_plataforma_externa ?? "",
+    carga_horaria: curso.carga_horaria ?? undefined,
     status: curso.status,
   };
 
@@ -37,9 +38,11 @@ export default async function EditarCursoGratuitoPage({
         <p className="text-muted-foreground text-sm">{curso.nome}</p>
       </div>
       <CursoGratuitoForm
-        action={atualizarCursoGratuito.bind(null, id)}
+        action={atualizarCursoGratuito.bind(null, id, curso.foto_path)}
         defaultValues={defaultValues}
         submitLabel="Salvar alterações"
+        cursoId={id}
+        fotoAtualUrl={curso.foto_url}
       />
     </div>
   );

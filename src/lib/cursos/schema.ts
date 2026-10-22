@@ -58,15 +58,22 @@ export type Curso = {
   valor: number | null;
   gratuito: boolean;
   url_plataforma_externa: string | null;
+  // Texto livre ("40h", "20 horas") — NÃO é a mesma coluna que carga_horaria_horas (numérica,
+  // usada pelo CursoForm principal). Só cursos gratuitos usam esta.
+  carga_horaria: string | null;
+  foto_url: string | null;
+  foto_path: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
 };
 
 // Formulário dedicado de /admin/cursos-gratuitos — campos reduzidos em relação ao CursoForm
-// principal (sem tipo/carga_horaria/valor: cursos gratuitos são hospedados numa plataforma
-// externa, o aluno só precisa do link). tipo é fixado como "ead" na Server Action (coluna
-// not null sem default, mas irrelevante pra um curso 100% externo).
+// principal (sem tipo/valor: cursos gratuitos são hospedados numa plataforma externa, o aluno
+// só precisa do link). tipo é fixado como "ead" na Server Action (coluna not null sem default,
+// mas irrelevante pra um curso 100% externo). carga_horaria aqui é texto livre ("40h", "20
+// horas"), diferente de carga_horaria_horas (numérica) do CursoForm principal — foto é tratada
+// fora deste schema (upload multipart, mesmo padrão do campo "capa" do CursoForm).
 export const cursoGratuitoFormSchema = z.object({
   nome: z
     .string({ error: "Informe o nome do curso." })
@@ -81,6 +88,11 @@ export const cursoGratuitoFormSchema = z.object({
   url_plataforma_externa: z
     .url({ error: "Informe uma URL válida (ex.: https://plataforma.com/curso)." })
     .max(500, { error: "A URL pode ter no máximo 500 caracteres." }),
+  carga_horaria: z
+    .string()
+    .trim()
+    .max(50, { error: "A carga horária pode ter no máximo 50 caracteres." })
+    .optional(),
   status: z.enum(CURSO_STATUSES, { error: "Selecione o status do curso." }),
 });
 

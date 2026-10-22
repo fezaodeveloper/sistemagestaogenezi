@@ -5,17 +5,24 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { cursoGratuitoFormSchema } from "@/lib/cursos/schema";
+import { uploadImagem, validarImagem } from "@/lib/storage/validar-imagem";
+
+// Mesmo bucket já usado pela capa dos cursos regulares (público, só admin escreve — ver
+// 20260825100000_add_capa_cursos.sql) — a foto do curso gratuito é só mais um tipo de imagem na
+// mesma tabela "cursos", sem motivo pra um bucket separado.
+const CURSOS_BUCKET = "cursos";
 
 type CursoGratuitoFormValuesEcho = {
   nome: string;
   descricao: string;
   url_plataforma_externa: string;
+  carga_horaria: string;
   status: string;
 };
 
 export type CursoGratuitoFormState =
   | {
-      errors?: Partial<Record<"nome" | "descricao" | "url_plataforma_externa" | "status", string[]>>;
+      errors?: Partial<Record<"nome" | "descricao" | "url_plataforma_externa" | "carga_horaria" | "status" | "foto", string[]>>;
       error?: string;
       values?: CursoGratuitoFormValuesEcho;
     }
@@ -26,6 +33,7 @@ function echoValues(formData: FormData): CursoGratuitoFormValuesEcho {
     nome: String(formData.get("nome") ?? ""),
     descricao: String(formData.get("descricao") ?? ""),
     url_plataforma_externa: String(formData.get("url_plataforma_externa") ?? ""),
+    carga_horaria: String(formData.get("carga_horaria") ?? ""),
     status: String(formData.get("status") ?? ""),
   };
 }
@@ -35,6 +43,7 @@ function parseCursoGratuitoForm(formData: FormData) {
     nome: formData.get("nome"),
     descricao: formData.get("descricao") || undefined,
     url_plataforma_externa: formData.get("url_plataforma_externa"),
+    carga_horaria: formData.get("carga_horaria") || undefined,
     status: formData.get("status"),
   });
 }
@@ -50,12 +59,30 @@ export async function criarCursoGratuito(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
+  const { erro: erroFoto, arquivo: arquivoFoto } = validarImagem(formData.get("foto"));
+  if (erroFoto) {
+    return { errors: { foto: [erroFoto] }, values: echoValues(formData) };
+  }
+
   const supabase = await createClient();
+
+  let fotoPath: string | null = null;
+  if (arquivoFoto) {
+    const { path, error: uploadError } = await uploadImagem(supabase, CURSOS_BUCKET, arquivoFoto);
+    if (uploadError || !path) {
+      return { error: "Não foi possível enviar a foto. Tente novamente.", values: echoValues(formData) };
+    }
+    fotoPath = path;
+  }
+  const fotoUrl = fotoPath ? supabase.storage.from(CURSOS_BUCKET).getPublicUrl(fotoPath).data.publicUrl : null;
 
   const { error } = await supabase.from("cursos").insert({
     nome: parsed.data.nome,
     descricao: parsed.data.descricao ?? null,
     url_plataforma_externa: parsed.data.url_plataforma_externa,
+    carga_horaria: parsed.data.carga_horaria ?? null,
+    foto_url: fotoUrl,
+    foto_path: fotoPath,
     status: parsed.data.status,
     // Curso gratuito é sempre hospedado numa plataforma externa — "tipo" não tem equivalente
     // real pra esse caso, mas a coluna é not null sem default; "ead" é o mais próximo.
@@ -64,6 +91,7 @@ export async function criarCursoGratuito(
   });
 
   if (error) {
+    if (fotoPath) await supabase.storage.from(CURSOS_BUCKET).remove([fotoPath]);
     return {
       error: "Não foi possível criar o curso gratuito. Tente novamente.",
       values: echoValues(formData),
@@ -76,6 +104,7 @@ export async function criarCursoGratuito(
 
 export async function atualizarCursoGratuito(
   id: string,
+  fotoPathAtual: string | null,
   _prevState: CursoGratuitoFormState,
   formData: FormData,
 ): Promise<CursoGratuitoFormState> {
@@ -86,7 +115,24 @@ export async function atualizarCursoGratuito(
     return { errors: parsed.error.flatten().fieldErrors, values: echoValues(formData) };
   }
 
+  const { erro: erroFoto, arquivo: arquivoFoto } = validarImagem(formData.get("foto"));
+  if (erroFoto) {
+    return { errors: { foto: [erroFoto] }, values: echoValues(formData) };
+  }
+
   const supabase = await createClient();
+
+  let fotoPath = fotoPathAtual;
+  let novoPath: string | null = null;
+  if (arquivoFoto) {
+    const { path, error: uploadError } = await uploadImagem(supabase, CURSOS_BUCKET, arquivoFoto);
+    if (uploadError || !path) {
+      return { error: "Não foi possível enviar a foto. Tente novamente.", values: echoValues(formData) };
+    }
+    novoPath = path;
+    fotoPath = path;
+  }
+  const fotoUrl = fotoPath ? supabase.storage.from(CURSOS_BUCKET).getPublicUrl(fotoPath).data.publicUrl : null;
 
   const { error } = await supabase
     .from("cursos")
@@ -94,20 +140,66 @@ export async function atualizarCursoGratuito(
       nome: parsed.data.nome,
       descricao: parsed.data.descricao ?? null,
       url_plataforma_externa: parsed.data.url_plataforma_externa,
+      carga_horaria: parsed.data.carga_horaria ?? null,
+      foto_url: fotoUrl,
+      foto_path: fotoPath,
       status: parsed.data.status,
     })
     .eq("id", id)
     .eq("gratuito", true);
 
   if (error) {
+    if (novoPath) await supabase.storage.from(CURSOS_BUCKET).remove([novoPath]);
     return {
       error: "Não foi possível salvar as alterações. Tente novamente.",
       values: echoValues(formData),
     };
   }
 
+  // Só remove a foto antiga depois que a nova já está salva — evita ficar sem foto nenhuma se o
+  // remove() falhar no meio do caminho. Mesmo padrão de updateCurso (src/app/admin/cursos/actions.ts).
+  if (novoPath && fotoPathAtual && fotoPathAtual !== novoPath) {
+    await supabase.storage.from(CURSOS_BUCKET).remove([fotoPathAtual]);
+  }
+
   revalidatePath("/admin/cursos-gratuitos");
   redirect("/admin/cursos-gratuitos");
+}
+
+// Botão "Remover foto" do formulário de edição — separado de atualizarCursoGratuito porque
+// remover a foto é uma ação independente de salvar o resto do formulário (mesmo racional de
+// removerFotoAluno em src/app/admin/alunos/actions.ts).
+export async function removerFotoCursoGratuito(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+
+  const { data: curso } = await supabase
+    .from("cursos")
+    .select("foto_path")
+    .eq("id", id)
+    .eq("gratuito", true)
+    .maybeSingle();
+
+  if (curso?.foto_path) {
+    const { error: storageError } = await supabase.storage.from(CURSOS_BUCKET).remove([curso.foto_path]);
+    if (storageError) {
+      return { error: "Não foi possível remover o arquivo do Storage. Tente novamente." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("cursos")
+    .update({ foto_url: null, foto_path: null })
+    .eq("id", id)
+    .eq("gratuito", true);
+
+  if (error) {
+    return { error: "Arquivo removido do Storage, mas não foi possível atualizar o cadastro. Tente novamente." };
+  }
+
+  revalidatePath("/admin/cursos-gratuitos");
+  return {};
 }
 
 // Toggle rápido de status direto na listagem (coluna "Ativo") — não precisa da página de edição
@@ -137,6 +229,13 @@ export async function excluirCursoGratuito(id: string): Promise<{ error?: string
 
   // gratuito = true na condição: mesmo cuidado de atualizarCursoGratuito acima — esta action só
   // pode agir sobre cursos gratuitos, nunca sobre o catálogo de cursos regulares.
+  const { data: curso } = await supabase
+    .from("cursos")
+    .select("foto_path")
+    .eq("id", id)
+    .eq("gratuito", true)
+    .maybeSingle();
+
   const { error } = await supabase.from("cursos").delete().eq("id", id).eq("gratuito", true);
 
   if (error) {
@@ -150,6 +249,34 @@ export async function excluirCursoGratuito(id: string): Promise<{ error?: string
     return { error: "Não foi possível excluir o curso gratuito. Tente novamente." };
   }
 
+  // Best-effort: o curso já foi excluído com sucesso acima mesmo se isso falhar — só ficaria um
+  // arquivo órfão no Storage (mesma limitação já documentada no CLAUDE.md pra outros buckets).
+  if (curso?.foto_path) {
+    await supabase.storage.from(CURSOS_BUCKET).remove([curso.foto_path]);
+  }
+
   revalidatePath("/admin/cursos-gratuitos");
   return {};
+}
+
+export type AlunoInscritoCursoGratuito = { full_name: string | null; status: string };
+
+// Lista de alunos inscritos num curso gratuito específico ("Ver detalhes" na tabela) — via
+// matriculas.curso_bonus_id, o único caminho real de inscrição num curso gratuito (ver commit
+// a87616d: o bônus nunca passa por turma_id). Matricula via turma própria pra um curso
+// "gratuito" não é um fluxo que esta tela produz — não contemplado aqui de propósito.
+export async function getAlunosInscritosCursoGratuito(cursoId: string): Promise<AlunoInscritoCursoGratuito[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("matriculas")
+    .select("status, alunos(full_name)")
+    .eq("curso_bonus_id", cursoId);
+
+  const linhas = (data ?? []) as unknown as { status: string; alunos: { full_name: string | null } | null }[];
+
+  return linhas
+    .map((linha) => ({ full_name: linha.alunos?.full_name ?? null, status: linha.status }))
+    .sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""));
 }
