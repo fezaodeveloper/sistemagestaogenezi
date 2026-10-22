@@ -178,8 +178,9 @@ export function CursoForm({
           <div className="flex flex-1 flex-col gap-2">
             <Input id="capa" name="capa" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCapaChange} />
             <p className="text-muted-foreground text-xs">
-              JPEG, PNG ou WebP, até 5MB. A imagem é recortada automaticamente em 2:3 — a prévia
-              ao lado já mostra o enquadramento final.
+              📐 Recomendado: 600×900px · Proporção 2:3 · JPEG, PNG ou WebP, até 5MB. A imagem é
+              recortada automaticamente nesse formato — a prévia ao lado já mostra o enquadramento
+              final.
               {capaAtualUrl && " Envie um novo arquivo pra substituir a capa atual."}
             </p>
           </div>

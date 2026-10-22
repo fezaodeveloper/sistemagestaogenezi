@@ -216,7 +216,9 @@ export function AssinaturaDiretorForm({
             {error}
           </p>
         )}
-        <p className="text-muted-foreground text-xs">PNG transparente recomendado. Máximo 2MB.</p>
+        <p className="text-muted-foreground text-xs">
+          📐 Recomendado: 400×150px · PNG com fundo transparente · máx. 2MB.
+        </p>
       </div>
 
       <div className="flex max-w-md flex-col gap-2">

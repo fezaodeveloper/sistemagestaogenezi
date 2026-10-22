@@ -411,6 +411,9 @@ function CampanhaDialog({
                 </Button>
               )}
             </div>
+            <p className="text-muted-foreground text-xs">
+              📐 Recomendado: 1280×800px · Proporção 16:10 · JPG, PNG ou WebP · máx. 5MB.
+            </p>
           </div>
 
           {error && (

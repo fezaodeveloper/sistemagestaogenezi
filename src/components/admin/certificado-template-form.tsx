@@ -189,6 +189,9 @@ export function CertificadoTemplateForm({
             accept="image/jpeg,image/png"
             onChange={fundoFrente.onChange}
           />
+          <p className="text-muted-foreground text-xs">
+            📐 Recomendado: 1600×1131px (A4 paisagem) · JPEG ou PNG, até 5MB.
+          </p>
           {state?.errors?.fundo_frente && (
             <p role="alert" className="text-destructive text-sm">
               {state.errors.fundo_frente[0]}
@@ -218,8 +221,8 @@ export function CertificadoTemplateForm({
             onChange={fundoVerso.onChange}
           />
           <p className="text-muted-foreground text-xs">
-            JPEG ou PNG, até 5MB cada. O PDF sai com 2 páginas, cada uma no tamanho da respectiva
-            imagem de fundo.
+            📐 Recomendado: 1600×1131px (A4 paisagem) · JPEG ou PNG, até 5MB cada. O PDF sai com 2
+            páginas, cada uma no tamanho da respectiva imagem de fundo.
           </p>
           {state?.errors?.fundo_verso && (
             <p role="alert" className="text-destructive text-sm">
@@ -245,6 +248,9 @@ export function CertificadoTemplateForm({
             accept="image/jpeg,image/png"
             onChange={assinatura.onChange}
           />
+          <p className="text-muted-foreground text-xs">
+            📐 PNG com fundo transparente recomendado · até 5MB.
+          </p>
           <div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col gap-1">
               <Label htmlFor="assinatura_x_percentual" className="text-muted-foreground text-xs">
@@ -311,6 +317,9 @@ export function CertificadoTemplateForm({
             />
           )}
           <Input id="logo" name="logo" type="file" accept="image/jpeg,image/png" onChange={logo.onChange} />
+          <p className="text-muted-foreground text-xs">
+            📐 Recomendado: 300×100px · Proporção 3:1 · PNG com fundo transparente · máx. 5MB.
+          </p>
           {state?.errors?.logo && (
             <p role="alert" className="text-destructive text-sm">
               {state.errors.logo[0]}

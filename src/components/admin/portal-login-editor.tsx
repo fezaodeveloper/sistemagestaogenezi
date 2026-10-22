@@ -247,7 +247,7 @@ export function PortalLoginEditor({
                 {template === "split"
                   ? "Ocupa a metade esquerda, com um véu da cor de fundo. Sem imagem, mostra o carrossel de banners do portal do aluno."
                   : "Fica atrás do cartão. Sem imagem, vale a cor de fundo."}{" "}
-                JPG, PNG ou WebP, até 5MB.
+                📐 Recomendado: 1920×1080px · Proporção 16:9 · JPG, PNG ou WebP, até 5MB.
               </p>
             </div>
           </CardContent>

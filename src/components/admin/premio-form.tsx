@@ -93,7 +93,8 @@ export function PremioForm({
         )}
         <Input id="foto" name="foto" type="file" accept="image/*" />
         <p className="text-muted-foreground text-xs">
-          {fotoAtualUrl ? "Envie um novo arquivo pra substituir a foto atual." : "Opcional."}
+          📐 Recomendado: 400×400px · Quadrado · JPEG, PNG ou WebP · máx. 5MB.
+          {fotoAtualUrl ? " Envie um novo arquivo pra substituir a foto atual." : " Opcional."}
         </p>
         {state?.errors?.foto && (
           <p role="alert" className="text-destructive text-sm">

@@ -398,7 +398,9 @@ export function ConquistasAdminLista({ conquistas }: { conquistas: ConquistaAdmi
                         Remover
                       </Button>
                     )}
-                    <span className="text-muted-foreground w-full text-xs">PNG, JPG, WEBP ou GIF, até 1 MB. Quadrada fica melhor.</span>
+                    <span className="text-muted-foreground w-full text-xs">
+                      📐 Recomendado: 200×200px · Quadrada · PNG, JPG, WEBP ou GIF · máx. 1MB.
+                    </span>
                   </div>
                 )}
               </div>

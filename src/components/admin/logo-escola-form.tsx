@@ -188,6 +188,9 @@ export function LogoEscolaForm({
           {error}
         </p>
       )}
+      <p className="text-muted-foreground text-xs">
+        📐 Recomendado: 300×100px · Proporção 3:1 · PNG com fundo transparente · máx. 10MB.
+      </p>
     </div>
   );
 }

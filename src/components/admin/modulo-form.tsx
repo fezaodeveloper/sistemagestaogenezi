@@ -110,8 +110,9 @@ export function ModuloForm({
               onChange={handleCapaChange}
             />
             <p className="text-muted-foreground text-xs">
-              JPEG, PNG ou WebP, até 5MB. A imagem é recortada automaticamente em 16:9 — a prévia
-              ao lado já mostra o enquadramento final.
+              📐 Recomendado: 1280×720px · Proporção 16:9 · JPEG, PNG ou WebP, até 5MB. A imagem é
+              recortada automaticamente nesse formato — a prévia ao lado já mostra o enquadramento
+              final.
               {capaAtualUrl && " Envie um novo arquivo pra substituir a capa atual."}
             </p>
           </div>

@@ -142,7 +142,7 @@ export function CursoGratuitoForm({
           <div className="flex flex-1 flex-col gap-2">
             <Input id="foto" name="foto" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFotoChange} />
             <p className="text-muted-foreground text-xs">
-              JPEG, PNG ou WebP, até 5MB.
+              📐 Recomendado: 800×500px · Proporção 16:10 · JPEG, PNG ou WebP, até 5MB.
               {fotoAtualUrl && " Envie um novo arquivo pra substituir a foto atual."}
             </p>
             {cursoId && fotoAtualUrl && previewUrl === fotoAtualUrl && (

@@ -48,7 +48,7 @@ export const CAMPOS_IMAGEM: Record<CampoImagem, DefinicaoCampoImagem> = {
   escola_logo_url: {
     campo: "escola_logo_url",
     rotulo: "Logo tema claro",
-    nota: "Usada nas telas de login, contratos e certificados.",
+    nota: "Usada nas telas de login, contratos e certificados. 📐 Recomendado: 300×100px · Proporção 3:1 · PNG com fundo transparente · máx. 10MB.",
     fundo: "claro",
     bucket: "escola-logo",
     pasta: "",
@@ -60,7 +60,7 @@ export const CAMPOS_IMAGEM: Record<CampoImagem, DefinicaoCampoImagem> = {
   escola_logo_escuro_url: {
     campo: "escola_logo_escuro_url",
     rotulo: "Logo tema escuro",
-    nota: "Aparece no painel admin e no portal do aluno (temas escuros). Vazia = usa a logo do tema claro.",
+    nota: "Aparece no painel admin e no portal do aluno (temas escuros). Vazia = usa a logo do tema claro. 📐 Recomendado: 300×100px · Proporção 3:1 · PNG com fundo transparente · máx. 10MB.",
     fundo: "escuro",
     bucket: "escola-logo",
     pasta: "",
@@ -72,7 +72,7 @@ export const CAMPOS_IMAGEM: Record<CampoImagem, DefinicaoCampoImagem> = {
   escola_logo_colapsada_url: {
     campo: "escola_logo_colapsada_url",
     rotulo: "Logo colapsada (claro)",
-    nota: "Versão pequena para sidebar recolhida.",
+    nota: "Versão pequena para sidebar recolhida. 📐 Recomendado: 64×64px · Quadrado · PNG com fundo transparente · máx. 5MB.",
     fundo: "claro",
     bucket: "escola-logo",
     pasta: "",
@@ -84,7 +84,7 @@ export const CAMPOS_IMAGEM: Record<CampoImagem, DefinicaoCampoImagem> = {
   escola_logo_colapsada_escuro_url: {
     campo: "escola_logo_colapsada_escuro_url",
     rotulo: "Logo colapsada (escuro)",
-    nota: "Versão pequena para sidebar recolhida, no tema escuro.",
+    nota: "Versão pequena para sidebar recolhida, no tema escuro. 📐 Recomendado: 64×64px · Quadrado · PNG com fundo transparente · máx. 5MB.",
     fundo: "escuro",
     bucket: "escola-logo",
     pasta: "",
@@ -96,7 +96,7 @@ export const CAMPOS_IMAGEM: Record<CampoImagem, DefinicaoCampoImagem> = {
   escola_favicon_url: {
     campo: "escola_favicon_url",
     rotulo: "Favicon",
-    nota: "Ícone na aba do navegador. Quadrado; PNG, ICO ou SVG.",
+    nota: "Ícone na aba do navegador. 📐 Recomendado: 32×32px ou 48×48px · Quadrado · PNG, ICO ou SVG · máx. 1MB.",
     fundo: "claro",
     bucket: "escola-logo",
     pasta: "",
@@ -113,7 +113,7 @@ export const CAMPOS_IMAGEM: Record<CampoImagem, DefinicaoCampoImagem> = {
   portal_login_imagem_fundo_url: {
     campo: "portal_login_imagem_fundo_url",
     rotulo: "Imagem da tela de login",
-    nota: "Fundo (modelo Cartão) ou imagem lateral (modelo Dividido) da tela de entrada do aluno.",
+    nota: "Fundo (modelo Cartão) ou imagem lateral (modelo Dividido) da tela de entrada do aluno. 📐 Recomendado: 1920×1080px · Proporção 16:9 · JPG ou PNG · máx. 5MB.",
     fundo: "claro",
     // Mesmo bucket/pasta do editor de login (Portal do Aluno > Login).
     bucket: "login-banners",

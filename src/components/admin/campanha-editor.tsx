@@ -926,6 +926,9 @@ export function CampanhaEditor({
                           </Button>
                         )}
                       </div>
+                      <p className="text-muted-foreground text-xs">
+                        📐 Recomendado: 1200×400px · Proporção 3:1 · JPG, PNG, WebP ou SVG · máx. 5MB.
+                      </p>
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label>Logo (exibido abaixo do banner)</Label>
@@ -954,6 +957,9 @@ export function CampanhaEditor({
                           </Button>
                         )}
                       </div>
+                      <p className="text-muted-foreground text-xs">
+                        📐 Recomendado: 400×150px · PNG com fundo transparente · máx. 5MB.
+                      </p>
                     </div>
 
                     <div className="flex flex-col gap-3 border-t pt-4">

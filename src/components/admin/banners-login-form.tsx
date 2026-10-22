@@ -552,6 +552,9 @@ function AdicionarBannerDialog() {
               accept="image/jpeg,image/png,image/webp"
               onChange={handleArquivoChange}
             />
+            <p className="text-muted-foreground text-xs">
+              📐 Recomendado: 1280×720px (paisagem) · JPG, PNG ou WebP · máx. 5MB.
+            </p>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="banner-tipo">Tela de destino</Label>

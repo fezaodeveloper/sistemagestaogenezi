@@ -168,7 +168,9 @@ export function FotoAlunoUpload({
             </AlertDialogContent>
           </AlertDialog>
         )}
-        <p className="text-muted-foreground text-xs">JPG, PNG ou WebP. Máximo 5MB.</p>
+        <p className="text-muted-foreground text-xs">
+          📐 Recomendado: 400×400px · Quadrado · JPG, PNG ou WebP · máx. 5MB.
+        </p>
         {error && (
           <p role="alert" className="text-destructive text-xs">
             {error}
