@@ -239,6 +239,7 @@ export async function createMatricula(
       taxa_matricula_final: data.taxa_matricula_final,
       taxa_matricula_forma_pagamento: data.taxa_matricula_forma_pagamento,
       taxa_matricula_paga: data.taxa_matricula_paga,
+      curso_bonus_id: data.curso_bonus_id,
     })
     .select()
     .single();
@@ -390,6 +391,11 @@ export type MatriculaDetalhada = Matricula & {
       descricao: string | null;
     } | null;
   } | null;
+  // Curso gratuito BÔNUS (matriculas.curso_bonus_id) — resolvido por uma segunda consulta
+  // abaixo, não por embed: curso_bonus_id é uma FK direta pra cursos, separada do caminho
+  // turmas->cursos acima, mais simples de buscar à parte do que arriscar um hint de FK errado
+  // num select dinâmico.
+  cursoBonus: { nome: string } | null;
 };
 
 export async function getMatricula(id: string): Promise<MatriculaDetalhada | null> {
@@ -404,7 +410,15 @@ export async function getMatricula(id: string): Promise<MatriculaDetalhada | nul
     .eq("id", id)
     .single();
 
-  return (data as MatriculaDetalhada | null) ?? null;
+  if (!data) return null;
+
+  let cursoBonus: { nome: string } | null = null;
+  if (data.curso_bonus_id) {
+    const { data: bonus } = await supabase.from("cursos").select("nome").eq("id", data.curso_bonus_id).maybeSingle();
+    cursoBonus = bonus ?? null;
+  }
+
+  return { ...(data as MatriculaDetalhada), cursoBonus };
 }
 
 export type UpdateMatriculaDetalhesResult = { success: true } | { error: string };

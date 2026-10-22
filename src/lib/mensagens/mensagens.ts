@@ -188,14 +188,22 @@ export async function enviarMensagemMatriculaCriada(
 
     const { data } = await admin
       .from("matriculas")
-      .select("turma_id, alunos(id, telefone, email, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))")
+      .select(
+        "turma_id, alunos(id, telefone, email, senha_portal, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))",
+      )
       .eq("id", matriculaId)
       .single();
 
     const matricula = data as unknown as
       | {
           turma_id: string;
-          alunos: { id: string; telefone: string; email: string; profiles: { full_name: string | null } | null } | null;
+          alunos: {
+            id: string;
+            telefone: string;
+            email: string;
+            senha_portal: string | null;
+            profiles: { full_name: string | null } | null;
+          } | null;
           turmas: { nome: string; horario_aula: string | null; cursos: { nome: string } | null } | null;
         }
       | null;
@@ -215,17 +223,18 @@ export async function enviarMensagemMatriculaCriada(
     const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(/\/+$/, "");
 
     // Credenciais de acesso ao portal — não há senha em texto puro (nem hash) em public.alunos
-    // pra incluir aqui: a senha só existe transitoriamente no navegador do admin no momento da
-    // criação do aluno (ver comentário em createAluno, src/app/admin/alunos/actions.ts) e nunca
-    // é persistida fora do Supabase Auth. Além disso, matrícula é feita sobre um aluno JÁ
-    // existente (buscarAlunosParaWizard busca só entre alunos existentes, a Etapa 1 do wizard
-    // não cria conta nova) — mesmo se a senha fosse salva em algum lugar, não haveria uma "senha
-    // recém-gerada" disponível neste momento. Por isso o fallback seguro: portal + email + a
-    // instrução de usar a senha já cadastrada ou pedir redefinição.
-    const credenciaisTexto =
-      `🎓 Acesse o Portal do Aluno:\n${baseUrl}/aluno\n\n` +
-      `📧 Email de acesso: ${matricula.alunos.email}\n` +
-      `🔑 Use a senha definida no seu cadastro ou solicite redefinição no portal.`;
+    // pra incluir aqui, a menos que createAluno (src/app/admin/alunos/actions.ts) tenha salvo
+    // alunos.senha_portal no momento da criação da conta (não acontece no modo "so_email",
+    // onde a senha é um token que ninguém deve conhecer). Sem senha_portal (conta criada antes
+    // dessa coluna existir, ou modo so_email), cai no fallback genérico de sempre.
+    const credenciaisTexto = matricula.alunos.senha_portal
+      ? `🎓 Acesse o Portal do Aluno:\n${baseUrl}/aluno\n\n` +
+        `📧 Email de acesso: ${matricula.alunos.email}\n` +
+        `🔑 Senha: ${matricula.alunos.senha_portal}\n` +
+        `💡 Recomendamos trocar sua senha após o primeiro acesso.`
+      : `🎓 Acesse o Portal do Aluno:\n${baseUrl}/aluno\n\n` +
+        `📧 Email de acesso: ${matricula.alunos.email}\n` +
+        `🔑 Use a senha definida no seu cadastro ou solicite redefinição no portal.`;
 
     await enviarMensagem({
       tipo: "matricula_criada",

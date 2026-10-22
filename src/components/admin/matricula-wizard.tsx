@@ -253,30 +253,27 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
   const [descontoFormato, setDescontoFormato] = useState<DescontoFormato | null>(null);
   const [descontoValorInput, setDescontoValorInput] = useState("");
 
-  // Curso Gratuito (checkbox) — ao marcar, busca os cursos com gratuito=true e, ao escolher um
-  // no dropdown, reaproveita handleSelecionarCurso (já carrega turmas/módulos do curso
-  // escolhido, mesma lógica da busca por texto da Etapa 2) e fixa o desconto em bolsa_social
-  // 100%. Desmarcar só volta o desconto ao estado normal — não desfaz o curso/turma já
-  // escolhidos, pra não ser destrutivo além do que foi pedido.
+  // Curso Gratuito (checkbox) — BÔNUS adicional à matrícula, nunca substitui o curso principal
+  // (pago) escolhido na Etapa 2: ao marcar, só busca os cursos com gratuito=true pro dropdown;
+  // escolher um no dropdown grava em cursoBonus (estado PRÓPRIO, separado de `curso`) — não
+  // chama mais handleSelecionarCurso, que antes trocava o curso/turma/valores inteiros da
+  // matrícula pelo curso gratuito (bug real, corrigido). Desconto_tipo não é mais tocado aqui:
+  // continua 100% editável pelo admin, independente deste checkbox.
   const [cursoGratuito, setCursoGratuito] = useState(false);
   const [cursosGratuitos, setCursosGratuitos] = useState<CursoParaMatricula[]>([]);
   const [carregandoCursosGratuitos, setCarregandoCursosGratuitos] = useState(false);
+  const [cursoBonus, setCursoBonus] = useState<CursoParaMatricula | null>(null);
 
   function handleToggleCursoGratuito(marcado: boolean) {
     setCursoGratuito(marcado);
     if (marcado) {
-      setDescontoTipo("bolsa_social");
-      setDescontoFormato("porcentagem");
-      setDescontoValorInput("100");
       setCarregandoCursosGratuitos(true);
       getCursosGratuitos()
         .then(setCursosGratuitos)
         .finally(() => setCarregandoCursosGratuitos(false));
     } else {
       setCursosGratuitos([]);
-      setDescontoTipo("sem_bolsa");
-      setDescontoFormato(null);
-      setDescontoValorInput("");
+      setCursoBonus(null);
     }
   }
   const [numParcelas, setNumParcelas] = useState(1);
@@ -399,6 +396,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
     setDescontoValorInput("");
     setCursoGratuito(false);
     setCursosGratuitos([]);
+    setCursoBonus(null);
     setNumParcelas(1);
     setDataPrimeiraMensalidade("");
     setFormaPagamento(null);
@@ -452,6 +450,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
       taxa_matricula_final: cobrarTaxaMatricula ? taxaMatriculaFinal : null,
       taxa_matricula_forma_pagamento: cobrarTaxaMatricula ? taxaMatriculaFormaPagamento : null,
       taxa_matricula_paga: cobrarTaxaMatricula ? taxaMatriculaPaga : false,
+      curso_bonus_id: cursoBonus?.id ?? null,
     };
 
     startTransition(async () => {
@@ -510,6 +509,7 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
             escola_endereco: escola.endereco,
             escola_telefone: escola.telefone,
             escola_email: escola.email,
+            cursoBonusNome: cursoBonus?.nome,
             responsavelNome: responsavel?.nome,
             responsavelCpf: responsavel?.cpf,
           }}
@@ -551,6 +551,9 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
               {formatDiasSemana(turma.cadencia_dias_semana)}
               {turma.horario_aula ? ` · ${turma.horario_aula}` : ""}
             </p>
+            {cursoBonus && (
+              <p className="text-muted-foreground">🎁 Curso Bônus: {cursoBonus.nome}</p>
+            )}
           </div>
           <div>
             <h3 className="mb-1 font-semibold">Financeiro</h3>
@@ -903,10 +906,10 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
               ) : (
                 <Select
                   items={Object.fromEntries(cursosGratuitos.map((c) => [c.id, c.nome]))}
-                  value={curso && cursosGratuitos.some((c) => c.id === curso.id) ? curso.id : undefined}
+                  value={cursoBonus?.id}
                   onValueChange={(value) => {
                     const escolhido = cursosGratuitos.find((c) => c.id === value);
-                    if (escolhido) handleSelecionarCurso(escolhido);
+                    setCursoBonus(escolhido ?? null);
                   }}
                 >
                   <SelectTrigger id="curso_gratuito_select" className="w-64">
@@ -930,7 +933,6 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
           <Select
             items={DESCONTO_TIPO_LABELS}
             value={descontoTipo}
-            disabled={cursoGratuito}
             onValueChange={(value) => {
               setDescontoTipo(value as DescontoTipo);
               if (value === "sem_bolsa") {

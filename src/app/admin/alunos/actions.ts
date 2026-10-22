@@ -229,6 +229,16 @@ export async function createAluno(
     return { error: message, values: echoValues(formData) };
   }
 
+  // senha_portal: guardada em texto puro só pra poder reenviar por WhatsApp na confirmação de
+  // matrícula (ver enviarMensagemMatriculaCriada em src/lib/mensagens/mensagens.ts) — o hash do
+  // Supabase Auth nunca é legível de volta. NUNCA no modo "so_email": ali senhaInicial é um
+  // token longo que ninguém deve conhecer/usar por design (ver comentário acima) — salvá-lo
+  // aqui derrotaria esse modo. Best-effort: se a UPDATE falhar, o aluno já foi criado com
+  // sucesso — a mensagem de matrícula só cai no fallback genérico (sem a senha).
+  if (portal.tipo !== "so_email") {
+    await supabase.from("alunos").update({ senha_portal: senhaInicial }).eq("id", userId);
+  }
+
   if (isMinor(data.data_nascimento)) {
     const { error: responsavelError } = await supabase.from("responsaveis").insert({
       aluno_id: userId,

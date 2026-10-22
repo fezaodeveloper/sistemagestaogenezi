@@ -64,6 +64,10 @@ export type ResumoMatricula = {
   escola_endereco?: string;
   escola_telefone?: string;
   escola_email?: string;
+  // Curso gratuito BÔNUS da matrícula (matriculas.curso_bonus_id) — adicional ao curso
+  // principal acima, nunca o substitui. Listado como linha própria, não dentro da seção
+  // "Informações do Curso" (que é só do curso principal/pago).
+  cursoBonusNome?: string;
   // Preenchidos manualmente pelo admin no momento da impressão (Dialog "aluno
   // é menor de idade?"), não vêm de nenhuma tabela — ver handleImprimirComprovante
   // em matricula-detalhes.tsx/matricula-wizard.tsx. Reaproveitado aqui só para
@@ -195,6 +199,12 @@ export function MatriculaComprovantePdf({
             value={resumo.previsaoConclusao ? formatDataBR(resumo.previsaoConclusao) : "—"}
           />
         </View>
+
+        {resumo.cursoBonusNome && (
+          <View style={pdfStyles.section}>
+            <LinhaPdf label="Curso Bônus" value={resumo.cursoBonusNome} />
+          </View>
+        )}
 
         <View style={pdfStyles.section}>
           <Text style={pdfStyles.sectionTitle}>Financeiro</Text>

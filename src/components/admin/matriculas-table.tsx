@@ -60,7 +60,12 @@ export type MatriculaListItem = Matricula & {
     vagas_ocupadas: number;
     cursos: { nome: string } | null;
   } | null;
-  contratos_assinados: { status: ContratoStatus; aceito_em: string | null }[] | null;
+  // Objeto único, não array: contratos_assinados.matricula_id é UNIQUE (1 contrato por
+  // matrícula no máximo), então o PostgREST resolve esse embed como relação to-one. Bug real
+  // corrigido aqui — o código antigo tratava isso como array (`?.[0]`), e como o valor de
+  // verdade é um objeto plano (sem índice "0"), `contrato` saía sempre `null` e a tela mostrava
+  // "Sem contrato" até pra matrículas com contrato já assinado.
+  contratos_assinados: { status: ContratoStatus; aceito_em: string | null } | null;
 };
 
 // Âmbar (pendente) / verde (assinado) / cinza (recusado) — pedido
@@ -86,7 +91,7 @@ const CONTRATO_STATUS_CONFIG: Record<ContratoStatus, { label: string; className:
 function ContratoButton({ matricula }: { matricula: MatriculaListItem }) {
   const [baixando, setBaixando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const contrato = matricula.contratos_assinados?.[0] ?? null;
+  const contrato = matricula.contratos_assinados ?? null;
 
   async function handleBaixar() {
     setErro(null);

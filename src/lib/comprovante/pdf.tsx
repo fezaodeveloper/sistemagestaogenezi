@@ -35,6 +35,7 @@ type LinhaMatricula = {
   taxa_matricula_final: number | null;
   taxa_matricula_forma_pagamento: TaxaMatriculaFormaPagamento | null;
   taxa_matricula_paga: boolean;
+  curso_bonus_id: string | null;
   alunos: {
     full_name: string | null;
     email: string;
@@ -66,7 +67,7 @@ export async function gerarComprovantePdf(matriculaId: string): Promise<Buffer> 
   const { data } = await admin
     .from("matriculas")
     .select(
-      "id, aluno_id, valor_original, desconto_tipo, desconto_formato, desconto_valor, valor_final, num_parcelas, valor_parcela, forma_pagamento, data_primeira_mensalidade, data_inicio, previsao_conclusao, apostila_entregue, farda_entregue, kit_entregue, observacoes, taxa_matricula_final, taxa_matricula_forma_pagamento, taxa_matricula_paga, alunos(full_name, email, cpf, telefone, data_nascimento), turmas(nome, cadencia_dias_semana, horario_aula, cursos(id, nome, tipo, carga_horaria_horas, descricao))",
+      "id, aluno_id, valor_original, desconto_tipo, desconto_formato, desconto_valor, valor_final, num_parcelas, valor_parcela, forma_pagamento, data_primeira_mensalidade, data_inicio, previsao_conclusao, apostila_entregue, farda_entregue, kit_entregue, observacoes, taxa_matricula_final, taxa_matricula_forma_pagamento, taxa_matricula_paga, curso_bonus_id, alunos(full_name, email, cpf, telefone, data_nascimento), turmas(nome, cadencia_dias_semana, horario_aula, cursos(id, nome, tipo, carga_horaria_horas, descricao))",
     )
     .eq("id", matriculaId)
     .maybeSingle();
@@ -77,23 +78,27 @@ export async function gerarComprovantePdf(matriculaId: string): Promise<Buffer> 
   }
 
   const cursoId = matricula.turmas?.cursos?.id;
-  const [{ count: totalModulos }, { count: totalAulas }, { data: configuracoes }, escolaLogo] = await Promise.all([
-    cursoId
-      ? admin.from("modulos").select("id", { count: "exact", head: true }).eq("curso_id", cursoId)
-      : Promise.resolve({ count: 0 }),
-    cursoId
-      ? admin
-          .from("aulas")
-          .select("id, modulos!inner(curso_id)", { count: "exact", head: true })
-          .eq("modulos.curso_id", cursoId)
-      : Promise.resolve({ count: 0 }),
-    admin
-      .from("configuracoes")
-      .select("escola_nome, escola_endereco, escola_telefone, escola_email")
-      .eq("id", true)
-      .maybeSingle(),
-    carregarLogoEscolaParaPdf(),
-  ]);
+  const [{ count: totalModulos }, { count: totalAulas }, { data: configuracoes }, escolaLogo, { data: cursoBonus }] =
+    await Promise.all([
+      cursoId
+        ? admin.from("modulos").select("id", { count: "exact", head: true }).eq("curso_id", cursoId)
+        : Promise.resolve({ count: 0 }),
+      cursoId
+        ? admin
+            .from("aulas")
+            .select("id, modulos!inner(curso_id)", { count: "exact", head: true })
+            .eq("modulos.curso_id", cursoId)
+        : Promise.resolve({ count: 0 }),
+      admin
+        .from("configuracoes")
+        .select("escola_nome, escola_endereco, escola_telefone, escola_email")
+        .eq("id", true)
+        .maybeSingle(),
+      carregarLogoEscolaParaPdf(),
+      matricula.curso_bonus_id
+        ? admin.from("cursos").select("nome").eq("id", matricula.curso_bonus_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
   // Mesmo critério de gerarContratoPdf: responsável só é buscado (tabela responsaveis) quando o
   // aluno é menor — aqui não tem admin presente pra responder o dialog manual que
@@ -151,6 +156,7 @@ export async function gerarComprovantePdf(matriculaId: string): Promise<Buffer> 
     escola_endereco: configuracoes?.escola_endereco ?? undefined,
     escola_telefone: configuracoes?.escola_telefone ?? undefined,
     escola_email: configuracoes?.escola_email ?? undefined,
+    cursoBonusNome: cursoBonus?.nome ?? undefined,
     responsavelNome: responsavel?.nome,
     responsavelCpf: responsavel?.cpf,
   };

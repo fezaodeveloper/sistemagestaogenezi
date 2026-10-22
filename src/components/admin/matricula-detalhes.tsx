@@ -273,6 +273,7 @@ export function MatriculaDetalhes({
             escola_endereco: escola.endereco,
             escola_telefone: escola.telefone,
             escola_email: escola.email,
+            cursoBonusNome: matriculaAtual.cursoBonus?.nome,
             responsavelNome: responsavel?.nome,
             responsavelCpf: responsavel?.cpf,
           }}

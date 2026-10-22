@@ -130,6 +130,9 @@ export const matriculaWizardSchema = z.object({
   taxa_matricula_final: z.number().min(0).nullable(),
   taxa_matricula_forma_pagamento: z.enum(TAXA_MATRICULA_FORMAS_PAGAMENTO).nullable(),
   taxa_matricula_paga: z.boolean(),
+  // Curso gratuito BÔNUS (checkbox "Curso Gratuito" na Etapa 3) — adicional ao curso principal
+  // (turma_id), nunca o substitui. Ver matricula-wizard.tsx.
+  curso_bonus_id: z.uuid().nullable(),
 });
 
 export type MatriculaWizardInput = z.infer<typeof matriculaWizardSchema>;
@@ -209,6 +212,7 @@ export type Matricula = {
   taxa_matricula_final: number | null;
   taxa_matricula_forma_pagamento: TaxaMatriculaFormaPagamento | null;
   taxa_matricula_paga: boolean;
+  curso_bonus_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
