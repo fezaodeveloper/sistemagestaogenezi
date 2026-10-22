@@ -13,6 +13,7 @@ import { ConquistasPersonalizadasProvider } from "@/components/aluno/conquistas-
 import { AlunoSidebar } from "@/components/aluno/aluno-sidebar";
 import { AlunoBottomNav } from "@/components/aluno/aluno-bottom-nav";
 import { ConquistasProvider } from "@/components/aluno/conquistas-provider";
+import { SinoNotificacoesAluno } from "@/components/aluno/sino-notificacoes-aluno";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -54,6 +55,7 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
     conversa,
     { count: parcelasAtrasadas },
     { count: contratosPendentes },
+    { count: notificacoesNaoLidas },
     conectaHabilitado,
     { data: configData },
     configComunidade,
@@ -71,6 +73,13 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
         .select("id", { count: "exact", head: true })
         .eq("aluno_id", user.id)
         .eq("status", "pendente"),
+      // Migration pendente (notificacoes_aluno) cai em count null -> 0 abaixo, nunca derruba o
+      // layout (mesmo espírito dos outros counts best-effort aqui).
+      supabase
+        .from("notificacoes_aluno")
+        .select("id", { count: "exact", head: true })
+        .eq("aluno_id", user.id)
+        .eq("lida", false),
       getConectaHabilitado(supabase),
       supabase.from("configuracoes").select("push_vapid_public_key, escola_nome").eq("id", true).maybeSingle(),
       // Nunca lança: erro/migration pendente = comunidade desligada (menu escondido).
@@ -105,10 +114,13 @@ export default async function AlunoLayout({ children }: { children: ReactNode })
           vapidPublicKey={configData?.push_vapid_public_key ?? null}
         />
         <SidebarInset className="min-w-0">
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger />
-            <Separator orientation="vertical" className="h-4" />
-            <span className="text-sm font-medium">Área do aluno</span>
+          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger />
+              <Separator orientation="vertical" className="h-4" />
+              <span className="text-sm font-medium">Área do aluno</span>
+            </div>
+            <SinoNotificacoesAluno naoLidasInicial={notificacoesNaoLidas ?? 0} />
           </header>
           <div className="flex-1 p-6 pb-20 md:pb-6">{children}</div>
         </SidebarInset>

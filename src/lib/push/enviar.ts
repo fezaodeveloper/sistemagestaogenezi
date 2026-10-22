@@ -52,7 +52,7 @@ async function enviarPushPara(
       config.push_vapid_private_key,
     );
 
-    let query = admin.from("push_subscriptions").select("id, endpoint, p256dh, auth_key");
+    let query = admin.from("push_subscriptions").select("id, endpoint, p256dh, auth_key, aluno_id");
     if (filtro === "admin") query = query.is("aluno_id", null);
     else if (filtro === "aluno") query = query.not("aluno_id", "is", null);
     else query = query.eq("aluno_id", filtro.alunoId);
@@ -83,6 +83,24 @@ async function enviarPushPara(
         }
       }),
     );
+
+    // Histórico pro sininho do portal (/aluno) — só quando o destino é aluno (nunca pras
+    // subscriptions do admin, que não tem essa tela). Um registro por ALUNO, não por
+    // dispositivo/subscription: um aluno com 2+ aparelhos não deve ver a mesma notificação
+    // duplicada na lista. Best-effort — nunca deve impedir o push já enviado acima de "ter
+    // acontecido" pro chamador.
+    if (filtro !== "admin") {
+      const alunoIds = Array.from(new Set(subscriptions.map((s) => s.aluno_id as string).filter(Boolean)));
+      if (alunoIds.length > 0) {
+        try {
+          await admin
+            .from("notificacoes_aluno")
+            .insert(alunoIds.map((alunoId) => ({ aluno_id: alunoId, titulo, corpo })));
+        } catch {
+          // Migration ainda não aplicada ou outra falha — nunca deve afetar o push já enviado.
+        }
+      }
+    }
 
     return subscriptions.length;
   } catch {
