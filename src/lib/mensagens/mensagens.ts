@@ -238,6 +238,11 @@ export async function enviarMensagemMatriculaCriada(
         `📧 Email de acesso: ${matricula.alunos.email}\n` +
         `🔑 Use a senha definida no seu cadastro ou solicite redefinição no portal.`;
 
+    // Rota real de assinatura (/contrato/[matriculaId]/assinar, ver src/app/contrato/
+    // [matriculaId]/assinar/page.tsx) — pública, sem id de responsável/aluno na URL, mesmo
+    // padrão de bearer-implícito via UUID já aceito nas outras rotas públicas do portal.
+    const linkContratoTexto = `📝 Assine seu contrato:\n${baseUrl}/contrato/${matriculaId}/assinar`;
+
     await enviarMensagem({
       tipo: "matricula_criada",
       matriculaId,
@@ -254,9 +259,9 @@ export async function enviarMensagemMatriculaCriada(
         horario_aula: matricula.turmas.horario_aula ? formatarHorario(matricula.turmas.horario_aula) : "a definir",
       },
       // URL em linha própria: no WhatsApp mobile, texto e link na MESMA linha (só um espaço
-      // entre eles) nem sempre fica clicável — quebrar antes do link resolve isso. Credenciais
-      // vêm antes do link do comprovante (ordem pedida na tarefa).
-      sufixoTexto: `${credenciaisTexto}\n\n📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
+      // entre eles) nem sempre fica clicável — quebrar antes do link resolve isso. Ordem:
+      // credenciais do portal, depois link de assinatura do contrato, depois comprovante.
+      sufixoTexto: `${credenciaisTexto}\n\n${linkContratoTexto}\n\n📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
     });
 
     // GênZap Fase 3 — fluxos personalizados com gatilho "matricula_criada", além do template
