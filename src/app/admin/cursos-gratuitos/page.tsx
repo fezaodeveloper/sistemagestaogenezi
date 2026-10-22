@@ -10,24 +10,40 @@ export default async function CursosGratuitosPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const [{ data: cursos, error }, { data: matriculasBonus }] = await Promise.all([
+  const [{ data: cursos, error }, { data: matriculasBonus }, { data: vinculosManuais }] = await Promise.all([
     supabase
       .from("cursos")
       .select("id, nome, descricao, url_plataforma_externa, carga_horaria, foto_url, status")
       .eq("gratuito", true)
       .order("nome"),
-    // Inscritos = matriculas.curso_bonus_id — o único caminho real de inscrição num curso
-    // gratuito (ver commit a87616d: o bônus nunca passa por turma_id). Busca todas de uma vez e
-    // conta em memória (volume baixo: matrículas de uma escola) em vez de uma query por curso.
-    supabase.from("matriculas").select("curso_bonus_id").not("curso_bonus_id", "is", null),
+    // Inscritos = duas fontes combinadas: matriculas.curso_bonus_id (bônus de uma matrícula
+    // paga, ver commit a87616d: o bônus nunca passa por turma_id) e aluno_cursos_gratuitos
+    // (atribuição manual — ver migration 20261022150000). Busca todas de uma vez e conta em
+    // memória (volume baixo: matrículas/vínculos de uma escola) em vez de uma query por curso.
+    supabase.from("matriculas").select("aluno_id, curso_bonus_id").not("curso_bonus_id", "is", null),
+    supabase.from("aluno_cursos_gratuitos").select("aluno_id, curso_id"),
   ]);
 
-  const inscritosPorCurso = new Map<string, number>();
+  // Mapa curso -> conjunto de alunos (não soma direto): um aluno com as duas formas de vínculo
+  // pro mesmo curso conta só 1 vez, mesmo critério de getAlunosInscritosCursoGratuito.
+  const alunosPorCurso = new Map<string, Set<string>>();
   for (const linha of matriculasBonus ?? []) {
     const cursoBonusId = linha.curso_bonus_id as string;
-    inscritosPorCurso.set(cursoBonusId, (inscritosPorCurso.get(cursoBonusId) ?? 0) + 1);
+    if (!alunosPorCurso.has(cursoBonusId)) alunosPorCurso.set(cursoBonusId, new Set());
+    alunosPorCurso.get(cursoBonusId)!.add(linha.aluno_id);
   }
-  const totalAlunosInscritos = matriculasBonus?.length ?? 0;
+  for (const linha of vinculosManuais ?? []) {
+    if (!alunosPorCurso.has(linha.curso_id)) alunosPorCurso.set(linha.curso_id, new Set());
+    alunosPorCurso.get(linha.curso_id)!.add(linha.aluno_id);
+  }
+
+  const inscritosPorCurso = new Map<string, number>();
+  const todosAlunosInscritos = new Set<string>();
+  for (const [cursoId, alunos] of alunosPorCurso) {
+    inscritosPorCurso.set(cursoId, alunos.size);
+    for (const alunoId of alunos) todosAlunosInscritos.add(alunoId);
+  }
+  const totalAlunosInscritos = todosAlunosInscritos.size;
 
   return (
     <div className="flex flex-col gap-6">

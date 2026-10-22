@@ -259,24 +259,121 @@ export async function excluirCursoGratuito(id: string): Promise<{ error?: string
   return {};
 }
 
-export type AlunoInscritoCursoGratuito = { full_name: string | null; status: string };
+// origem "matricula" = veio de matriculas.curso_bonus_id (escolhido no wizard, preso àquela
+// matrícula — sem botão de remover aqui, isso se edita na matrícula). origem "manual" = veio de
+// aluno_cursos_gratuitos (atribuído nesta tela — "vinculoId" identifica a linha pra remover).
+export type AlunoInscritoCursoGratuito = {
+  alunoId: string;
+  full_name: string | null;
+  status: string;
+  origem: "matricula" | "manual";
+  vinculoId: string | null;
+};
 
-// Lista de alunos inscritos num curso gratuito específico ("Ver detalhes" na tabela) — via
-// matriculas.curso_bonus_id, o único caminho real de inscrição num curso gratuito (ver commit
-// a87616d: o bônus nunca passa por turma_id). Matricula via turma própria pra um curso
-// "gratuito" não é um fluxo que esta tela produz — não contemplado aqui de propósito.
+// Lista de alunos com acesso a um curso gratuito específico ("Ver detalhes" na tabela) — combina
+// as DUAS formas de vínculo que existem hoje: matriculas.curso_bonus_id (bônus de uma matrícula
+// paga, ver commit a87616d) e aluno_cursos_gratuitos (atribuição manual, independente de
+// matrícula — ver migration 20261022150000). Um aluno pode aparecer via as duas ao mesmo tempo;
+// nesse caso aparece 1 vez só, com origem "matricula" (prioridade, porque não tem como remover
+// por aqui) e sem vinculoId mesmo que também tenha um vínculo manual.
 export async function getAlunosInscritosCursoGratuito(cursoId: string): Promise<AlunoInscritoCursoGratuito[]> {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("matriculas")
-    .select("status, alunos(full_name)")
-    .eq("curso_bonus_id", cursoId);
+  const [{ data: matriculasData }, { data: vinculosData }] = await Promise.all([
+    supabase.from("matriculas").select("aluno_id, status, alunos(full_name)").eq("curso_bonus_id", cursoId),
+    supabase.from("aluno_cursos_gratuitos").select("id, aluno_id, alunos(full_name)").eq("curso_id", cursoId),
+  ]);
 
-  const linhas = (data ?? []) as unknown as { status: string; alunos: { full_name: string | null } | null }[];
+  const porAluno = new Map<string, AlunoInscritoCursoGratuito>();
 
-  return linhas
-    .map((linha) => ({ full_name: linha.alunos?.full_name ?? null, status: linha.status }))
-    .sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""));
+  for (const linha of (matriculasData ?? []) as unknown as {
+    aluno_id: string;
+    status: string;
+    alunos: { full_name: string | null } | null;
+  }[]) {
+    porAluno.set(linha.aluno_id, {
+      alunoId: linha.aluno_id,
+      full_name: linha.alunos?.full_name ?? null,
+      status: linha.status,
+      origem: "matricula",
+      vinculoId: null,
+    });
+  }
+
+  for (const linha of (vinculosData ?? []) as unknown as {
+    id: string;
+    aluno_id: string;
+    alunos: { full_name: string | null } | null;
+  }[]) {
+    if (porAluno.has(linha.aluno_id)) continue;
+    porAluno.set(linha.aluno_id, {
+      alunoId: linha.aluno_id,
+      full_name: linha.alunos?.full_name ?? null,
+      status: "atribuído",
+      origem: "manual",
+      vinculoId: linha.id,
+    });
+  }
+
+  return Array.from(porAluno.values()).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""));
+}
+
+export type AlunoBuscaResultado = { id: string; full_name: string | null; cpf: string };
+
+// Busca por nome OU CPF (dígitos, sem máscara — cpf no banco é salvo só com números) pra
+// autocompletar o campo "Adicionar aluno" no dialog de detalhes. Limite de 10: é autocomplete,
+// não listagem.
+export async function buscarAlunosParaCursoGratuito(termo: string): Promise<AlunoBuscaResultado[]> {
+  await requireRole("admin");
+
+  const termoLimpo = termo.trim();
+  if (termoLimpo.length < 2) return [];
+
+  const supabase = await createClient();
+  const cpfDigitos = termoLimpo.replace(/\D/g, "");
+  const filtro =
+    cpfDigitos.length >= 2
+      ? `full_name.ilike.%${termoLimpo}%,cpf.ilike.%${cpfDigitos}%`
+      : `full_name.ilike.%${termoLimpo}%`;
+
+  const { data } = await supabase.from("alunos").select("id, full_name, cpf").or(filtro).limit(10);
+
+  return (data ?? []) as AlunoBuscaResultado[];
+}
+
+export async function atribuirCursoGratuito(cursoId: string, alunoId: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("aluno_cursos_gratuitos")
+    .insert({ curso_id: cursoId, aluno_id: alunoId, created_by: user.id });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "Este aluno já tem acesso a este curso gratuito." };
+    }
+    return { error: "Não foi possível vincular o aluno. Tente novamente." };
+  }
+
+  revalidatePath("/admin/cursos-gratuitos");
+  return {};
+}
+
+// Só remove vínculos manuais (aluno_cursos_gratuitos) — um vínculo "origem: matricula" não tem
+// vinculoId e esta action nunca é chamada pra ele (botão de remover nem aparece na UI); a
+// matrícula principal do aluno nunca é tocada por aqui.
+export async function removerVinculoCursoGratuito(vinculoId: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("aluno_cursos_gratuitos").delete().eq("id", vinculoId);
+
+  if (error) {
+    return { error: "Não foi possível remover o vínculo. Tente novamente." };
+  }
+
+  revalidatePath("/admin/cursos-gratuitos");
+  return {};
 }

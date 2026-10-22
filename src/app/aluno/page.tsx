@@ -15,6 +15,7 @@ import { AvisoInadimplencia } from "@/components/aluno/aviso-inadimplencia";
 import { BannerSlideshowPortal } from "@/components/aluno/banner-slideshow-portal";
 import { Capa } from "@/components/aluno/capa";
 import { CursoBloqueadoCard, type CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
+import { CursoGratuitoCard, type CursoGratuitoAluno } from "@/components/aluno/curso-gratuito-card";
 import { NotificacoesPushCard } from "@/components/aluno/notificacoes-push-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,6 +52,75 @@ type CursoAluno = {
   gratuito: boolean;
   urlPlataformaExterna: string | null;
 };
+
+type CursoGratuitoRow = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  foto_url: string | null;
+  url_plataforma_externa: string | null;
+  status: string;
+};
+
+function cursoGratuitoRowParaCard(curso: CursoGratuitoRow): CursoGratuitoAluno | null {
+  // Sem RLS extra necessária pro aluno ler esse curso: a policy "Alunos podem ver o catalogo de
+  // cursos ativos" (status = 'ativo', sem checar role nem vínculo) já cobre, mas o status pode
+  // ter virado inativo DEPOIS do vínculo (aluno_cursos_gratuitos/curso_bonus_id) ser criado —
+  // sem url também não tem pra onde linkar. Os dois casos saem do card, não travados nele.
+  if (curso.status !== "ativo" || !curso.url_plataforma_externa) return null;
+  return {
+    id: curso.id,
+    nome: curso.nome,
+    descricao: curso.descricao,
+    fotoUrl: curso.foto_url,
+    url: curso.url_plataforma_externa,
+  };
+}
+
+// Cursos gratuitos que o aluno tem acesso, combinando as duas formas de vínculo que existem hoje
+// (ver migration 20261022150000 e commit a87616d): aluno_cursos_gratuitos (atribuição manual,
+// /admin/cursos-gratuitos) e matriculas.curso_bonus_id (bônus de uma matrícula paga). Nenhum dos
+// dois passa por turma_id — por isso nunca aparecia em "Meus Cursos" (que só lê
+// matriculas->turmas->cursos) nem em lugar nenhum do portal antes desta correção.
+async function getCursosGratuitosAluno(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  alunoId: string,
+): Promise<CursoGratuitoAluno[]> {
+  const [{ data: vinculosData }, { data: matriculasBonusData }] = await Promise.all([
+    supabase
+      .from("aluno_cursos_gratuitos")
+      .select("cursos(id, nome, descricao, foto_url, url_plataforma_externa, status)")
+      .eq("aluno_id", alunoId),
+    supabase.from("matriculas").select("curso_bonus_id").eq("aluno_id", alunoId).not("curso_bonus_id", "is", null),
+  ]);
+
+  // curso_bonus_id é uma FK direta pra cursos, separada do caminho turmas->cursos acima — resolvida
+  // numa segunda consulta à parte (mesmo padrão de getMatricula em admin/matriculas/actions.ts),
+  // mais simples do que arriscar um hint de FK errado num select dinâmico.
+  const idsBonus = Array.from(
+    new Set((matriculasBonusData ?? []).map((m) => m.curso_bonus_id as string)),
+  );
+  const { data: cursosBonusData } =
+    idsBonus.length > 0
+      ? await supabase
+          .from("cursos")
+          .select("id, nome, descricao, foto_url, url_plataforma_externa, status")
+          .in("id", idsBonus)
+      : { data: [] as CursoGratuitoRow[] };
+
+  const mapa = new Map<string, CursoGratuitoAluno>();
+  for (const linha of (vinculosData ?? []) as unknown as { cursos: CursoGratuitoRow | null }[]) {
+    const card = linha.cursos ? cursoGratuitoRowParaCard(linha.cursos) : null;
+    if (card) mapa.set(card.id, card);
+  }
+  for (const curso of (cursosBonusData ?? []) as CursoGratuitoRow[]) {
+    if (mapa.has(curso.id)) continue;
+    const card = cursoGratuitoRowParaCard(curso);
+    if (card) mapa.set(card.id, card);
+  }
+
+  return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+}
 
 function formatDateBR(isoDate: string) {
   const [year, month, day] = isoDate.split("-");
@@ -144,6 +214,7 @@ export default async function AlunoDashboardPage() {
   ]);
 
   const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
+  const cursosGratuitos = await getCursosGratuitosAluno(supabase, user.id);
 
   // Capa fica em bucket público — a URL é montada aqui (não precisa de
   // signed URL, mesma lógica já usada pra foto de prêmio).
@@ -337,6 +408,20 @@ export default async function AlunoDashboardPage() {
           </div>
         )}
       </div>
+
+      {cursosGratuitos.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Cursos Gratuitos</h2>
+            <Badge variant="secondary">{cursosGratuitos.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {cursosGratuitos.map((curso) => (
+              <CursoGratuitoCard key={curso.id} curso={curso} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <NotificacoesPushCard vapidPublicKey={configData?.push_vapid_public_key ?? null} />
 

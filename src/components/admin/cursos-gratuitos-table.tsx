@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
-import { Users } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Plus, Trash2, Users } from "lucide-react";
 import {
+  atribuirCursoGratuito,
   atualizarStatusCursoGratuito,
+  buscarAlunosParaCursoGratuito,
   getAlunosInscritosCursoGratuito,
+  removerVinculoCursoGratuito,
+  type AlunoBuscaResultado,
   type AlunoInscritoCursoGratuito,
 } from "@/app/admin/cursos-gratuitos/actions";
 import { Button } from "@/components/ui/button";
@@ -71,19 +75,111 @@ function StatusToggle({ id, statusInicial }: { id: string; statusInicial: (typeo
   return <Switch checked={ativo} disabled={isPending} onCheckedChange={(checked) => handleChange(checked === true)} />;
 }
 
+// Autocomplete de aluno por nome/CPF — debounce de 300ms pra não disparar uma busca por tecla
+// digitada. Resultado já exclui (no clique) alunos que o próprio insert recusaria por duplicidade;
+// a mensagem de "já tem acesso" só aparece mesmo assim se o admin tentar de novo rápido.
+function AdicionarAlunoForm({ cursoId, onAdicionado }: { cursoId: string; onAdicionado: () => void }) {
+  const [termo, setTermo] = useState("");
+  const [resultados, setResultados] = useState<AlunoBuscaResultado[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const termoAtual = termo.trim();
+    const timeout = setTimeout(() => {
+      if (termoAtual.length < 2) {
+        setResultados([]);
+        return;
+      }
+      setBuscando(true);
+      buscarAlunosParaCursoGratuito(termoAtual)
+        .then(setResultados)
+        .finally(() => setBuscando(false));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [termo]);
+
+  function handleAdicionar(alunoId: string) {
+    setErro(null);
+    startTransition(async () => {
+      const resultado = await atribuirCursoGratuito(cursoId, alunoId);
+      if (resultado.error) {
+        setErro(resultado.error);
+        return;
+      }
+      setTermo("");
+      setResultados([]);
+      onAdicionado();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-b pb-4">
+      <Input
+        placeholder="Buscar aluno por nome ou CPF..."
+        value={termo}
+        onChange={(event) => setTermo(event.target.value)}
+        disabled={isPending}
+      />
+      {buscando && <p className="text-muted-foreground text-xs">Buscando...</p>}
+      {erro && <p className="text-destructive text-xs">{erro}</p>}
+      {resultados.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {resultados.map((aluno) => (
+            <button
+              key={aluno.id}
+              type="button"
+              disabled={isPending}
+              onClick={() => handleAdicionar(aluno.id)}
+              className="hover:bg-accent flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm disabled:pointer-events-none disabled:opacity-50"
+            >
+              <span>{aluno.full_name ?? "—"}</span>
+              <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                <Plus className="size-3.5" />
+                Adicionar
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RemoverVinculoButton({ vinculoId, onRemovido }: { vinculoId: string; onRemovido: () => void }) {
+  const [isPending, startTransition] = useTransition();
+
+  function handleRemover() {
+    startTransition(async () => {
+      const resultado = await removerVinculoCursoGratuito(vinculoId);
+      if (!resultado.error) onRemovido();
+    });
+  }
+
+  return (
+    <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleRemover}>
+      <Trash2 className="size-3.5" />
+      Remover
+    </Button>
+  );
+}
+
 function DetalhesInscritosDialog({ cursoId, nome }: { cursoId: string; nome: string }) {
   const [open, setOpen] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [alunos, setAlunos] = useState<AlunoInscritoCursoGratuito[] | null>(null);
 
+  function recarregar() {
+    setCarregando(true);
+    getAlunosInscritosCursoGratuito(cursoId)
+      .then(setAlunos)
+      .finally(() => setCarregando(false));
+  }
+
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
-    if (nextOpen && alunos === null) {
-      setCarregando(true);
-      getAlunosInscritosCursoGratuito(cursoId)
-        .then(setAlunos)
-        .finally(() => setCarregando(false));
-    }
+    if (nextOpen && alunos === null) recarregar();
   }
 
   return (
@@ -98,25 +194,36 @@ function DetalhesInscritosDialog({ cursoId, nome }: { cursoId: string; nome: str
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Alunos inscritos — {nome}</DialogTitle>
+          <DialogTitle>Alunos com acesso — {nome}</DialogTitle>
         </DialogHeader>
+        <AdicionarAlunoForm cursoId={cursoId} onAdicionado={recarregar} />
         {carregando ? (
           <p className="text-muted-foreground py-6 text-center text-sm">Carregando...</p>
         ) : !alunos || alunos.length === 0 ? (
-          <p className="text-muted-foreground py-6 text-center text-sm">Nenhum aluno inscrito neste curso ainda.</p>
+          <p className="text-muted-foreground py-6 text-center text-sm">Nenhum aluno com acesso a este curso ainda.</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>Status da matrícula</TableHead>
+                <TableHead>Origem</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {alunos.map((aluno, indice) => (
-                <TableRow key={indice}>
+              {alunos.map((aluno) => (
+                <TableRow key={aluno.alunoId}>
                   <TableCell>{aluno.full_name ?? "—"}</TableCell>
-                  <TableCell className="capitalize">{aluno.status}</TableCell>
+                  <TableCell>
+                    {aluno.origem === "matricula" ? (
+                      <span className="text-muted-foreground text-xs">Bônus da matrícula</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">Atribuição manual</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {aluno.vinculoId && <RemoverVinculoButton vinculoId={aluno.vinculoId} onRemovido={recarregar} />}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
