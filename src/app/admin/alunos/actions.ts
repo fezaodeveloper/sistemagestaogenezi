@@ -772,7 +772,8 @@ export async function enviarSenhaAlunoWhatsApp(
 //
 // AWAITABLE (não emSegundoPlano/fire-and-forget) — diferente de enviarSenhaAlunoWhatsApp acima:
 // o botão precisa mostrar sucesso/erro reais pro admin, não só "disparei e já volto". URL
-// (/responsavel/[alunoId], item 8 desta sessão) usa o mesmo domínio-padrão de todo o projeto.
+// (/responsavel, sem id de aluno — o responsável entra só com o próprio CPF) usa o mesmo
+// domínio-padrão de todo o projeto.
 export async function enviarLinkPortalResponsavel(
   alunoId: string,
   telefoneResponsavel: string,
@@ -785,7 +786,7 @@ export async function enviarLinkPortalResponsavel(
   const { data: aluno } = await admin.from("alunos").select("full_name").eq("id", alunoId).maybeSingle();
   if (!aluno) return { error: "Aluno não encontrado." };
 
-  const linkPortal = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/responsavel/${alunoId}`;
+  const linkPortal = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/responsavel`;
   const mensagem = [
     `Olá! Você é responsável por ${aluno.full_name ?? "um(a) aluno(a)"} na GÊNEZI.`,
     "",

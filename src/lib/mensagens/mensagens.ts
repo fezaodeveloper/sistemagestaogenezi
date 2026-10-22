@@ -74,9 +74,11 @@ async function enviarCopiaParaResponsavel(
   let blocoPortalResponsavel = "";
   if (tipo === "matricula_criada") {
     const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(/\/+$/, "");
+    // Sem id de aluno na URL (rota /responsavel global) — o responsável entra só com o próprio
+    // CPF, ver src/app/responsavel/page.tsx.
     blocoPortalResponsavel =
-      `\n\n👨‍👩‍👧 Como responsável, você também tem acesso ao portal:\n${baseUrl}/responsavel/${alunoId}\n\n` +
-      `No portal você acompanha matrículas, parcelas e documentos de ${nomeAluno}.`;
+      `\n\n👨‍👩‍👧 Como responsável, você também tem acesso ao portal:\n${baseUrl}/responsavel\n\n` +
+      `No portal você acompanha matrículas, parcelas e documentos de ${nomeAluno} usando o CPF cadastrado como responsável.`;
   }
 
   await enviarWhatsapp(

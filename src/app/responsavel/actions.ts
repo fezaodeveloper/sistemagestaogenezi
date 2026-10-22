@@ -3,31 +3,43 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { onlyDigits } from "@/lib/alunos/schema";
 
-// Portal do Responsável — acesso SEM login. alunoId na URL funciona como bearer token
-// implícito (mesmo modelo de risco já aceito nos itens 6/7: contrato e termo de imagem por
-// CPF), e a identidade de quem acessa é validada por CPF contra responsaveis.cpf. Sempre via
-// createAdminClient() — não há sessão nenhuma neste fluxo.
+// Portal do Responsável — acesso SEM login, SEM id de aluno na URL: o responsável entra só com
+// o próprio CPF (/responsavel), e o sistema acha o aluno vinculado automaticamente via
+// responsaveis.cpf. Sempre via createAdminClient() — não há sessão nenhuma neste fluxo.
+//
+// Substitui a rota antiga /responsavel/[alunoId] (mantida só como redirect, ver
+// src/app/responsavel/[alunoId]/page.tsx) — este arquivo reúne a lógica que vivia em
+// src/app/responsavel/[alunoId]/actions.ts (removido).
 
-export async function validarCpfResponsavel(
-  alunoId: string,
-  cpfDigitado: string,
-): Promise<{ valido: true; nomeResponsavel: string } | { valido: false; erro: string }> {
+export type ValidarCpfResponsavelResult =
+  | { alunoId: string; nomeResponsavel: string; nomeAluno: string | null }
+  | { error: string };
+
+export async function validarCpfResponsavelGlobal(cpfDigitado: string): Promise<ValidarCpfResponsavelResult> {
   const admin = createAdminClient();
 
-  const { data: responsaveis } = await admin.from("responsaveis").select("nome, cpf").eq("aluno_id", alunoId);
-
-  if (!responsaveis || responsaveis.length === 0) {
-    return { valido: false, erro: "Nenhum responsável cadastrado para este aluno." };
-  }
+  // Compara CPF normalizando em JS (onlyDigits de ambos os lados), não por igualdade direta no
+  // SQL — mesmo critério já usado em todo o resto do projeto pra esse tipo de comparação (ver
+  // assinarContratoPorCpf, assinarTermoImagemPorCpf): o valor salvo em responsaveis.cpf não tem
+  // garantia de estar sempre só em dígitos puros (máscara aplicada só no formulário, não no
+  // banco), então um `.eq("cpf", onlyDigits(cpfDigitado))` arriscaria não bater com uma linha
+  // salva com pontuação.
+  const { data: responsaveis } = await admin.from("responsaveis").select("aluno_id, nome, cpf");
 
   const cpfNormalizado = onlyDigits(cpfDigitado);
-  const encontrado = responsaveis.find((r) => onlyDigits(r.cpf) === cpfNormalizado);
+  const encontrado = (responsaveis ?? []).find((r) => onlyDigits(r.cpf) === cpfNormalizado);
 
   if (!encontrado) {
-    return { valido: false, erro: "CPF não confere com nenhum responsável cadastrado." };
+    return { error: "CPF não encontrado como responsável." };
   }
 
-  return { valido: true, nomeResponsavel: encontrado.nome };
+  const { data: aluno } = await admin.from("alunos").select("full_name").eq("id", encontrado.aluno_id).maybeSingle();
+
+  return {
+    alunoId: encontrado.aluno_id,
+    nomeResponsavel: encontrado.nome,
+    nomeAluno: aluno?.full_name ?? null,
+  };
 }
 
 export type DadosPortalParcela = {
@@ -67,11 +79,11 @@ type LinhaMatricula = {
 };
 
 // IMPORTANTE: esta function NÃO re-valida CPF — a autenticação acontece uma única vez em
-// validarCpfResponsavel(), chamada pelo componente client ANTES de este ser chamado. Mesmo
-// modelo de segurança (bearer token implícito via UUID) já aceito nas rotas públicas de PDF
-// (/api/contratos/[matriculaId]/pdf, /api/comprovantes/parcela/[parcelaId]/pdf) — não é um gap
-// novo introduzido aqui.
-export async function getDadosPortalResponsavel(alunoId: string): Promise<DadosPortal | null> {
+// validarCpfResponsavelGlobal(), chamada pelo componente client ANTES de este ser chamado.
+// Mesmo modelo de segurança (bearer token implícito via UUID) já aceito nas rotas públicas de
+// PDF (/api/contratos/[matriculaId]/pdf, /api/comprovantes/parcela/[parcelaId]/pdf) — não é um
+// gap novo introduzido aqui.
+export async function getDadosPortalResponsavelGlobal(alunoId: string): Promise<DadosPortal | null> {
   const admin = createAdminClient();
 
   const { data: aluno } = await admin.from("alunos").select("full_name, status_aluno").eq("id", alunoId).maybeSingle();

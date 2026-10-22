@@ -5,7 +5,7 @@
 // PortalResponsavelAuth simples e o dashboard autocontido.
 
 import { useEffect, useState } from "react";
-import { getDadosPortalResponsavel, type DadosPortal } from "@/app/responsavel/[alunoId]/actions";
+import { getDadosPortalResponsavelGlobal, type DadosPortal } from "@/app/responsavel/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,7 +59,7 @@ export function PortalResponsavelDashboard({ alunoId }: { alunoId: string }) {
 
   useEffect(() => {
     let cancelado = false;
-    getDadosPortalResponsavel(alunoId).then((resultado) => {
+    getDadosPortalResponsavelGlobal(alunoId).then((resultado) => {
       if (cancelado) return;
       setDados(resultado);
       setCarregando(false);
