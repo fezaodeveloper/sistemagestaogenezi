@@ -98,11 +98,14 @@ export function PortalLoginLayout({
   }
 
   // ===== Template DIVIDIDO =====
+  // 65/35 (hero/formulário) — era 50/50 (grid-cols-2 puro). Largura em grid-template-columns
+  // explícito (não dá pra fazer isso com grid-cols-2, que é sempre igual); o `fr` normal do
+  // Tailwind (grid-cols-[2fr_1fr] etc.) chegaria perto mas não exatamente 65/35, por isso % direto.
   const temHero = !!config.imagemFundoUrl;
   return (
     <main
       style={{ ...varsCor, ["--login-fundo" as string]: config.corFundo } as CSSProperties}
-      className={`${altura} ${escolher(modo, { mobile: "flex", desktop: "grid grid-cols-2", responsivo: "grid lg:grid-cols-2" })}`}
+      className={`${altura} ${escolher(modo, { mobile: "flex", desktop: "grid grid-cols-[65%_35%]", responsivo: "grid lg:grid-cols-[65%_35%]" })}`}
     >
       {/* Coluna esquerda: hero (só em telas largas). */}
       <div
@@ -133,7 +136,7 @@ export function PortalLoginLayout({
         })}`}
       >
         <div
-          className={`text-foreground flex w-full max-w-sm flex-col gap-6 ${escolher(modo, {
+          className={`text-foreground flex w-full max-w-95 flex-col gap-6 ${escolher(modo, {
             mobile: "bg-background rounded-2xl p-8 shadow-2xl",
             desktop: "",
             responsivo: "bg-background rounded-2xl p-8 shadow-2xl lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none",

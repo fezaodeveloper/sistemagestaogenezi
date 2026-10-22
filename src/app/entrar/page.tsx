@@ -83,8 +83,11 @@ export default async function EntrarPage({
   return (
     <main className="flex h-svh">
       {/* Coluna esquerda — slideshow, escondida em telas menores que lg
-          (ver TAREFA 6: mobile mostra só o formulário). */}
-      <div className="hidden lg:flex lg:w-[75%] relative overflow-hidden">
+          (ver TAREFA 6: mobile mostra só o formulário). 65/35 (era 75/25) —
+          mesma proporção do template "dividido" em PortalLoginLayout, pra
+          esta tela antiga (só ativa se a migration de portal_login_* ainda
+          não tiver sido aplicada) não ficar inconsistente com a tela real. */}
+      <div className="hidden lg:flex lg:w-[65%] relative overflow-hidden">
         <BannerSlideshow tipo="aluno" />
       </div>
 
@@ -94,7 +97,7 @@ export default async function EntrarPage({
           min-height:auto por padrão e o conteúdo pode "estourar" a altura
           do pai em vez de rolar internamente (por isso h-full sozinho não
           bastava). */}
-      <div className="flex w-full flex-1 min-h-0 flex-col items-center justify-center gap-8 p-6 lg:w-[25%] bg-background overflow-y-auto">
+      <div className="flex w-full flex-1 min-h-0 flex-col items-center justify-center gap-8 p-6 lg:w-[35%] bg-background overflow-y-auto">
         <div className="flex flex-col items-center gap-3">
           {configuracoes?.escola_logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto, sem necessidade de otimização do next/image aqui
@@ -114,7 +117,7 @@ export default async function EntrarPage({
           </div>
         </div>
 
-        <div className="w-full max-w-xs flex flex-col gap-6">
+        <div className="w-full max-w-95 flex flex-col gap-6">
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold">Bem-vindo!</h2>
             <p className="text-muted-foreground text-sm">Acesse sua conta para continuar.</p>
