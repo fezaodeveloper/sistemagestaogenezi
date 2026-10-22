@@ -2,16 +2,25 @@ import { Circle, Document, Font, Page, Polygon, StyleSheet, Svg, Text, View } fr
 import { formatCpf } from "@/lib/alunos/schema";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 
-// Desativa a hifenização automática do react-pdf (global, roda 1x ao carregar o módulo) — causa
-// real dos "=PAGADOR"/"=INFORMAÇÕES DO PAGAMENTO"/"=A" (não havia nenhum "=" literal no código —
-// confirmado lendo o arquivo inteiro): o hifenizador padrão insere o caractere invisível SOFT
-// HYPHEN (U+00AD) nos pontos de quebra de palavra, e esse caractere está sendo exibido como "="
-// nesta combinação de fonte (Helvetica)/encoding, em vez de ficar invisível como deveria. Mesma
-// causa do slogan hifenizado errado (RE-ALIDADES): o hifenizador padrão só reconhece inglês.
-// `hyphenationCallback` é prop de <Text> nesta versão do @react-pdf/renderer (4.6.1), não de
-// <Document> — Font.registerHyphenationCallback() é o jeito de aplicar globalmente sem repetir
-// a prop em cada <Text>.
+// Desativa a hifenização automática do react-pdf (global, roda 1x ao carregar o módulo) — evita
+// o hifenizador padrão (que só reconhece inglês) quebrar palavras em português no meio errado
+// (ex.: slogan "RE-ALIDADES"). NÃO é a causa do "=PAGADOR"/"=INFORMAÇÕES DO PAGAMENTO"/"=A" — essa
+// teoria (soft hyphen U+00AD renderizando como "=") estava errada; ver causa real abaixo, nos
+// emojis removidos dos títulos.
 Font.registerHyphenationCallback((word) => [word]);
+
+// CAUSA REAL do "=X" antes dos títulos de seção (confirmado renderizando o PDF e inspecionando os
+// bytes do content stream, não só lendo o código): Helvetica é uma fonte padrão (base-14) do PDF,
+// com WinAnsiEncoding de 1 byte por caractere — não tem glifo pra emoji nenhum. Um emoji do bloco
+// suplementar (ex.: 👤 U+1F464) vem em UTF-16 como par de surrogates (0xD83D 0xDC64); o
+// @react-pdf/pdfkit trunca cada code unit do par pro byte baixo (0x3D, 0x64) e emite os dois como
+// se fossem caracteres WinAnsi de 1 byte — 0x3D é literalmente "=", 0x64 é "d". Por isso "👤
+// PAGADOR" virava "=d PAGADOR" (relatado como "=PAGADOR"/"=A" pelo usuário, dependendo de qual
+// parte ele transcreveu). Todo emoji do bloco U+1F3xx-U+1F4xx tem o high surrogate em 0xD83C-
+// 0xD83F, cujo byte baixo cai em 0x3C-0x3F ("<", "=", ">", "?") — por isso o sintoma bate em quase
+// todos os emojis usados aqui, não só num. Sem solução de fonte/encoding viável pra emoji em fonte
+// base-14 (nem forçar fontFamily resolve — Helvetica já era a fonte usada); os emojis decorativos
+// foram removidos dos textos abaixo, mantendo só o título em texto puro.
 
 // Estilos/helpers próprios (não importados de matricula-comprovante-pdf.tsx): pdfStyles/LinhaPdf
 // lá não são exportados — cada PDF deste projeto já define o próprio conjunto mínimo (mesmo
@@ -198,18 +207,18 @@ export function ParcelaReciboPdf({ resumo, geradoEm }: { resumo: ResumoReciboPar
             </View>
             <View style={styles.caixaRecibo}>
               <Text style={styles.caixaReciboTitulo}>Recibo nº {numeroRecibo}</Text>
-              <Text style={styles.caixaReciboMeta}>Emitido em {geradoEm} 📅</Text>
+              <Text style={styles.caixaReciboMeta}>Emitido em {geradoEm}</Text>
             </View>
           </View>
 
           <View style={styles.secaoHeader}>
-            <Text style={styles.secaoHeaderTexto}>👤 PAGADOR</Text>
+            <Text style={styles.secaoHeaderTexto}>PAGADOR</Text>
           </View>
           <LinhaRecibo indice={0} label="Nome" value={resumo.aluno.full_name ?? "—"} />
           <LinhaRecibo indice={1} label="CPF" value={formatCpf(resumo.aluno.cpf)} />
 
           <View style={styles.secaoHeader}>
-            <Text style={styles.secaoHeaderTexto}>💳 INFORMAÇÕES DO PAGAMENTO</Text>
+            <Text style={styles.secaoHeaderTexto}>INFORMAÇÕES DO PAGAMENTO</Text>
           </View>
           <LinhaRecibo
             indice={0}
@@ -222,12 +231,12 @@ export function ParcelaReciboPdf({ resumo, geradoEm }: { resumo: ResumoReciboPar
           {resumo.asaasPaymentId && <LinhaRecibo indice={4} label="Identificador Asaas" value={resumo.asaasPaymentId} />}
 
           <View style={styles.confirmacao}>
-            <Text style={styles.confirmacaoTitulo}>✅ PAGAMENTO CONFIRMADO</Text>
+            <Text style={styles.confirmacaoTitulo}>PAGAMENTO CONFIRMADO</Text>
             <Text style={styles.confirmacaoTexto}>Este recibo comprova o pagamento da parcela acima.</Text>
           </View>
 
           <View style={styles.secaoHeader}>
-            <Text style={styles.secaoHeaderTexto}>📝 OBSERVAÇÕES</Text>
+            <Text style={styles.secaoHeaderTexto}>OBSERVAÇÕES</Text>
           </View>
           <Text style={styles.observacoesTexto}>{resumo.observacoes || "-"}</Text>
 
@@ -236,13 +245,9 @@ export function ParcelaReciboPdf({ resumo, geradoEm }: { resumo: ResumoReciboPar
             <Text style={styles.footerEscola}>{resumo.escolaNome ?? "Gênezi Educação Profissional"}</Text>
             {(resumo.escolaEndereco || resumo.escolaTelefone || resumo.escolaEmail) && (
               <Text style={styles.footerContato}>
-                {[
-                  resumo.escolaEndereco ? `📍 ${resumo.escolaEndereco}` : null,
-                  resumo.escolaTelefone ? `📞 ${resumo.escolaTelefone}` : null,
-                  resumo.escolaEmail ? `✉️ ${resumo.escolaEmail}` : null,
-                ]
+                {[resumo.escolaEndereco, resumo.escolaTelefone, resumo.escolaEmail]
                   .filter(Boolean)
-                  .join("   ")}
+                  .join("   •   ")}
               </Text>
             )}
           </View>

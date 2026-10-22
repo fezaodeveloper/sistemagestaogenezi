@@ -84,11 +84,10 @@ const AZUL_MEDIO = "#2980d4";
 const AZUL_CLARO = "#cfe0f5";
 const LINHA_ALT = "#f0f4f8";
 
-// Desativa a hifenização automática do react-pdf (global, roda 1x ao carregar o módulo) — causa
-// real dos "=ALUNO"/"=INFORMAÇÕES DO CURSO" (não havia nenhum "=" literal no código — ver
-// mesmo comentário completo em src/components/pdf/parcela-recibo-pdf.tsx, que tem o mesmo
-// problema): o hifenizador padrão insere o caractere invisível SOFT HYPHEN (U+00AD) nos pontos
-// de quebra de palavra, exibido como "=" nesta combinação de fonte/encoding.
+// Desativa a hifenização automática do react-pdf (global, roda 1x ao carregar o módulo) — evita
+// o hifenizador padrão (só reconhece inglês) quebrar palavras em português no meio errado. NÃO
+// é a causa do "=ALUNO"/"=INFORMAÇÕES DO CURSO" — ver causa real (emojis em fonte base-14) no
+// comentário completo em src/components/pdf/parcela-recibo-pdf.tsx, mesmo bug nos dois arquivos.
 Font.registerHyphenationCallback((word) => [word]);
 
 // configuracoes.escola_slogan não existe (confirmado em consulta ao banco) — texto fixo do
@@ -288,11 +287,11 @@ export function MatriculaComprovantePdf({
               <Text style={pdfStyles.tituloAzul}>DE MATRÍCULA</Text>
             </Text>
             <Text style={pdfStyles.subtitulo}>Documento emitido pelo sistema acadêmico</Text>
-            <Text style={pdfStyles.meta}>📅 Emitido em {geradoEm}</Text>
+            <Text style={pdfStyles.meta}>Emitido em {geradoEm}</Text>
           </View>
 
           <View style={pdfStyles.secaoHeader}>
-            <Text style={pdfStyles.secaoHeaderTexto}>👤 ALUNO</Text>
+            <Text style={pdfStyles.secaoHeaderTexto}>ALUNO</Text>
           </View>
           <LinhaPdf indice={0} label="Nome" value={resumo.aluno.full_name ?? "—"} />
           <LinhaPdf indice={1} label="E-mail" value={resumo.aluno.email} />
@@ -300,20 +299,20 @@ export function MatriculaComprovantePdf({
           <LinhaPdf indice={3} label="Telefone" value={formatTelefone(resumo.aluno.telefone)} />
 
           <View style={pdfStyles.secaoHeader}>
-            <Text style={pdfStyles.secaoHeaderTexto}>🎓 INFORMAÇÕES DO CURSO</Text>
+            <Text style={pdfStyles.secaoHeaderTexto}>INFORMAÇÕES DO CURSO</Text>
           </View>
           {linhasCurso.map((linha, indice) => (
             <LinhaPdf key={linha.label} indice={indice} label={linha.label} value={linha.value} />
           ))}
           {resumo.cursoBonusNome && (
             <View style={pdfStyles.linhaBonus}>
-              <Text style={[pdfStyles.linhaLabel, pdfStyles.linhaBonusTexto]}>🎁 Curso Bônus</Text>
+              <Text style={[pdfStyles.linhaLabel, pdfStyles.linhaBonusTexto]}>Curso Bônus</Text>
               <Text style={[pdfStyles.linhaValor, pdfStyles.linhaBonusTexto]}>{resumo.cursoBonusNome}</Text>
             </View>
           )}
 
           <View style={pdfStyles.secaoHeader}>
-            <Text style={pdfStyles.secaoHeaderTexto}>💰 FINANCEIRO</Text>
+            <Text style={pdfStyles.secaoHeaderTexto}>FINANCEIRO</Text>
           </View>
           {linhasFinanceiro.map((linha, indice) => (
             <LinhaPdf key={linha.label} indice={indice} label={linha.label} value={linha.value} />
@@ -322,7 +321,7 @@ export function MatriculaComprovantePdf({
           {temTaxaMatricula && (
             <>
               <View style={pdfStyles.secaoHeader}>
-                <Text style={pdfStyles.secaoHeaderTexto}>💳 TAXA DE MATRÍCULA</Text>
+                <Text style={pdfStyles.secaoHeaderTexto}>TAXA DE MATRÍCULA</Text>
               </View>
               <LinhaPdf
                 indice={0}
@@ -344,7 +343,7 @@ export function MatriculaComprovantePdf({
           {materiaisEntregues.length > 0 && (
             <>
               <View style={pdfStyles.secaoHeader}>
-                <Text style={pdfStyles.secaoHeaderTexto}>📦 MATERIAIS ENTREGUES</Text>
+                <Text style={pdfStyles.secaoHeaderTexto}>MATERIAIS ENTREGUES</Text>
               </View>
               {materiaisEntregues.map((linha, indice) => (
                 <LinhaPdf key={linha.label} indice={indice} label={linha.label} value={linha.value} />
@@ -355,7 +354,7 @@ export function MatriculaComprovantePdf({
           {resumo.observacoes && (
             <>
               <View style={pdfStyles.secaoHeader}>
-                <Text style={pdfStyles.secaoHeaderTexto}>📝 OBSERVAÇÕES</Text>
+                <Text style={pdfStyles.secaoHeaderTexto}>OBSERVAÇÕES</Text>
               </View>
               <Text style={pdfStyles.observacoesTexto}>{resumo.observacoes}</Text>
             </>
@@ -369,13 +368,9 @@ export function MatriculaComprovantePdf({
             <Text style={pdfStyles.footerEscola}>{resumo.escola_nome ?? "Gênezi Educação Profissional"}</Text>
             {(resumo.escola_endereco || resumo.escola_telefone || resumo.escola_email) && (
               <Text style={pdfStyles.footerContato}>
-                {[
-                  resumo.escola_endereco ? `📍 ${resumo.escola_endereco}` : null,
-                  resumo.escola_telefone ? `📞 ${resumo.escola_telefone}` : null,
-                  resumo.escola_email ? `✉️ ${resumo.escola_email}` : null,
-                ]
+                {[resumo.escola_endereco, resumo.escola_telefone, resumo.escola_email]
                   .filter(Boolean)
-                  .join("   ")}
+                  .join("   •   ")}
               </Text>
             )}
           </View>
