@@ -1,6 +1,17 @@
-import { Circle, Document, Page, Polygon, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
+import { Circle, Document, Font, Page, Polygon, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
 import { formatCpf } from "@/lib/alunos/schema";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
+
+// Desativa a hifenização automática do react-pdf (global, roda 1x ao carregar o módulo) — causa
+// real dos "=PAGADOR"/"=INFORMAÇÕES DO PAGAMENTO"/"=A" (não havia nenhum "=" literal no código —
+// confirmado lendo o arquivo inteiro): o hifenizador padrão insere o caractere invisível SOFT
+// HYPHEN (U+00AD) nos pontos de quebra de palavra, e esse caractere está sendo exibido como "="
+// nesta combinação de fonte (Helvetica)/encoding, em vez de ficar invisível como deveria. Mesma
+// causa do slogan hifenizado errado (RE-ALIDADES): o hifenizador padrão só reconhece inglês.
+// `hyphenationCallback` é prop de <Text> nesta versão do @react-pdf/renderer (4.6.1), não de
+// <Document> — Font.registerHyphenationCallback() é o jeito de aplicar globalmente sem repetir
+// a prop em cada <Text>.
+Font.registerHyphenationCallback((word) => [word]);
 
 // Estilos/helpers próprios (não importados de matricula-comprovante-pdf.tsx): pdfStyles/LinhaPdf
 // lá não são exportados — cada PDF deste projeto já define o próprio conjunto mínimo (mesmo

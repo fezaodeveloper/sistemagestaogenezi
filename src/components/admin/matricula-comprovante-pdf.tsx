@@ -1,4 +1,4 @@
-import { Circle, Document, Page, Polygon, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
+import { Circle, Document, Font, Page, Polygon, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
 import { formatCpf, formatTelefone } from "@/lib/alunos/schema";
 import { LogoEscolaPdf } from "@/components/pdf/logo-escola-pdf";
 import { CURSO_TIPO_LABELS, type CURSO_TIPOS } from "@/lib/cursos/schema";
@@ -84,6 +84,13 @@ const AZUL_MEDIO = "#2980d4";
 const AZUL_CLARO = "#cfe0f5";
 const LINHA_ALT = "#f0f4f8";
 
+// Desativa a hifenização automática do react-pdf (global, roda 1x ao carregar o módulo) — causa
+// real dos "=ALUNO"/"=INFORMAÇÕES DO CURSO" (não havia nenhum "=" literal no código — ver
+// mesmo comentário completo em src/components/pdf/parcela-recibo-pdf.tsx, que tem o mesmo
+// problema): o hifenizador padrão insere o caractere invisível SOFT HYPHEN (U+00AD) nos pontos
+// de quebra de palavra, exibido como "=" nesta combinação de fonte/encoding.
+Font.registerHyphenationCallback((word) => [word]);
+
 // configuracoes.escola_slogan não existe (confirmado em consulta ao banco) — texto fixo do
 // modelo aprovado, sem nenhum jeito de configurar pelo admin ainda.
 const SLOGAN_PADRAO = "QUALIFICAÇÃO HOJE, MAIS OPORTUNIDADES AMANHÃ";
@@ -111,7 +118,10 @@ function formatDiasSemana(dias: (typeof DIAS_SEMANA)[number][] | null | undefine
 }
 
 const pdfStyles = StyleSheet.create({
-  page: { fontSize: 9, fontFamily: "Helvetica" },
+  // fontSize 8 (corpo): com a Taxa de Matrícula + Curso Bônus + Materiais + Observações todas
+  // presentes, o conteúdo passou a vazar pra uma 2ª página — títulos de seção continuam em 9
+  // (secaoHeaderTexto define o próprio fontSize, não herda este daqui).
+  page: { fontSize: 8, fontFamily: "Helvetica" },
   conteudo: { padding: 28 },
   header: { alignItems: "center", paddingTop: 6 },
   logoFallback: {
@@ -126,7 +136,7 @@ const pdfStyles = StyleSheet.create({
   logoFallbackTexto: { color: "#ffffff", fontSize: 18, fontFamily: "Helvetica-Bold" },
   escolaNome: { fontSize: 13, fontFamily: "Helvetica-Bold", color: AZUL_ESCURO, marginTop: 2 },
   slogan: { fontSize: 7, color: "#777777", marginTop: 2, letterSpacing: 0.5 },
-  divisoria: { height: 2, backgroundColor: AZUL_ESCURO, marginTop: 10, marginBottom: 10 },
+  divisoria: { height: 2, backgroundColor: AZUL_ESCURO, marginTop: 8, marginBottom: 8 },
   tituloLinha: { fontSize: 20, fontFamily: "Helvetica-Bold" },
   tituloPreto: { color: "#000000" },
   tituloAzul: { color: AZUL_MEDIO },
@@ -136,7 +146,7 @@ const pdfStyles = StyleSheet.create({
     backgroundColor: AZUL_ESCURO,
     paddingVertical: 4,
     paddingHorizontal: 6,
-    marginTop: 10,
+    marginTop: 6,
   },
   secaoHeaderTexto: { color: "#ffffff", fontFamily: "Helvetica-Bold", fontSize: 9 },
   linha: { flexDirection: "row", paddingVertical: 3, paddingHorizontal: 6 },
