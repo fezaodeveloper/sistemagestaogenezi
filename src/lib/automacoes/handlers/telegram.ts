@@ -1,6 +1,6 @@
 import "server-only";
 
-import { enviarAlertaTelegram } from "@/lib/telegram/client";
+import { enviarAlertaTelegram, enviarMensagemTelegram } from "@/lib/telegram/client";
 import { enviarPushAdmin } from "@/lib/push/enviar";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { escapeHtml, sendTelegram } from "@/lib/telegram";
@@ -505,6 +505,31 @@ export async function notificarAvisoPresenca(payload: Record<string, unknown>): 
 
   const enviada = await sendTelegram(mensagem);
   if (!enviada) throw new Error("O Telegram não aceitou a mensagem de aviso de presença.");
+
+  // Aviso individual ao professor, só quando a turma tem telegram_chat_id
+  // configurado (/admin/turmas, campo abaixo de "Professor") — sem isso,
+  // pula silenciosamente. Não existe cadastro de professor como conta no
+  // projeto (só admin/aluno) — o chat_id fica na própria turma, assim como
+  // o nome do professor já é texto livre nela. Best-effort: uma falha aqui
+  // não derruba o evento, que já foi confirmado pelo aviso administrativo
+  // acima.
+  const chatIdProfessor =
+    typeof payload.telegram_chat_id === "string" ? payload.telegram_chat_id.trim() : "";
+  if (chatIdProfessor) {
+    const mensagemProfessor = [
+      "📋 <b>Lembrete de Chamada</b>",
+      "",
+      `Olá, Professor(a) ${texto(payload.professor_nome)}!`,
+      "",
+      `A aula da turma ${texto(payload.turma_nome)} começou há 1 hora.`,
+      "",
+      "Não esqueça de registrar a presença dos alunos no sistema! ✅",
+      "",
+      `🔗 ${LINK_TURMAS}/${texto(payload.turma_id)}`,
+    ].join("\n");
+    await enviarMensagemTelegram(mensagemProfessor, chatIdProfessor);
+  }
+
   return true;
 }
 

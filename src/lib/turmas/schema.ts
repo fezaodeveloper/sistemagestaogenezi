@@ -92,6 +92,10 @@ export const turmaFormSchema = z
       .optional()
       .transform((v) => (v ? v : undefined)),
     observacoes: z.string().trim().max(2000, { error: "Máximo de 2000 caracteres." }).optional(),
+    // ID do chat do professor no Telegram (numérico, pode ser negativo pra
+    // grupo) — usado pelo aviso de presença (cron aviso-presenca) pra
+    // notificar o professor direto, além do chat administrativo fixo.
+    telegram_chat_id: z.string().trim().max(32, { error: "Máximo de 32 caracteres." }).optional(),
   })
   .refine((data) => data.data_fim >= data.data_inicio, {
     error: "A data de término deve ser igual ou posterior à data de início.",
@@ -115,6 +119,7 @@ export type Turma = {
   professor: string | null;
   horario_fim: string | null;
   observacoes: string | null;
+  telegram_chat_id: string | null;
   vagas_total: number;
   vagas_ocupadas: number;
   created_by: string;

@@ -22,6 +22,7 @@ type TurmaFormValuesEcho = {
   professor: string;
   horario_fim: string;
   observacoes: string;
+  telegram_chat_id: string;
 };
 
 export type TurmaFormState =
@@ -37,7 +38,8 @@ export type TurmaFormState =
           | "cadencia_dias_semana"
           | "local_sala"
           | "professor"
-          | "observacoes",
+          | "observacoes"
+          | "telegram_chat_id",
           string[]
         >
       >;
@@ -61,6 +63,7 @@ function echoValues(formData: FormData): TurmaFormValuesEcho {
     professor: String(formData.get("professor") ?? ""),
     horario_fim: String(formData.get("horario_fim") ?? ""),
     observacoes: String(formData.get("observacoes") ?? ""),
+    telegram_chat_id: String(formData.get("telegram_chat_id") ?? ""),
   };
 }
 
@@ -79,6 +82,7 @@ function parseTurmaForm(formData: FormData) {
     professor: formData.get("professor"),
     horario_fim: formData.get("horario_fim"),
     observacoes: formData.get("observacoes"),
+    telegram_chat_id: formData.get("telegram_chat_id"),
   });
 }
 
@@ -152,6 +156,7 @@ export async function createTurma(
       professor: parsed.data.professor ?? null,
       horario_fim: parsed.data.horario_fim ?? null,
       observacoes: parsed.data.observacoes ?? null,
+      telegram_chat_id: parsed.data.telegram_chat_id ?? null,
     })
     .select("id")
     .single();
@@ -233,6 +238,7 @@ export async function updateTurma(
       professor: parsed.data.professor ?? null,
       horario_fim: parsed.data.horario_fim ?? null,
       observacoes: parsed.data.observacoes ?? null,
+      telegram_chat_id: parsed.data.telegram_chat_id ?? null,
     })
     .eq("id", id);
 
@@ -345,6 +351,7 @@ export async function duplicarTurma(turmaId: string): Promise<{ id: string } | {
       professor: turma.professor,
       horario_fim: turma.horario_fim,
       observacoes: turma.observacoes,
+      telegram_chat_id: turma.telegram_chat_id,
     })
     .select("id")
     .single();

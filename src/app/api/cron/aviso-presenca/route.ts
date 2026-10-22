@@ -20,6 +20,8 @@ type TurmaComAulaHoje = {
   nome: string;
   // Opcional na turma; entra na mensagem quando existe ("HH:MM:SS").
   horario_aula: string | null;
+  professor: string | null;
+  telegram_chat_id: string | null;
 };
 
 export async function GET(request: Request) {
@@ -37,7 +39,7 @@ export async function GET(request: Request) {
   // presencial ou híbrido (EAD não tem chamada).
   const { data: turmasData } = await admin
     .from("turmas")
-    .select("id, nome, horario_aula, cursos!inner(tipo)")
+    .select("id, nome, horario_aula, professor, telegram_chat_id, cursos!inner(tipo)")
     .eq("status", "ativa")
     .lte("data_inicio", hoje)
     .gte("data_fim", hoje)
@@ -80,6 +82,8 @@ export async function GET(request: Request) {
         turma_nome: turma.nome,
         horario_inicio: turma.horario_aula ? turma.horario_aula.slice(0, 5) : null,
         alunos_ativos: idsMatriculas.length,
+        professor_nome: turma.professor,
+        telegram_chat_id: turma.telegram_chat_id,
       },
       `aviso-presenca-${turma.id}-${hoje}`,
     );

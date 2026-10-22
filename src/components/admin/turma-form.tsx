@@ -253,6 +253,25 @@ export function TurmaForm({
             )}
           </div>
 
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="telegram_chat_id">ID do chat do professor no Telegram</Label>
+            <Input
+              id="telegram_chat_id"
+              name="telegram_chat_id"
+              placeholder="Ex.: 123456789"
+              defaultValue={values?.telegram_chat_id ?? ""}
+            />
+            <p className="text-muted-foreground text-sm">
+              ID do chat no Telegram (para receber lembretes automáticos). Opcional — sem ele, o
+              aviso de presença continua sendo enviado só pro chat administrativo.
+            </p>
+            {state?.errors?.telegram_chat_id && (
+              <p role="alert" className="text-destructive text-sm">
+                {state.errors.telegram_chat_id[0]}
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="horario_aula">Horário de início</Label>

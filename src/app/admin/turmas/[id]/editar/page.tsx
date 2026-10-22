@@ -45,6 +45,7 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
           professor: turma.professor ?? "",
           horario_fim: turma.horario_fim ?? "",
           observacoes: turma.observacoes ?? "",
+          telegram_chat_id: turma.telegram_chat_id ?? "",
         }}
         submitLabel="Salvar alterações"
       />
