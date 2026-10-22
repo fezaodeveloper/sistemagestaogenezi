@@ -15,12 +15,46 @@ import { enviarMensagemLembreteAula } from "@/lib/mensagens/mensagens";
 // virada de dia BRT, então UTC e BRT sempre batem nesse horário fixo). Resolvido com meio-dia
 // UTC na soma de dias (mesmo truque usado em diaDaSemana, src/lib/whatsapp/eventos.ts) pra nunca
 // escorregar de dia por fuso.
+function hojeISOBRT(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+function somarDias(dataISO: string, dias: number): string {
+  const [ano, mes, dia] = dataISO.split("-").map(Number);
+  // meio-dia UTC: mesmo truque de diaDaSemana (src/lib/whatsapp/eventos.ts) pra nunca escorregar
+  // de dia por fuso.
+  return new Date(Date.UTC(ano, mes - 1, dia + dias, 12)).toISOString().slice(0, 10);
+}
+
 function dataAlvoISO(horasAntes: number): string {
-  const hojeBRT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
-  const [ano, mes, dia] = hojeBRT.split("-").map(Number);
   const diasAntes = Math.max(0, Math.round(horasAntes / 24));
-  const alvo = new Date(Date.UTC(ano, mes - 1, dia + diasAntes, 12));
-  return alvo.toISOString().slice(0, 10);
+  return somarDias(hojeISOBRT(), diasAntes);
+}
+
+const DIAS_POR_RECORRENCIA: Record<string, number> = { diario: 1, semanal: 7, quinzenal: 15, mensal: 30 };
+
+// "Painel de Notificações" (/admin/configuracoes, aba Notificações, seção Regras) — regras com
+// tipo='lembrete_aula' ativas e já vencidas (proxima_execucao <= hoje) avançam pra hoje + N dias,
+// conforme a recorrência escolhida. Base é SEMPRE hoje (não a proxima_execucao antiga): se o cron
+// não rodar num dia, a regra não acumula atraso — ela só volta a disparar na própria base, em vez
+// de ficar "devendo" execuções passadas. Best-effort: nunca deve derrubar a resposta do cron, já
+// que os lembretes de aula em si (o que realmente importa) já foram disparados antes desta
+// chamada.
+async function avancarRegrasLembreteAula(admin: ReturnType<typeof createAdminClient>, hojeISO: string): Promise<void> {
+  const { data: regras } = await admin
+    .from("regras_notificacao")
+    .select("id, recorrencia")
+    .eq("tipo", "lembrete_aula")
+    .eq("ativo", true)
+    .lte("proxima_execucao", hojeISO);
+
+  for (const regra of regras ?? []) {
+    const dias = DIAS_POR_RECORRENCIA[regra.recorrencia] ?? 1;
+    await admin
+      .from("regras_notificacao")
+      .update({ ultima_execucao: new Date().toISOString(), proxima_execucao: somarDias(hojeISO, dias) })
+      .eq("id", regra.id);
+  }
 }
 
 // Disparada 1x/dia pelo Vercel Cron (ver vercel.json), sempre às 11h UTC (08h BRT) — plano Hobby
@@ -76,6 +110,12 @@ export async function GET(request: Request) {
           mensagensDisparadas++;
         }
       }
+    }
+
+    try {
+      await avancarRegrasLembreteAula(admin, hojeISOBRT());
+    } catch (erro) {
+      console.error("[CRON] falha ao avançar regras_notificacao (lembretes já foram enviados normalmente):", erro);
     }
 
     return NextResponse.json({ ok: true, data: dataAlvo, mensagensDisparadas });

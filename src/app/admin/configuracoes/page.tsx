@@ -11,6 +11,9 @@ import { CriteriosCertificadoForm } from "@/components/admin/criterios-certifica
 import { DadosEscolaForm } from "@/components/admin/dados-escola-form";
 import { ConfiguracoesNotificacoesForm } from "@/components/admin/configuracoes-notificacoes-form";
 import { ConfigHorariosNotificacoesForm } from "@/components/admin/config-horarios-notificacoes-form";
+import { RegrasNotificacaoSection } from "@/components/admin/regras-notificacao-section";
+import { HistoricoEnviosSection } from "@/components/admin/historico-envios-section";
+import { listarRegras } from "@/app/admin/configuracoes/regras-notificacao-actions";
 import { PushNotificacoesForm } from "@/components/admin/push-notificacoes-form";
 import { TelegramNotificacoesForm } from "@/components/admin/telegram-notificacoes-form";
 import { WhatsappNotificacoesForm } from "@/components/admin/whatsapp-notificacoes-form";
@@ -59,7 +62,7 @@ export default async function ConfiguracoesPage({
   // new_email só existe no usuário completo (getUser), não nos claims do JWT.
   const { data: usuarioAuth } = await supabase.auth.getUser();
   const emailPendente = usuarioAuth.user?.new_email ?? null;
-  const [{ data }, banners] = await Promise.all([
+  const [{ data }, banners, regrasNotificacao] = await Promise.all([
     supabase
       .from("configuracoes")
       // String literal de propósito (não .join() em runtime): o supabase-js só consegue inferir
@@ -72,6 +75,7 @@ export default async function ConfiguracoesPage({
       )
       .single(),
     getBannersLoginAdmin(),
+    listarRegras(),
   ]);
 
   const telegramDefaultValues = Object.fromEntries(
@@ -308,6 +312,28 @@ export default async function ConfiguracoesPage({
                   lembrete_pagamento_hora_envio: data?.lembrete_pagamento_hora_envio ?? 9,
                 }}
               />
+              <p className="text-muted-foreground mt-4 text-sm">
+                ⚠️ No plano atual, o envio ocorre 1x/dia às 8h (horário de Brasília). O campo
+                &quot;hora de envio&quot; será ativado com o plano Pro.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Regras de Notificação</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RegrasNotificacaoSection regrasIniciais={regrasNotificacao} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Histórico de Envios</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HistoricoEnviosSection />
             </CardContent>
           </Card>
 
