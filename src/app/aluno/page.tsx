@@ -15,6 +15,7 @@ import { AvisoInadimplencia } from "@/components/aluno/aviso-inadimplencia";
 import { BannerSlideshowPortal } from "@/components/aluno/banner-slideshow-portal";
 import { Capa } from "@/components/aluno/capa";
 import { CursoBloqueadoCard, type CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
+import { NotificacoesPushCard } from "@/components/aluno/notificacoes-push-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -126,7 +127,7 @@ export default async function AlunoDashboardPage() {
   const recursos = await getRecursosHabilitadosAluno(user.id);
 
   const supabase = await createClient();
-  const [{ data, error }, meusPontos, statusInadimplencia, saldoCreditos] = await Promise.all([
+  const [{ data, error }, meusPontos, statusInadimplencia, saldoCreditos, { data: configData }] = await Promise.all([
     supabase
       .from("matriculas")
       .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url, gratuito, url_plataforma_externa))")
@@ -136,6 +137,10 @@ export default async function AlunoDashboardPage() {
     getMeusPontos(supabase, user.id),
     verificarInadimplenciaAluno(user.id),
     getSaldoCreditos(supabase, user.id),
+    // Mesma coluna já lida em src/app/aluno/layout.tsx pra alimentar o toggle da sidebar — essa
+    // seção na página principal (NotificacoesPushCard) precisa da própria cópia, já que layouts
+    // não passam props pras pages no Next.
+    supabase.from("configuracoes").select("push_vapid_public_key").eq("id", true).maybeSingle(),
   ]);
 
   const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
@@ -332,6 +337,8 @@ export default async function AlunoDashboardPage() {
           </div>
         )}
       </div>
+
+      <NotificacoesPushCard vapidPublicKey={configData?.push_vapid_public_key ?? null} />
 
       {cursosBloqueados.length > 0 && (
         <div className="flex flex-col gap-3">

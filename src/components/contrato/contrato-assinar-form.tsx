@@ -5,12 +5,17 @@
 // Component pai (page.tsx) — só a parte interativa vive aqui, convenção padrão do projeto.
 
 import { useEffect, useState, useTransition, type FormEvent } from "react";
-import { assinarContratoPorCpf, verificarTermoImagemAssinado } from "@/app/contrato/[matriculaId]/actions";
+import {
+  assinarContratoPorCpf,
+  getConteudoTermoImagem,
+  verificarTermoImagemAssinado,
+} from "@/app/contrato/[matriculaId]/actions";
 import { TermoImagemAssinarForm } from "@/components/termo-imagem/termo-imagem-assinar-form";
 import { CpfInput, cpfCompleto } from "@/components/ui/cpf-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import type { TermoLegal } from "@/lib/termos-legais/schema";
 
 export function ContratoAssinarForm({
   matriculaId,
@@ -24,6 +29,10 @@ export function ContratoAssinarForm({
   const [sucesso, setSucesso] = useState(false);
   // null enquanto verifica (logo depois de assinar o contrato); true/false = resultado real.
   const [termoJaAssinado, setTermoJaAssinado] = useState<boolean | null>(null);
+  // Texto do termo pra exibição ANTES da assinatura (mesmo conteúdo que /termo-imagem/
+  // [matriculaId]/assinar mostraria) — buscado junto, só é de fato usado se termoJaAssinado
+  // vier false.
+  const [termoConteudo, setTermoConteudo] = useState<TermoLegal | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Fluxo sequencial: assina contrato → assina Termo de Imagem, sem sair desta página. Checa só
@@ -31,9 +40,13 @@ export function ContratoAssinarForm({
   useEffect(() => {
     if (!sucesso) return;
     let cancelado = false;
-    verificarTermoImagemAssinado(matriculaId).then((assinado) => {
-      if (!cancelado) setTermoJaAssinado(assinado);
-    });
+    Promise.all([verificarTermoImagemAssinado(matriculaId), getConteudoTermoImagem(matriculaId)]).then(
+      ([assinado, termo]) => {
+        if (cancelado) return;
+        setTermoJaAssinado(assinado);
+        setTermoConteudo(termo);
+      },
+    );
     return () => {
       cancelado = true;
     };
@@ -75,7 +88,11 @@ export function ContratoAssinarForm({
             </CardContent>
           </Card>
           <h2 className="text-lg font-semibold">Agora assine o Termo de Uso de Imagem</h2>
-          <TermoImagemAssinarForm matriculaId={matriculaId} precisaResponsavel={precisaResponsavel} />
+          <TermoImagemAssinarForm
+            matriculaId={matriculaId}
+            precisaResponsavel={precisaResponsavel}
+            termo={termoConteudo}
+          />
         </div>
       );
     }

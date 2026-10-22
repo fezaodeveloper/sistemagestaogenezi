@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isMinor, onlyDigits } from "@/lib/alunos/schema";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { gerarContratoPdf } from "@/lib/contratos/pdf";
+import { getTermoLegalPublico } from "@/lib/termos-legais/get-termo";
+import type { TermoLegal } from "@/lib/termos-legais/schema";
 
 // Assinatura SEM login — validação por CPF em vez de sessão. Por isso sem requireRole() (não há
 // usuário autenticado neste fluxo) e sempre via createAdminClient() (service_role bypassa a RLS
@@ -136,4 +138,13 @@ export async function verificarTermoImagemAssinado(matriculaId: string): Promise
     .eq("matricula_id", matriculaId)
     .maybeSingle();
   return !!data;
+}
+
+// Conteúdo do Termo de Imagem pra exibição ANTES da assinatura, usado pelo fluxo inline em
+// ContratoAssinarForm (mostra o termo logo após assinar o contrato, sem navegar pra
+// /termo-imagem/[matriculaId]/assinar). matriculaId é recebido por consistência com o resto
+// deste arquivo (todo fluxo aqui é "sem login, escopado a uma matrícula"), mas o termo em si é
+// um texto único por chave ("imagem"), não por matrícula — não é usado na consulta.
+export async function getConteudoTermoImagem(_matriculaId: string): Promise<TermoLegal | null> {
+  return getTermoLegalPublico("imagem");
 }

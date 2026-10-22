@@ -72,7 +72,18 @@ type Estado = "carregando" | "indisponivel" | "ios-instalar" | "bloqueado" | "in
 // suprimem pedido automático, e antes disso a tentativa única ficava gasta
 // sem nunca ter perguntado nada). Se a permissão já foi concedida, sincroniza
 // a subscription em segundo plano a cada carregamento.
-export function PushSubscribeAluno({ vapidPublicKey }: { vapidPublicKey: string | null }) {
+//
+// exibirIndisponivel: no rodapé compacto da sidebar (uso original) o estado "sem suporte" fica
+// mudo de propósito (não vale o espaço num footer apertado); na seção "🔔 Notificações" da
+// página principal do portal (NotificacoesPushCard), Fernando pediu esse estado visível — daí o
+// prop, default false pra não alterar o comportamento já existente na sidebar.
+export function PushSubscribeAluno({
+  vapidPublicKey,
+  exibirIndisponivel = false,
+}: {
+  vapidPublicKey: string | null;
+  exibirIndisponivel?: boolean;
+}) {
   const [estado, setEstado] = useState<Estado>("carregando");
   const [erro, setErro] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
@@ -181,7 +192,15 @@ export function PushSubscribeAluno({ vapidPublicKey }: { vapidPublicKey: string 
     }
   }
 
-  if (estado === "carregando" || estado === "indisponivel") return null;
+  if (estado === "carregando") return null;
+  if (estado === "indisponivel") {
+    if (!exibirIndisponivel) return null;
+    return (
+      <p className="px-2 pb-1 text-center text-[11px] text-amber-600 dark:text-amber-400">
+        ⚠️ Seu navegador não suporta notificações.
+      </p>
+    );
+  }
 
   const textoPequeno = "px-2 pb-1 text-center text-[11px] text-muted-foreground";
 
@@ -199,7 +218,7 @@ export function PushSubscribeAluno({ vapidPublicKey }: { vapidPublicKey: string 
     return (
       <div className="flex flex-col gap-1">
         <div className="mx-2 mb-1 flex items-center justify-between gap-2">
-          <p className="text-muted-foreground text-[11px]">🔔 Notificações ativadas</p>
+          <p className="text-[11px] text-green-600 dark:text-green-400">🔔 Notificações ativadas</p>
           <Button type="button" variant="ghost" size="sm" disabled={processando} onClick={handleDesativar}>
             {processando ? "Desativando..." : "Desativar"}
           </Button>
@@ -215,9 +234,12 @@ export function PushSubscribeAluno({ vapidPublicKey }: { vapidPublicKey: string 
 
   return (
     <div className="flex flex-col gap-1">
-      <Button type="button" variant="outline" size="sm" className="mx-2 mb-1" disabled={processando} onClick={handleAtivar}>
-        {processando ? "Ativando..." : "🔔 Ativar notificações"}
-      </Button>
+      <div className="mx-2 mb-1 flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-[11px]">🔕 Notificações desativadas</p>
+        <Button type="button" variant="outline" size="sm" disabled={processando} onClick={handleAtivar}>
+          {processando ? "Ativando..." : "Ativar"}
+        </Button>
+      </div>
       {erro && (
         <p role="alert" className="text-destructive px-2 pb-1 text-center text-[11px]">
           {erro}
