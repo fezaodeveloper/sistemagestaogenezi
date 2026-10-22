@@ -121,6 +121,41 @@ export function ConfigHorariosNotificacoesForm({
         </div>
       </div>
 
+      <div className="flex flex-col gap-4 border-t pt-4">
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="aviso-presenca-ativo" className="font-normal">
+            Aviso de presença (Telegram)
+          </Label>
+          <Switch
+            id="aviso-presenca-ativo"
+            checked={valores.telegram_aviso_presenca_ativo}
+            onCheckedChange={(checked) =>
+              setValores((v) => ({ ...v, telegram_aviso_presenca_ativo: checked === true }))
+            }
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="aviso-presenca-hora-limite">Enviar aviso para turmas com início até</Label>
+          <Input
+            id="aviso-presenca-hora-limite"
+            type="time"
+            className="max-w-32"
+            value={valores.telegram_aviso_presenca_hora_limite}
+            onChange={(e) =>
+              setValores((v) => ({ ...v, telegram_aviso_presenca_hora_limite: e.target.value }))
+            }
+            disabled={!valores.telegram_aviso_presenca_ativo}
+          />
+          <p className="text-muted-foreground text-xs">
+            O cron roda 1x por dia, sempre no mesmo horário (plano Hobby) — por isso este campo
+            não é “a que hora envia”, e sim “a partir de que horário de turma o aviso dispara”.
+            Ex.: configurado “08:00”, avisa professores de turmas que começam às 07:00, 07:30 ou
+            08:00; turmas mais tarde no dia não disparam o aviso.
+          </p>
+        </div>
+      </div>
+
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={isPending} size="sm">
           {isPending ? "Salvando..." : "Salvar"}

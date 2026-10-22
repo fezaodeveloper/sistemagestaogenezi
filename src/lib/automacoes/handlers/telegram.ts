@@ -105,6 +105,7 @@ export async function notificarMatriculaCriada(payload: Record<string, unknown>)
 // cpf já chega mascarado no payload (só os últimos 3 dígitos) — ver createAluno, que monta o
 // payload; o handler nunca recebe o CPF completo.
 export async function notificarAlunoCadastrado(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_aluno_cadastrado"))) return true;
   return enviarAlertaTelegram(
     "Novo Aluno Cadastrado",
     [
@@ -182,6 +183,7 @@ export async function notificarCursoConcluido(payload: Record<string, unknown>):
 }
 
 export async function notificarEvasaoRisco(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_evasao_risco"))) return true;
   // Array não passa por texto() (só usado no branch else) — escapa cada item manualmente, mesmo
   // motivo do comentário em texto() acima.
   const motivos = Array.isArray(payload.motivos)
@@ -272,6 +274,7 @@ export async function notificarContratoAssinado(payload: Record<string, unknown>
 }
 
 export async function notificarContratoPendente(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_contrato_pendente"))) return true;
   return enviarAlertaTelegram(
     "Contrato Pendente",
     [
@@ -297,6 +300,7 @@ export async function notificarLeadSemContato(payload: Record<string, unknown>):
 }
 
 export async function notificarParcelaVencendoAmanha(payload: Record<string, unknown>): Promise<boolean> {
+  if (!(await telegramNotifHabilitada("tg_parcela_vencendo_amanha"))) return true;
   return enviarAlertaTelegram(
     "Parcela vencendo amanhã",
     [

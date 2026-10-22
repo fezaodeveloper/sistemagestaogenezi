@@ -97,6 +97,12 @@ export const TELEGRAM_NOTIF_CHAVES = [
   // Gênezi Conecta
   "tg_conecta_nova_postagem",
   "tg_conecta_novo_comentario",
+  // Já existiam no código sem toggle (ver auditoria do painel de notificações) — notificar*
+  // correspondentes em src/lib/automacoes/handlers/telegram.ts.
+  "tg_aluno_cadastrado",
+  "tg_evasao_risco",
+  "tg_contrato_pendente",
+  "tg_parcela_vencendo_amanha",
 ] as const;
 
 export type TelegramNotifChave = (typeof TELEGRAM_NOTIF_CHAVES)[number];

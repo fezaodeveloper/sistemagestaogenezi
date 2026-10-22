@@ -5,11 +5,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { agoraEmBrasilia, diaDaSemana } from "@/lib/datas/util";
 
-// Roda 1x por dia, às 22:00 UTC = 19:00 em Brasília (ver vercel.json) — o
-// plano Hobby da Vercel só permite uma execução diária por cron. Por isso a
-// lógica NÃO depende do horário da aula: pega TODAS as turmas presenciais/
-// híbridas que têm aula hoje e ainda não tiveram presença marcada, e avisa no
-// Telegram de uma vez.
+// Roda 1x por dia, às 22:00 UTC = 19:00 em Brasília (ver vercel.json) — o plano Hobby da Vercel
+// só permite uma execução diária por cron, num horário fixo que só muda com um novo deploy. Por
+// isso o controle de "horário" não é "a que hora o cron roda" (fixo), e sim um filtro configurável
+// sobre QUAIS turmas entram: configuracoes.telegram_aviso_presenca_hora_limite (painel
+// Configurações > Notificações > "Aviso de presença (Telegram)", ver migration 20261022160000) —
+// só turmas com horario_aula <= esse limite disparam o aviso; turmas sem horario_aula cadastrado
+// entram mesmo assim (não há como filtrar o que não existe). configuracoes.
+// telegram_aviso_presenca_ativo desliga o aviso por completo quando false.
 //
 // "Ainda não tiveram presença marcada" = nenhuma linha em `presencas` com a
 // data de hoje para as matrículas ativas da turma. Quem garante UM aviso só
@@ -31,13 +34,27 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // config null (linha ausente) cai no comportamento antigo — nunca bloqueia por falta de
+  // configuração explícita, mesmo padrão já usado no cron lembretes-aula.
+  const { data: config } = await admin
+    .from("configuracoes")
+    .select("telegram_aviso_presenca_ativo, telegram_aviso_presenca_hora_limite")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (config && !config.telegram_aviso_presenca_ativo) {
+    return NextResponse.json({ ok: true, message: "aviso de presença desativado em Configurações" });
+  }
+  const horaLimite = config?.telegram_aviso_presenca_hora_limite ?? null;
+
   // "Hoje" no horário de Brasília (a função serverless roda em UTC).
   const { hoje } = agoraEmBrasilia();
   const diaHoje = diaDaSemana(hoje);
 
   // Turmas ativas, dentro do período, com aula HOJE (cadência) e de curso
   // presencial ou híbrido (EAD não tem chamada).
-  const { data: turmasData } = await admin
+  let query = admin
     .from("turmas")
     .select("id, nome, horario_aula, professor, telegram_chat_id, cursos!inner(tipo)")
     .eq("status", "ativa")
@@ -45,6 +62,14 @@ export async function GET(request: Request) {
     .gte("data_fim", hoje)
     .contains("cadencia_dias_semana", [diaHoje])
     .in("cursos.tipo", ["presencial", "hibrido"]);
+
+  // horario_aula null entra mesmo assim (sem dado pra filtrar) — só exclui quem tem horário
+  // cadastrado E está depois do limite configurado.
+  if (horaLimite) {
+    query = query.or(`horario_aula.is.null,horario_aula.lte.${horaLimite}`);
+  }
+
+  const { data: turmasData } = await query;
 
   const turmas = (turmasData ?? []) as unknown as TurmaComAulaHoje[];
 

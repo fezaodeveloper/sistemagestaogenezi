@@ -132,10 +132,20 @@ export type ConfigHorariosNotificacoes = {
   lembrete_pagamento_ativo: boolean;
   lembrete_pagamento_dias_antes: number;
   lembrete_pagamento_hora_envio: number;
+  // Aviso de presença (Telegram) — ver cron aviso-presenca. Diferente dos campos acima
+  // (hora_envio é reservado, o cron nem lê): hora_limite AQUI é lida de verdade pelo cron, pois
+  // não decide "quando o cron roda" (isso é fixo no vercel.json), e sim "até que horário_aula de
+  // turma o aviso dispara" — ver migration 20261022160000.
+  telegram_aviso_presenca_ativo: boolean;
+  telegram_aviso_presenca_hora_limite: string;
 };
 
 function horaValida(hora: number): boolean {
   return Number.isInteger(hora) && hora >= 0 && hora <= 23;
+}
+
+function horaHHMMValida(hora: string): boolean {
+  return /^\d{2}:\d{2}$/.test(hora);
 }
 
 export async function atualizarConfigNotificacoes(
@@ -162,6 +172,9 @@ export async function atualizarConfigNotificacoes(
   }
   if (!horaValida(data.lembrete_pagamento_hora_envio)) {
     return { error: "Hora de envio do lembrete de pagamento precisa ser um número inteiro entre 0 e 23." };
+  }
+  if (!horaHHMMValida(data.telegram_aviso_presenca_hora_limite)) {
+    return { error: "Informe um horário limite válido (HH:MM) para o aviso de presença." };
   }
 
   const supabase = await createClient();

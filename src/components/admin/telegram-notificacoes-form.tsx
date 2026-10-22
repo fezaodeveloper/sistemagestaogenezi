@@ -36,16 +36,20 @@ const CATEGORIAS: Categoria[] = [
       { chave: "tg_pagamento_atrasado", label: "Pagamento em atraso" },
       { chave: "tg_cobranca_gerada", label: "Cobrança gerada" },
       { chave: "tg_resumo_financeiro_diario", label: "Resumo financeiro diário" },
+      { chave: "tg_contrato_pendente", label: "Contrato pendente de assinatura" },
+      { chave: "tg_parcela_vencendo_amanha", label: "Parcela vencendo amanhã" },
     ],
   },
   {
     titulo: "Alunos / LMS",
     itens: [
+      { chave: "tg_aluno_cadastrado", label: "Novo aluno cadastrado" },
       { chave: "tg_curso_concluido", label: "Curso concluído" },
       { chave: "tg_certificado_gerado", label: "Certificado gerado" },
       { chave: "tg_aluno_sem_acesso", label: "Aluno sem acesso" },
       { chave: "tg_nota_reprovacao", label: "Nota de reprovação" },
       { chave: "tg_frequencia_baixa", label: "Frequência baixa" },
+      { chave: "tg_evasao_risco", label: "Risco de evasão" },
     ],
   },
   {
