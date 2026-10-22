@@ -1,11 +1,20 @@
 import Link from "next/link";
-import { ArrowRight, GraduationCap, HelpCircle } from "lucide-react";
+import { ArrowRight, ExternalLink, GraduationCap, HelpCircle } from "lucide-react";
 import { PdfViewerButton } from "@/components/aluno/pdf-viewer-button";
 import { MateriaisListButton } from "@/components/aluno/materiais-list-button";
 import { ToggleAulaConcluidaButton } from "@/components/aluno/toggle-aula-concluida-button";
 import { Button } from "@/components/ui/button";
 
 type Material = { id: string; titulo: string };
+
+type LinkMaterial = { id: string; titulo: string; url: string };
+
+// Defensivo: a criação pelo admin já exige URL completa (z.url() em
+// materialUrlFormSchema), mas uma linha editada direto no banco sem
+// protocolo não pode virar um link quebrado pro aluno.
+function urlSegura(url: string): string {
+  return url.startsWith("http") ? url : `https://${url}`;
+}
 
 type Resumo = {
   tentativasUsadas: number;
@@ -18,6 +27,8 @@ export function AulaAcoesBar({
   aulaId,
   pdfs,
   pdfsError,
+  links,
+  linksError,
   quizResumo,
   quizHref,
   provaResumo,
@@ -30,6 +41,8 @@ export function AulaAcoesBar({
   aulaId: string;
   pdfs: Material[];
   pdfsError: boolean;
+  links: LinkMaterial[];
+  linksError: boolean;
   quizResumo: Resumo;
   quizHref: string;
   provaResumo: Resumo;
@@ -47,6 +60,22 @@ export function AulaAcoesBar({
           {pdfs.length === 1 && <PdfViewerButton materialId={pdfs[0].id} titulo={pdfs[0].titulo} />}
           {pdfs.length > 1 && <MateriaisListButton materiais={pdfs} />}
         </>
+      )}
+
+      {linksError ? (
+        <span className="text-destructive text-sm">Links indisponíveis.</span>
+      ) : (
+        links.map((link) => (
+          <Button
+            key={link.id}
+            variant="outline"
+            nativeButton={false}
+            render={<a href={urlSegura(link.url)} target="_blank" rel="noopener noreferrer" />}
+          >
+            <ExternalLink />
+            {link.titulo}
+          </Button>
+        ))
       )}
 
       {quizResumo && (

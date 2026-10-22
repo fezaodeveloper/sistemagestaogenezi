@@ -41,6 +41,8 @@ type NextAula = { moduloId: string; aulaId: string } | null;
 
 type PdfMaterialView = { id: string; titulo: string };
 
+type LinkMaterialView = { id: string; titulo: string; url: string };
+
 type Resumo = { tentativasUsadas: number; ultimaNota: number | null } | null;
 
 // Só busca id/título aqui — a signed URL é gerada sob demanda (Server
@@ -62,6 +64,26 @@ async function getPdfMateriais(
   }
 
   return { pdfs: (data ?? []) as PdfMaterialView[], error: false };
+}
+
+// Mesmo padrão de getPdfMateriais: materiais do tipo "link" são recursos
+// externos (não embutidos) — abrem em nova aba (ver AulaAcoesBar).
+async function getLinkMateriais(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  aulaId: string,
+): Promise<{ links: LinkMaterialView[]; error: boolean }> {
+  const { data, error } = await supabase
+    .from("materiais")
+    .select("id, titulo, url")
+    .eq("aula_id", aulaId)
+    .eq("tipo", "link")
+    .order("ordem");
+
+  if (error) {
+    return { links: [], error: true };
+  }
+
+  return { links: (data ?? []) as LinkMaterialView[], error: false };
 }
 
 async function getQuizResumo(
@@ -300,6 +322,7 @@ export default async function AulaConteudoPage({
     { data: materiaisData, error: materiaisError },
     nextAula,
     { pdfs, error: pdfsError },
+    { links, error: linksError },
     { data: concluidaData },
     quizResumo,
     provaResumo,
@@ -320,6 +343,7 @@ export default async function AulaConteudoPage({
       .limit(1),
     getNextAula(supabase, cursoId, modulo, aulaId, aulasDoModulo),
     getPdfMateriais(supabase, aulaId),
+    getLinkMateriais(supabase, aulaId),
     supabase.from("aulas_concluidas").select("id").eq("aula_id", aulaId).limit(1).maybeSingle(),
     getQuizResumo(supabase, aulaId, matriculaId),
     getProvaResumo(supabase, moduloId, matriculaId),
@@ -412,6 +436,8 @@ export default async function AulaConteudoPage({
             aulaId={aulaId}
             pdfs={pdfs}
             pdfsError={pdfsError}
+            links={links}
+            linksError={linksError}
             quizResumo={quizResumo}
             quizHref={`/aluno/cursos/${cursoId}/modulos/${moduloId}/aulas/${aulaId}/quiz`}
             provaResumo={isModuloCompleto ? provaResumo : null}
