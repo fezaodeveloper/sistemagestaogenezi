@@ -16,6 +16,7 @@ import { BannerSlideshowPortal } from "@/components/aluno/banner-slideshow-porta
 import { Capa } from "@/components/aluno/capa";
 import { CursoBloqueadoCard, type CursoBloqueado } from "@/components/aluno/curso-bloqueado-card";
 import { CursoGratuitoCard, type CursoGratuitoAluno } from "@/components/aluno/curso-gratuito-card";
+import { DocumentosPendentesCard } from "@/components/aluno/documentos-pendentes-card";
 import { NotificacoesPushCard } from "@/components/aluno/notificacoes-push-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -122,6 +123,49 @@ async function getCursosGratuitosAluno(
   return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome));
 }
 
+type DocumentosPendentes = { contratoPendente: string | null; termoImagemPendente: string | null };
+
+// Contrato: mesma resolução de getContratoAluno (/aluno/contrato/actions.ts) — "o" contrato é o
+// mais recente por aluno, pendente quando existe e status != "aceito" (sem linha nenhuma = nada
+// pra assinar ainda, não é "pendente"). Termo de imagem: por matrícula, não por aluno — usa a
+// matrícula ativa mais recente; sem matrícula ativa, não há nada pra checar.
+async function getDocumentosPendentesAluno(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  alunoId: string,
+): Promise<DocumentosPendentes> {
+  const [{ data: contrato }, { data: matriculaAtiva }] = await Promise.all([
+    supabase
+      .from("contratos_assinados")
+      .select("matricula_id, status")
+      .eq("aluno_id", alunoId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("matriculas")
+      .select("id")
+      .eq("aluno_id", alunoId)
+      .eq("status", "ativa")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const contratoPendente = contrato && contrato.status !== "aceito" ? (contrato.matricula_id as string) : null;
+
+  let termoImagemPendente: string | null = null;
+  if (matriculaAtiva) {
+    const { data: termo } = await supabase
+      .from("termos_imagem_assinados")
+      .select("id")
+      .eq("matricula_id", matriculaAtiva.id)
+      .maybeSingle();
+    if (!termo) termoImagemPendente = matriculaAtiva.id;
+  }
+
+  return { contratoPendente, termoImagemPendente };
+}
+
 function formatDateBR(isoDate: string) {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
@@ -215,6 +259,7 @@ export default async function AlunoDashboardPage() {
 
   const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
   const cursosGratuitos = await getCursosGratuitosAluno(supabase, user.id);
+  const documentosPendentes = await getDocumentosPendentesAluno(supabase, user.id);
 
   // Capa fica em bucket público — a URL é montada aqui (não precisa de
   // signed URL, mesma lógica já usada pra foto de prêmio).
@@ -291,6 +336,11 @@ export default async function AlunoDashboardPage() {
       {statusInadimplencia.inadimplente && (
         <AvisoInadimplencia creditosDisponiveis={saldoCreditos.creditosDisponiveis} />
       )}
+
+      <DocumentosPendentesCard
+        matriculaIdContratoPendente={documentosPendentes.contratoPendente}
+        matriculaIdTermoImagemPendente={documentosPendentes.termoImagemPendente}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
