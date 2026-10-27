@@ -1,246 +1,45 @@
 "use client";
 
-// "use client": busca os dados via Server Action no mount/troca de filho (useEffect) — props
-// mínimas (alunoId + a lista de filhos pra montar o seletor do header), sem repassar dados já
-// buscados no Server Component pai, pra manter PortalResponsavelAuth simples e o dashboard
-// autocontido.
+// "use client": busca os dados via Server Action no mount/troca de filho (useEffect), controla
+// a seção ativa do menu e (quando há mais de uma matrícula) qual matrícula está em foco — tudo
+// em useState local, sem sincronizar com a URL (pedido explícito da tarefa: "estado da seção
+// ativa em useState no componente principal").
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Mail, Phone, User } from "lucide-react";
-import { getDadosPortalResponsavelGlobal, type DadosPortal, type FilhoResponsavel } from "@/app/responsavel/actions";
+import { ArrowLeft, BookOpen, CalendarDays, FileText, Home, LineChart, Mail, Phone, Trophy, User, Wallet } from "lucide-react";
+import {
+  getDadosPortalResponsavelGlobal,
+  type DadosPortal,
+  type DadosPortalMatricula,
+  type FilhoResponsavel,
+} from "@/app/responsavel/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { STATUS_ALUNO_LABELS, STATUS_MATRICULA_LABELS } from "@/lib/responsavel/formatacao";
+import { SecaoInicio } from "@/components/responsavel/secoes/secao-inicio";
+import { SecaoFrequencia } from "@/components/responsavel/secoes/secao-frequencia";
+import { SecaoCurso } from "@/components/responsavel/secoes/secao-curso";
+import { SecaoAgenda } from "@/components/responsavel/secoes/secao-agenda";
+import { SecaoFinanceiro } from "@/components/responsavel/secoes/secao-financeiro";
+import { SecaoConquistas } from "@/components/responsavel/secoes/secao-conquistas";
+import { SecaoDocumentos } from "@/components/responsavel/secoes/secao-documentos";
 
-const STATUS_ALUNO_LABELS: Record<string, string> = {
-  ativo: "Ativo",
-  inativo: "Inativo",
-  trancado: "Trancado",
-  formado: "Formado",
-};
+type SecaoId = "inicio" | "frequencia" | "curso" | "agenda" | "financeiro" | "conquistas" | "documentos";
 
-const STATUS_MATRICULA_LABELS: Record<string, string> = {
-  ativa: "Ativa",
-  concluida: "Concluída",
-  cancelada: "Cancelada",
-  transferida: "Transferida",
-};
+const MENU_ITEMS: { id: SecaoId; label: string; icon: typeof Home }[] = [
+  { id: "inicio", label: "Início", icon: Home },
+  { id: "frequencia", label: "Frequência", icon: LineChart },
+  { id: "curso", label: "Curso", icon: BookOpen },
+  { id: "agenda", label: "Agenda", icon: CalendarDays },
+  { id: "financeiro", label: "Financeiro", icon: Wallet },
+  { id: "conquistas", label: "Conquistas", icon: Trophy },
+  { id: "documentos", label: "Documentos", icon: FileText },
+];
 
-const STATUS_PARCELA_LABELS: Record<string, string> = {
-  pendente: "Pendente",
-  pago: "Pago",
-  atrasado: "Vencido",
-  cancelado: "Cancelado",
-  estornado: "Estornado",
-};
-
-const STATUS_PARCELA_BADGE: Record<string, string> = {
-  pendente: "bg-yellow-500/10 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400",
-  pago: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
-  atrasado: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
-  cancelado: "bg-muted text-muted-foreground",
-  estornado: "bg-muted text-muted-foreground",
-};
-
-function formatValor(valor: number): string {
-  return Number(valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-// dd/mm/aaaa a partir de "yyyy-mm-dd"/timestamptz — evita o desvio de fuso de usar `new
-// Date(...)` direto numa string de data pura (interpretada como UTC), mesmo critério já usado em
-// todo o projeto.
-function formatDataBR(iso: string | null): string {
-  if (!iso) return "—";
-  const [ano, mes, dia] = iso.slice(0, 10).split("-");
-  return `${dia}/${mes}/${ano}`;
-}
-
-function corFrequencia(percentual: number): string {
-  if (percentual >= 75) return "text-green-500";
-  if (percentual >= 60) return "text-amber-500";
-  return "text-red-500";
-}
-
-function corBarraFrequencia(percentual: number): string {
-  if (percentual >= 75) return "bg-green-500";
-  if (percentual >= 60) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-function SecaoVazia({ titulo, mensagem }: { titulo: string; mensagem: string }) {
+function SecaoVaziaSemMatricula() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{titulo}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-muted-foreground py-6 text-center text-sm">{mensagem}</CardContent>
-    </Card>
-  );
-}
-
-function SecaoProgresso({ progresso }: { progresso: DadosPortal["matriculas"][number]["progresso"] }) {
-  if (progresso.total === 0) {
-    return <SecaoVazia titulo="Progresso no curso" mensagem="Progresso não disponível." />;
-  }
-  const percentual = Math.round((progresso.concluidas / progresso.total) * 100);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Progresso no curso</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <div className="bg-muted h-2.5 w-full overflow-hidden rounded-full">
-          <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${percentual}%` }} />
-        </div>
-        <span className="text-muted-foreground text-sm">
-          {progresso.concluidas} de {progresso.total} aulas concluídas · {percentual}%
-        </span>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SecaoFrequencia({ frequencia }: { frequencia: DadosPortal["matriculas"][number]["frequencia"] }) {
-  if (frequencia.totalAulas === 0) {
-    return <SecaoVazia titulo="Frequência" mensagem="Dados não disponíveis." />;
-  }
-  const percentual = Math.round((frequencia.presentes / frequencia.totalAulas) * 100);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Frequência</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <span className={`text-2xl font-semibold ${corFrequencia(percentual)}`}>{percentual}%</span>
-          <span className="text-muted-foreground text-sm">
-            {frequencia.presentes} presenças em {frequencia.totalAulas} aulas
-          </span>
-        </div>
-        <div className="bg-muted h-2.5 w-full overflow-hidden rounded-full">
-          <div className={`h-full rounded-full transition-all ${corBarraFrequencia(percentual)}`} style={{ width: `${percentual}%` }} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SecaoFinanceiro({ parcelas }: { parcelas: DadosPortal["matriculas"][number]["parcelas"] }) {
-  if (parcelas.length === 0) {
-    return <SecaoVazia titulo="Financeiro" mensagem="Sem parcelas em aberto." />;
-  }
-  const emAberto = parcelas.filter((p) => p.status === "pendente" || p.status === "atrasado");
-  const totalEmAberto = emAberto.reduce((soma, p) => soma + Number(p.valor), 0);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Financeiro</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nº</TableHead>
-              <TableHead>Vencimento</TableHead>
-              <TableHead>Valor</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ação</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {parcelas.map((parcela) => {
-              const linkPagamento = parcela.asaas_invoice_url ?? parcela.asaas_bank_slip_url;
-              const emAbertoParcela = parcela.status === "pendente" || parcela.status === "atrasado";
-              return (
-                <TableRow key={parcela.id}>
-                  <TableCell>{parcela.numero_parcela}</TableCell>
-                  <TableCell>{formatDataBR(parcela.data_vencimento)}</TableCell>
-                  <TableCell>{formatValor(parcela.valor)}</TableCell>
-                  <TableCell>
-                    <Badge className={STATUS_PARCELA_BADGE[parcela.status] ?? ""}>
-                      {STATUS_PARCELA_LABELS[parcela.status] ?? parcela.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {emAbertoParcela && linkPagamento && (
-                      <Button
-                        render={<a href={linkPagamento} target="_blank" rel="noopener noreferrer" />}
-                        nativeButton={false}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Pagar
-                      </Button>
-                    )}
-                    {parcela.status === "pago" && (
-                      <Button
-                        render={
-                          <a href={`/api/comprovantes/parcela/${parcela.id}/pdf`} target="_blank" rel="noopener noreferrer" />
-                        }
-                        nativeButton={false}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        Recibo
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-        {emAberto.length > 0 && (
-          <p className="text-sm font-medium">
-            Total em aberto: <span className="text-amber-500">{formatValor(totalEmAberto)}</span>
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SecaoDocumentos({ matricula }: { matricula: DadosPortal["matriculas"][number] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Documentos</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm">Contrato de matrícula</span>
-          {matricula.statusContrato === "aceito" ? (
-            <Badge className="bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400">
-              Assinado em {formatDataBR(matricula.contratoAssinadoEm)}
-            </Badge>
-          ) : (
-            <Button render={<a href={`/contrato/${matricula.id}/assinar`} />} nativeButton={false} variant="outline" size="sm">
-              Assinar Contrato →
-            </Button>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm">Termo de uso de imagem</span>
-          {matricula.termoImagemAssinado ? (
-            <Badge className="bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400">
-              Assinado em {formatDataBR(matricula.termoImagemAssinadoEm)}
-            </Badge>
-          ) : (
-            <Button
-              render={<a href={`/termo-imagem/${matricula.id}/assinar`} />}
-              nativeButton={false}
-              variant="outline"
-              size="sm"
-            >
-              Assinar Termo →
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <p className="text-muted-foreground py-10 text-center text-sm">Nenhuma matrícula ativa encontrada.</p>
   );
 }
 
@@ -264,30 +63,69 @@ export function PortalResponsavelDashboard({
   const [alunoIdCarregado, setAlunoIdCarregado] = useState<string | null>(null);
   const carregando = alunoIdCarregado !== alunoId;
 
+  const [secaoAtiva, setSecaoAtiva] = useState<SecaoId>("inicio");
+  const [matriculaId, setMatriculaId] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelado = false;
     getDadosPortalResponsavelGlobal(alunoId).then((resultado) => {
       if (cancelado) return;
       setDados(resultado);
       setAlunoIdCarregado(alunoId);
+      setMatriculaId(resultado?.matriculas[0]?.id ?? null);
+      setSecaoAtiva("inicio");
     });
     return () => {
       cancelado = true;
     };
   }, [alunoId]);
 
+  const matricula: DadosPortalMatricula | null =
+    dados?.matriculas.find((m) => m.id === matriculaId) ?? dados?.matriculas[0] ?? null;
+
+  function renderSecao() {
+    if (!dados) return null;
+
+    if (secaoAtiva === "conquistas") {
+      return <SecaoConquistas badges={dados.badges} certificado={matricula?.certificado ?? null} />;
+    }
+
+    if (!matricula) return <SecaoVaziaSemMatricula />;
+
+    switch (secaoAtiva) {
+      case "inicio":
+        return <SecaoInicio aluno={dados.aluno} matricula={matricula} />;
+      case "frequencia":
+        return <SecaoFrequencia matricula={matricula} />;
+      case "curso":
+        return <SecaoCurso matricula={matricula} />;
+      case "agenda":
+        return <SecaoAgenda matricula={matricula} eventosCalendario={dados.eventosCalendario} />;
+      case "financeiro":
+        return <SecaoFinanceiro parcelas={matricula.parcelas} />;
+      case "documentos":
+        return <SecaoDocumentos matricula={matricula} />;
+      default:
+        return null;
+    }
+  }
+
   return (
-    <div className="dark bg-background text-foreground min-h-screen">
-      <header className="border-border/50 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-8">
+    <div className="dark bg-background text-foreground flex min-h-screen flex-col">
+      <header className="border-border/50 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
           {dados?.escola.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- logo em bucket público
-            <img src={dados.escola.logoUrl} alt={dados.escola.nome ?? "Logo da escola"} className="size-10 rounded-md object-contain" />
+            <img
+              src={dados.escola.logoUrl}
+              alt={dados.escola.nome ?? "Logo da escola"}
+              className="size-9 rounded-md object-contain"
+            />
           ) : (
-            <div className="bg-muted flex size-10 items-center justify-center rounded-md text-lg">🎓</div>
+            <div className="bg-muted flex size-9 items-center justify-center rounded-md text-lg">🎓</div>
           )}
           <div>
-            <p className="font-semibold">Portal do Responsável</p>
+            <p className="text-sm font-semibold">Portal do Responsável</p>
             <p className="text-muted-foreground text-xs">Olá, {nomeResponsavel}</p>
           </div>
         </div>
@@ -298,7 +136,7 @@ export function PortalResponsavelDashboard({
               items={Object.fromEntries(filhos.map((filho) => [filho.alunoId, filho.nomeAluno ?? "Aluno"]))}
               onValueChange={(value) => onTrocarFilho(String(value))}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-40 sm:w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -313,28 +151,53 @@ export function PortalResponsavelDashboard({
           {onVoltarSeletor && (
             <Button type="button" variant="ghost" size="sm" onClick={onVoltarSeletor}>
               <ArrowLeft className="size-4" />
-              Ver outros filhos
+              <span className="hidden sm:inline">Ver outros filhos</span>
             </Button>
           )}
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-8 sm:px-8">
-        {carregando ? (
-          <p className="text-muted-foreground text-center text-sm">Carregando...</p>
-        ) : !dados ? (
-          <p className="text-muted-foreground text-center text-sm">Não foi possível carregar os dados deste aluno.</p>
-        ) : (
-          <>
-            {/* Seção 1 — Dados do aluno */}
-            <Card>
-              <CardContent className="flex items-center gap-4 py-5">
+      {carregando ? (
+        <p className="text-muted-foreground py-16 text-center text-sm">Carregando...</p>
+      ) : !dados ? (
+        <p className="text-muted-foreground py-16 text-center text-sm">Não foi possível carregar os dados deste aluno.</p>
+      ) : (
+        <div className="flex flex-1 flex-col md:flex-row">
+          {/* Menu lateral — desktop. Em mobile vira bottom nav, ver abaixo. */}
+          <nav className="border-border/50 hidden w-56 shrink-0 flex-col gap-1 border-r p-3 md:flex">
+            {MENU_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const ativo = secaoAtiva === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSecaoAtiva(item.id)}
+                  className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                    ativo ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          <main className="flex-1 px-4 py-6 pb-24 sm:px-6 md:pb-6">
+            <div className="mx-auto flex max-w-3xl flex-col gap-5">
+              {/* Dados do aluno — sempre visíveis, independente da seção. */}
+              <div className="flex items-center gap-4">
                 {dados.aluno.fotoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- foto do aluno em bucket público
-                  <img src={dados.aluno.fotoUrl} alt={dados.aluno.full_name ?? "Aluno"} className="size-16 rounded-full object-cover" />
+                  <img
+                    src={dados.aluno.fotoUrl}
+                    alt={dados.aluno.full_name ?? "Aluno"}
+                    className="size-14 rounded-full object-cover"
+                  />
                 ) : (
-                  <div className="bg-muted flex size-16 items-center justify-center rounded-full">
-                    <User className="text-muted-foreground size-8" />
+                  <div className="bg-muted flex size-14 items-center justify-center rounded-full">
+                    <User className="text-muted-foreground size-7" />
                   </div>
                 )}
                 <div className="flex flex-col gap-1">
@@ -345,57 +208,77 @@ export function PortalResponsavelDashboard({
                     </Badge>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {dados.matriculas.length === 0 ? (
-              <>
-                <SecaoVazia titulo="Progresso no curso" mensagem="Nenhuma matrícula ativa encontrada." />
-                <SecaoVazia titulo="Frequência" mensagem="Nenhuma matrícula ativa encontrada." />
-                <SecaoVazia titulo="Financeiro" mensagem="Nenhuma matrícula ativa encontrada." />
-                <SecaoVazia titulo="Documentos" mensagem="Nenhuma matrícula ativa encontrada." />
-              </>
-            ) : (
-              dados.matriculas.map((matricula) => (
-                <div key={matricula.id} className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    <h2 className="text-lg font-semibold">
-                      {matricula.nomeCurso} — {matricula.nomeTurma}
-                    </h2>
-                    <Badge variant="outline">{STATUS_MATRICULA_LABELS[matricula.status] ?? matricula.status}</Badge>
-                  </div>
-
-                  {/* Seção 2 — Progresso */}
-                  <SecaoProgresso progresso={matricula.progresso} />
-                  {/* Seção 3 — Frequência */}
-                  <SecaoFrequencia frequencia={matricula.frequencia} />
-                  {/* Seção 4 — Financeiro */}
-                  <SecaoFinanceiro parcelas={matricula.parcelas} />
-                  {/* Seção 5 — Documentos */}
-                  <SecaoDocumentos matricula={matricula} />
-                </div>
-              ))
-            )}
-
-            {/* Seção 6 — Contato da escola */}
-            <p className="text-muted-foreground mt-2 flex flex-wrap items-center justify-center gap-4 text-center text-sm">
-              <span>Dúvidas? Entre em contato com a escola:</span>
-              {dados.escola.telefone && (
-                <span className="flex items-center gap-1">
-                  <Phone className="size-3.5" />
-                  {dados.escola.telefone}
-                </span>
+              {/* Seletor de matrícula — só aparece com 2+ matrículas ativas simultâneas. */}
+              {dados.matriculas.length > 1 && secaoAtiva !== "conquistas" && (
+                <Select
+                  value={matriculaId ?? undefined}
+                  items={Object.fromEntries(
+                    dados.matriculas.map((m) => [
+                      m.id,
+                      `${m.nomeCurso} — ${m.nomeTurma} (${STATUS_MATRICULA_LABELS[m.status] ?? m.status})`,
+                    ]),
+                  )}
+                  onValueChange={(value) => setMatriculaId(String(value))}
+                >
+                  <SelectTrigger className="w-full sm:w-80">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dados.matriculas.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.nomeCurso} — {m.nomeTurma} ({STATUS_MATRICULA_LABELS[m.status] ?? m.status})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
-              {dados.escola.email && (
-                <span className="flex items-center gap-1">
-                  <Mail className="size-3.5" />
-                  {dados.escola.email}
-                </span>
-              )}
-            </p>
-          </>
-        )}
-      </div>
+
+              {renderSecao()}
+
+              <p className="text-muted-foreground mt-2 flex flex-wrap items-center justify-center gap-4 text-center text-xs">
+                <span>Dúvidas? Entre em contato com a escola:</span>
+                {dados.escola.telefone && (
+                  <span className="flex items-center gap-1">
+                    <Phone className="size-3.5" />
+                    {dados.escola.telefone}
+                  </span>
+                )}
+                {dados.escola.email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="size-3.5" />
+                    {dados.escola.email}
+                  </span>
+                )}
+              </p>
+            </div>
+          </main>
+        </div>
+      )}
+
+      {/* Menu — mobile. Bottom nav com scroll horizontal (7 itens não cabem fixos numa tela pequena). */}
+      {dados && (
+        <nav className="bg-background border-border/50 fixed inset-x-0 bottom-0 z-50 flex items-center gap-1 overflow-x-auto border-t px-2 py-1.5 md:hidden">
+          {MENU_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const ativo = secaoAtiva === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSecaoAtiva(item.id)}
+                className={`flex shrink-0 flex-col items-center gap-0.5 rounded-md px-3 py-1.5 text-[11px] transition-colors ${
+                  ativo ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                <Icon className={`size-5 ${ativo ? "stroke-[2.5]" : ""}`} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }

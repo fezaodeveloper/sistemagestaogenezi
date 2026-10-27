@@ -18,7 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
-export function PortalResponsavelAuth() {
+export function PortalResponsavelAuth({
+  escolaNome,
+  escolaLogoUrl,
+}: {
+  escolaNome: string | null;
+  escolaLogoUrl: string | null;
+}) {
   const [sessao, setSessao] = useState<{ nomeResponsavel: string; filhos: FilhoResponsavel[] } | null>(null);
   // null = ainda não escolheu (mostra seletor, só relevante com 2+ filhos) — com 1 filho só,
   // já entra pré-selecionado direto no CPF validado com sucesso, pulando o seletor.
@@ -66,23 +72,29 @@ export function PortalResponsavelAuth() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-10">
-      <div className="flex flex-col gap-6">
-        <div>
+    <div className="dark bg-background text-foreground flex min-h-screen flex-col items-center justify-center px-4 py-10">
+      <div className="flex w-full max-w-sm flex-col items-center gap-6">
+        {escolaLogoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- logo em bucket público
+          <img src={escolaLogoUrl} alt={escolaNome ?? "Logo da escola"} className="h-16 w-auto object-contain" />
+        ) : (
+          <span className="text-xl font-semibold">{escolaNome ?? "GÊNEZI Educação"}</span>
+        )}
+
+        <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-semibold">Portal do Responsável</h1>
-          <p className="text-muted-foreground text-sm">
-            Digite o CPF cadastrado como responsável para acessar os dados do aluno.
-          </p>
+          <p className="text-muted-foreground text-sm">Acompanhe o desenvolvimento do seu filho(a)</p>
         </div>
-        <Card className="max-w-sm">
+
+        <Card className="w-full bg-white/5">
           <CardContent className="py-6">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="cpf_responsavel">CPF do responsável</Label>
-                <CpfInput id="cpf_responsavel" value={cpf} onValueChange={setCpf} required />
+                <CpfInput id="cpf_responsavel" value={cpf} onValueChange={setCpf} required className="text-center" />
               </div>
               {erro && (
-                <p role="alert" className="text-destructive text-sm">
+                <p role="alert" className="text-destructive text-center text-sm">
                   {erro}
                 </p>
               )}
@@ -92,6 +104,8 @@ export function PortalResponsavelAuth() {
             </form>
           </CardContent>
         </Card>
+
+        <p className="text-muted-foreground text-xs">{escolaNome ?? "GÊNEZI Educação"}</p>
       </div>
     </div>
   );
