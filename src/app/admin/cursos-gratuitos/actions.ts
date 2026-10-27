@@ -265,6 +265,8 @@ export async function excluirCursoGratuito(id: string): Promise<{ error?: string
 export type AlunoInscritoCursoGratuito = {
   alunoId: string;
   full_name: string | null;
+  cpf: string | null;
+  telefone: string | null;
   status: string;
   origem: "matricula" | "manual";
   vinculoId: string | null;
@@ -281,8 +283,14 @@ export async function getAlunosInscritosCursoGratuito(cursoId: string): Promise<
 
   const supabase = await createClient();
   const [{ data: matriculasData }, { data: vinculosData }] = await Promise.all([
-    supabase.from("matriculas").select("aluno_id, status, alunos(full_name)").eq("curso_bonus_id", cursoId),
-    supabase.from("aluno_cursos_gratuitos").select("id, aluno_id, alunos(full_name)").eq("curso_id", cursoId),
+    supabase
+      .from("matriculas")
+      .select("aluno_id, status, alunos(full_name, cpf, telefone)")
+      .eq("curso_bonus_id", cursoId),
+    supabase
+      .from("aluno_cursos_gratuitos")
+      .select("id, aluno_id, alunos(full_name, cpf, telefone)")
+      .eq("curso_id", cursoId),
   ]);
 
   const porAluno = new Map<string, AlunoInscritoCursoGratuito>();
@@ -290,11 +298,13 @@ export async function getAlunosInscritosCursoGratuito(cursoId: string): Promise<
   for (const linha of (matriculasData ?? []) as unknown as {
     aluno_id: string;
     status: string;
-    alunos: { full_name: string | null } | null;
+    alunos: { full_name: string | null; cpf: string | null; telefone: string | null } | null;
   }[]) {
     porAluno.set(linha.aluno_id, {
       alunoId: linha.aluno_id,
       full_name: linha.alunos?.full_name ?? null,
+      cpf: linha.alunos?.cpf ?? null,
+      telefone: linha.alunos?.telefone ?? null,
       status: linha.status,
       origem: "matricula",
       vinculoId: null,
@@ -304,12 +314,14 @@ export async function getAlunosInscritosCursoGratuito(cursoId: string): Promise<
   for (const linha of (vinculosData ?? []) as unknown as {
     id: string;
     aluno_id: string;
-    alunos: { full_name: string | null } | null;
+    alunos: { full_name: string | null; cpf: string | null; telefone: string | null } | null;
   }[]) {
     if (porAluno.has(linha.aluno_id)) continue;
     porAluno.set(linha.aluno_id, {
       alunoId: linha.aluno_id,
       full_name: linha.alunos?.full_name ?? null,
+      cpf: linha.alunos?.cpf ?? null,
+      telefone: linha.alunos?.telefone ?? null,
       status: "atribuído",
       origem: "manual",
       vinculoId: linha.id,
@@ -323,8 +335,9 @@ export type AlunoBuscaResultado = { id: string; full_name: string | null; cpf: s
 
 // Busca por nome OU CPF (dígitos, sem máscara — cpf no banco é salvo só com números) pra
 // autocompletar o campo "Adicionar aluno" no dialog de detalhes. Limite de 10: é autocomplete,
-// não listagem.
-export async function buscarAlunosParaCursoGratuito(termo: string): Promise<AlunoBuscaResultado[]> {
+// não listagem. cursoId exclui quem já tem acesso a ESTE curso gratuito (via qualquer uma das
+// duas fontes — matrícula bônus ou vínculo manual), pra não sugerir de novo quem já está na lista.
+export async function buscarAlunosParaCursoGratuito(termo: string, cursoId: string): Promise<AlunoBuscaResultado[]> {
   await requireRole("admin");
 
   const termoLimpo = termo.trim();
@@ -337,9 +350,18 @@ export async function buscarAlunosParaCursoGratuito(termo: string): Promise<Alun
       ? `full_name.ilike.%${termoLimpo}%,cpf.ilike.%${cpfDigitos}%`
       : `full_name.ilike.%${termoLimpo}%`;
 
-  const { data } = await supabase.from("alunos").select("id, full_name, cpf").or(filtro).limit(10);
+  const [{ data }, { data: matriculasBonus }, { data: vinculosManuais }] = await Promise.all([
+    supabase.from("alunos").select("id, full_name, cpf").or(filtro).limit(10),
+    supabase.from("matriculas").select("aluno_id").eq("curso_bonus_id", cursoId),
+    supabase.from("aluno_cursos_gratuitos").select("aluno_id").eq("curso_id", cursoId),
+  ]);
 
-  return (data ?? []) as AlunoBuscaResultado[];
+  const jaVinculados = new Set([
+    ...(matriculasBonus ?? []).map((m) => m.aluno_id as string),
+    ...(vinculosManuais ?? []).map((v) => v.aluno_id as string),
+  ]);
+
+  return ((data ?? []) as AlunoBuscaResultado[]).filter((aluno) => !jaVinculados.has(aluno.id));
 }
 
 export async function atribuirCursoGratuito(cursoId: string, alunoId: string): Promise<{ error?: string }> {

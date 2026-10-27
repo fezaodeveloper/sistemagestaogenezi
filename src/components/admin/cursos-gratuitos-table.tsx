@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Plus, Trash2, Users } from "lucide-react";
+import { Lock, Plus, Trash2, Users } from "lucide-react";
 import {
   atribuirCursoGratuito,
   atualizarStatusCursoGratuito,
@@ -15,6 +15,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -37,8 +48,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DeleteCursoGratuitoButton } from "@/components/admin/delete-curso-gratuito-button";
 import { CURSO_STATUSES } from "@/lib/cursos/schema";
+import { formatCpf, formatTelefone } from "@/lib/alunos/schema";
 
 export type CursoGratuitoListItem = {
   id: string;
@@ -93,12 +106,12 @@ function AdicionarAlunoForm({ cursoId, onAdicionado }: { cursoId: string; onAdic
         return;
       }
       setBuscando(true);
-      buscarAlunosParaCursoGratuito(termoAtual)
+      buscarAlunosParaCursoGratuito(termoAtual, cursoId)
         .then(setResultados)
         .finally(() => setBuscando(false));
     }, 300);
     return () => clearTimeout(timeout);
-  }, [termo]);
+  }, [termo, cursoId]);
 
   function handleAdicionar(alunoId: string) {
     setErro(null);
@@ -134,7 +147,10 @@ function AdicionarAlunoForm({ cursoId, onAdicionado }: { cursoId: string; onAdic
               onClick={() => handleAdicionar(aluno.id)}
               className="hover:bg-accent flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm disabled:pointer-events-none disabled:opacity-50"
             >
-              <span>{aluno.full_name ?? "—"}</span>
+              <span className="flex flex-col">
+                <span>{aluno.full_name ?? "—"}</span>
+                <span className="text-muted-foreground text-xs">{formatCpf(aluno.cpf)}</span>
+              </span>
               <span className="text-muted-foreground flex items-center gap-1 text-xs">
                 <Plus className="size-3.5" />
                 Adicionar
@@ -148,20 +164,58 @@ function AdicionarAlunoForm({ cursoId, onAdicionado }: { cursoId: string; onAdic
 }
 
 function RemoverVinculoButton({ vinculoId, onRemovido }: { vinculoId: string; onRemovido: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleRemover() {
     startTransition(async () => {
       const resultado = await removerVinculoCursoGratuito(vinculoId);
-      if (!resultado.error) onRemovido();
+      if (resultado.error) {
+        setErro(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onRemovido();
     });
   }
 
   return (
-    <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleRemover}>
-      <Trash2 className="size-3.5" />
-      Remover
-    </Button>
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setErro(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="ghost" size="sm">
+            <Trash2 className="size-3.5" />
+            Remover
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remover acesso ao curso gratuito</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja remover o acesso deste aluno a este curso gratuito?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {erro && (
+          <p role="alert" className="text-destructive text-sm">
+            {erro}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleRemover}>
+            {isPending ? "Removendo..." : "Remover"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -192,7 +246,7 @@ function DetalhesInscritosDialog({ cursoId, nome }: { cursoId: string; nome: str
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Alunos com acesso — {nome}</DialogTitle>
         </DialogHeader>
@@ -200,34 +254,53 @@ function DetalhesInscritosDialog({ cursoId, nome }: { cursoId: string; nome: str
         {carregando ? (
           <p className="text-muted-foreground py-6 text-center text-sm">Carregando...</p>
         ) : !alunos || alunos.length === 0 ? (
-          <p className="text-muted-foreground py-6 text-center text-sm">Nenhum aluno com acesso a este curso ainda.</p>
+          <p className="text-muted-foreground py-6 text-center text-sm">Nenhum aluno vinculado ainda.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {alunos.map((aluno) => (
-                <TableRow key={aluno.alunoId}>
-                  <TableCell>{aluno.full_name ?? "—"}</TableCell>
-                  <TableCell>
-                    {aluno.origem === "matricula" ? (
-                      <span className="text-muted-foreground text-xs">Bônus da matrícula</span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Atribuição manual</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {aluno.vinculoId && <RemoverVinculoButton vinculoId={aluno.vinculoId} onRemovido={recarregar} />}
-                  </TableCell>
+          <TooltipProvider>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>CPF</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {alunos.map((aluno) => (
+                  <TableRow key={aluno.alunoId}>
+                    <TableCell>{aluno.full_name ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{aluno.cpf ? formatCpf(aluno.cpf) : "—"}</TableCell>
+                    <TableCell className="text-sm">{aluno.telefone ? formatTelefone(aluno.telefone) : "—"}</TableCell>
+                    <TableCell>
+                      {aluno.origem === "matricula" ? (
+                        <span className="text-muted-foreground text-xs">Matrícula</span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Manual</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {aluno.vinculoId ? (
+                        <RemoverVinculoButton vinculoId={aluno.vinculoId} onRemovido={recarregar} />
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <span className="text-muted-foreground inline-flex justify-end px-2">
+                                <Lock className="size-3.5" />
+                              </span>
+                            }
+                          />
+                          <TooltipContent>Vínculo via matrícula — edite na matrícula</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
         )}
       </DialogContent>
     </Dialog>
