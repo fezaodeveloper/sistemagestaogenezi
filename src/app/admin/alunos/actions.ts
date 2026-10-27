@@ -14,6 +14,7 @@ import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressiv
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
 import { lerConfigSenhaPortal } from "@/lib/portal-login/config";
+import { gerarHashSenha, gerarSenhaNumerica } from "@/lib/responsavel/senha";
 import { enviarEmail } from "@/lib/email/provedor";
 import { renderizarTemplate } from "@/lib/email/templates";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
@@ -710,6 +711,37 @@ export async function gerarNovaSenhaAluno(alunoId: string): Promise<{ success: t
     );
   } catch {
     // Best-effort — a senha já foi trocada.
+  }
+
+  return { success: true, senha };
+}
+
+// ===== Portal do Responsável — senha (CPF + senha, ver Portal do Responsável) =====
+
+// Mesma function serve pra gerar a PRIMEIRA senha (responsaveis.senha_hash ainda null) e pra
+// redefinir uma já existente — não há distinção no backend, só no texto do botão/diálogo no
+// client. Devolve a senha em texto claro UMA VEZ (nunca gravada em claro, ver senha.ts); como a
+// tela de edição do aluno não faz redirect (diferente de createAluno), não há o problema de
+// "senha que precisaria sobreviver a um redirect" — o admin vê e copia na mesma tela, sempre via
+// este botão explícito (nunca gerada silenciosamente no cadastro).
+export async function gerarNovaSenhaResponsavel(
+  responsavelId: string,
+): Promise<{ success: true; senha: string } | { error: string }> {
+  await requireRole("admin");
+
+  const senha = gerarSenhaNumerica();
+  const senhaHash = await gerarHashSenha(senha);
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("responsaveis").update({ senha_hash: senhaHash }).eq("id", responsavelId);
+  if (error) {
+    console.error("[gerarNovaSenhaResponsavel] erro Supabase:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { error: "Não foi possível gerar a nova senha. Tente novamente." };
   }
 
   return { success: true, senha };

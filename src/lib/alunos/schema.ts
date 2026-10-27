@@ -240,6 +240,7 @@ export type Responsavel = {
   telefone: string;
   email: string | null;
   complemento: string | null;
+  senha_hash: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { onlyDigits } from "@/lib/alunos/schema";
 import { adicionarDias, hojeISO } from "@/lib/datas/util";
+import { verificarSenha } from "@/lib/responsavel/senha";
 
 // Portal do Responsável — acesso SEM login, SEM id de aluno na URL: o responsável entra só com
 // o próprio CPF (/responsavel), e o sistema acha TODOS os alunos vinculados automaticamente via
@@ -16,9 +17,26 @@ import { adicionarDias, hojeISO } from "@/lib/datas/util";
 
 export type FilhoResponsavel = { alunoId: string; nomeAluno: string | null; fotoUrl: string | null };
 
-export type ValidarCpfResponsavelResult = { nomeResponsavel: string; filhos: FilhoResponsavel[] } | { error: string };
+export type DadosResponsavelLogado = {
+  responsavelId: string;
+  nomeResponsavel: string;
+  cpf: string;
+  telefone: string | null;
+  email: string | null;
+  cadastradoEm: string;
+  filhos: FilhoResponsavel[];
+};
 
-export async function validarCpfResponsavelGlobal(cpfDigitado: string): Promise<ValidarCpfResponsavelResult> {
+export type AutenticarResponsavelResult = DadosResponsavelLogado | { error: string };
+
+const ERRO_CREDENCIAIS = "CPF ou senha incorretos.";
+
+// Substitui a validação só-por-CPF (versão anterior desta function, sem senha): agora exige
+// CPF + senha. Erro sempre genérico ("CPF ou senha incorretos") pra não revelar se o CPF existe
+// ou não — exceção única: CPF existe mas nenhuma das linhas encontradas tem senha_hash ainda
+// (responsável cadastrado antes desta funcionalidade existir), caso em que orientamos a
+// contatar a escola em vez de dar "senha incorreta" (que sugeriria que uma senha já existe).
+export async function autenticarResponsavelGlobal(cpfDigitado: string, senha: string): Promise<AutenticarResponsavelResult> {
   const admin = createAdminClient();
 
   // Compara CPF normalizando em JS (onlyDigits de ambos os lados), não por igualdade direta no
@@ -27,16 +45,31 @@ export async function validarCpfResponsavelGlobal(cpfDigitado: string): Promise<
   // garantia de estar sempre só em dígitos puros (máscara aplicada só no formulário, não no
   // banco), então um `.eq("cpf", onlyDigits(cpfDigitado))` arriscaria não bater com uma linha
   // salva com pontuação.
-  const { data: responsaveis } = await admin.from("responsaveis").select("aluno_id, nome, cpf");
+  const { data: responsaveis } = await admin
+    .from("responsaveis")
+    .select("id, aluno_id, nome, cpf, telefone, email, senha_hash, created_at");
 
   const cpfNormalizado = onlyDigits(cpfDigitado);
   // filter (não find): o mesmo CPF pode aparecer em mais de uma linha de `responsaveis`, uma por
   // filho — é o único jeito de ter múltiplos filhos com o modelo de dados atual (sem tabela pivot
-  // própria, sem migration pedida pela tarefa).
+  // própria). Cada linha tem seu próprio senha_hash (gerado por filho, na ficha de cada aluno) —
+  // a senha digitada precisa bater com pelo menos uma delas pra liberar acesso a TODOS os filhos
+  // encontrados com este CPF.
   const encontrados = (responsaveis ?? []).filter((r) => onlyDigits(r.cpf) === cpfNormalizado);
 
   if (encontrados.length === 0) {
-    return { error: "CPF não encontrado como responsável." };
+    return { error: ERRO_CREDENCIAIS };
+  }
+
+  const comSenha = encontrados.filter((r) => !!r.senha_hash);
+  if (comSenha.length === 0) {
+    return { error: "Entre em contato com a escola para obter sua senha." };
+  }
+
+  const verificacoes = await Promise.all(comSenha.map((r) => verificarSenha(senha, r.senha_hash!)));
+  const linhaValidada = comSenha.find((_, index) => verificacoes[index]);
+  if (!linhaValidada) {
+    return { error: ERRO_CREDENCIAIS };
   }
 
   const alunoIds = Array.from(new Set(encontrados.map((r) => r.aluno_id)));
@@ -49,7 +82,15 @@ export async function validarCpfResponsavelGlobal(cpfDigitado: string): Promise<
   });
   filhos.sort((a, b) => (a.nomeAluno ?? "").localeCompare(b.nomeAluno ?? ""));
 
-  return { nomeResponsavel: encontrados[0].nome, filhos };
+  return {
+    responsavelId: linhaValidada.id,
+    nomeResponsavel: linhaValidada.nome,
+    cpf: linhaValidada.cpf,
+    telefone: linhaValidada.telefone,
+    email: linhaValidada.email,
+    cadastradoEm: linhaValidada.created_at,
+    filhos,
+  };
 }
 
 // Dados públicos da escola (nome/logo) pra a própria tela de CPF, ANTES de qualquer validação —

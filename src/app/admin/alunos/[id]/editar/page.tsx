@@ -6,6 +6,7 @@ import { MatriculasSection } from "@/components/admin/matriculas-section";
 import { LiberacoesManuaisSection } from "@/components/admin/liberacoes-manuais-section";
 import { HistoricoAlteracoesSection } from "@/components/admin/historico-alteracoes-section";
 import { AcessoPlataformaAluno } from "@/components/admin/acesso-plataforma-aluno";
+import { RedefinirSenhaResponsavel } from "@/components/admin/redefinir-senha-responsavel";
 import { TrocarSenhaAlunoForm } from "@/components/admin/trocar-senha-aluno-form";
 import { VerificarConquistasButton } from "@/components/admin/verificar-conquistas-button";
 import { LimparFinanceiroAlunoButton } from "@/components/admin/limpar-financeiro-aluno-button";
@@ -198,6 +199,16 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
           <TrocarSenhaAlunoForm alunoId={aluno.id} />
         </CardContent>
       </Card>
+      {responsavel && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Portal do Responsável</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RedefinirSenhaResponsavel responsavelId={responsavel.id} jaTemSenha={!!responsavel.senha_hash} />
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Gamificação</CardTitle>

@@ -6,13 +6,27 @@
 // ativa em useState no componente principal").
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, CalendarDays, FileText, Home, LineChart, Mail, Phone, Trophy, User, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
+  FileText,
+  Home,
+  LineChart,
+  LogOut,
+  Mail,
+  Phone,
+  Trophy,
+  User,
+  Wallet,
+} from "lucide-react";
 import {
   getDadosPortalResponsavelGlobal,
   type DadosPortal,
   type DadosPortalMatricula,
-  type FilhoResponsavel,
+  type DadosResponsavelLogado,
 } from "@/app/responsavel/actions";
+import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,8 +38,9 @@ import { SecaoAgenda } from "@/components/responsavel/secoes/secao-agenda";
 import { SecaoFinanceiro } from "@/components/responsavel/secoes/secao-financeiro";
 import { SecaoConquistas } from "@/components/responsavel/secoes/secao-conquistas";
 import { SecaoDocumentos } from "@/components/responsavel/secoes/secao-documentos";
+import { SecaoPerfil } from "@/components/responsavel/secoes/secao-perfil";
 
-type SecaoId = "inicio" | "frequencia" | "curso" | "agenda" | "financeiro" | "conquistas" | "documentos";
+type SecaoId = "inicio" | "frequencia" | "curso" | "agenda" | "financeiro" | "conquistas" | "documentos" | "perfil";
 
 const MENU_ITEMS: { id: SecaoId; label: string; icon: typeof Home }[] = [
   { id: "inicio", label: "Início", icon: Home },
@@ -35,6 +50,7 @@ const MENU_ITEMS: { id: SecaoId; label: string; icon: typeof Home }[] = [
   { id: "financeiro", label: "Financeiro", icon: Wallet },
   { id: "conquistas", label: "Conquistas", icon: Trophy },
   { id: "documentos", label: "Documentos", icon: FileText },
+  { id: "perfil", label: "Perfil", icon: User },
 ];
 
 function SecaoVaziaSemMatricula() {
@@ -45,17 +61,18 @@ function SecaoVaziaSemMatricula() {
 
 export function PortalResponsavelDashboard({
   alunoId,
-  nomeResponsavel,
-  filhos,
+  responsavel,
   onTrocarFilho,
   onVoltarSeletor,
+  onSair,
 }: {
   alunoId: string;
-  nomeResponsavel: string;
-  filhos: FilhoResponsavel[];
+  responsavel: DadosResponsavelLogado;
   onTrocarFilho: (alunoId: string) => void;
   onVoltarSeletor: (() => void) | null;
+  onSair: () => void;
 }) {
+  const { filhos } = responsavel;
   const [dados, setDados] = useState<DadosPortal | null>(null);
   // Em vez de um booleano próprio resetado no corpo do effect (setState síncrono dentro de
   // effect, o que o linter recusa) — deriva "carregando" comparando o alunoId do último fetch
@@ -88,6 +105,10 @@ export function PortalResponsavelDashboard({
 
     if (secaoAtiva === "conquistas") {
       return <SecaoConquistas badges={dados.badges} certificado={matricula?.certificado ?? null} />;
+    }
+
+    if (secaoAtiva === "perfil") {
+      return <SecaoPerfil responsavel={responsavel} />;
     }
 
     if (!matricula) return <SecaoVaziaSemMatricula />;
@@ -126,10 +147,11 @@ export function PortalResponsavelDashboard({
           )}
           <div>
             <p className="text-sm font-semibold">Portal do Responsável</p>
-            <p className="text-muted-foreground text-xs">Olá, {nomeResponsavel}</p>
+            <p className="text-muted-foreground text-xs">Olá, {responsavel.nomeResponsavel}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <PwaInstallButton />
           {filhos.length > 1 && (
             <Select
               value={alunoId}
@@ -154,6 +176,10 @@ export function PortalResponsavelDashboard({
               <span className="hidden sm:inline">Ver outros filhos</span>
             </Button>
           )}
+          <Button type="button" variant="ghost" size="sm" onClick={onSair}>
+            <LogOut className="size-4" />
+            <span className="hidden sm:inline">Sair</span>
+          </Button>
         </div>
       </header>
 
@@ -182,6 +208,14 @@ export function PortalResponsavelDashboard({
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={onSair}
+              className="text-muted-foreground mt-2 flex items-center gap-2.5 rounded-md border-t px-3 pt-3 text-left text-sm transition-colors hover:text-foreground"
+            >
+              <LogOut className="size-4" />
+              Sair
+            </button>
           </nav>
 
           <main className="flex-1 px-4 py-6 pb-24 sm:px-6 md:pb-6">
@@ -211,7 +245,7 @@ export function PortalResponsavelDashboard({
               </div>
 
               {/* Seletor de matrícula — só aparece com 2+ matrículas ativas simultâneas. */}
-              {dados.matriculas.length > 1 && secaoAtiva !== "conquistas" && (
+              {dados.matriculas.length > 1 && secaoAtiva !== "conquistas" && secaoAtiva !== "perfil" && (
                 <Select
                   value={matriculaId ?? undefined}
                   items={Object.fromEntries(
