@@ -15,6 +15,7 @@ import {
   LineChart,
   LogOut,
   Mail,
+  Menu,
   Phone,
   Trophy,
   User,
@@ -30,6 +31,7 @@ import { PwaInstallButton } from "@/components/aluno/pwa-install-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { STATUS_ALUNO_LABELS, STATUS_MATRICULA_LABELS } from "@/lib/responsavel/formatacao";
 import { SecaoInicio } from "@/components/responsavel/secoes/secao-inicio";
 import { SecaoFrequencia } from "@/components/responsavel/secoes/secao-frequencia";
@@ -52,6 +54,13 @@ const MENU_ITEMS: { id: SecaoId; label: string; icon: typeof Home }[] = [
   { id: "documentos", label: "Documentos", icon: FileText },
   { id: "perfil", label: "Perfil", icon: User },
 ];
+
+// Bottom nav mobile mostra só estes 4 + o botão "Mais" (abre o drawer com o resto) — 5 itens
+// fixos, sem scroll horizontal. O menu lateral desktop continua mostrando todos os itens de
+// MENU_ITEMS, sem mudança.
+const IDS_BOTTOM_NAV: SecaoId[] = ["inicio", "frequencia", "curso", "financeiro"];
+const ITENS_BOTTOM_NAV = MENU_ITEMS.filter((item) => IDS_BOTTOM_NAV.includes(item.id));
+const ITENS_DRAWER_MAIS = MENU_ITEMS.filter((item) => !IDS_BOTTOM_NAV.includes(item.id));
 
 function SecaoVaziaSemMatricula() {
   return (
@@ -82,6 +91,7 @@ export function PortalResponsavelDashboard({
 
   const [secaoAtiva, setSecaoAtiva] = useState<SecaoId>("inicio");
   const [matriculaId, setMatriculaId] = useState<string | null>(null);
+  const [drawerAberto, setDrawerAberto] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -291,27 +301,83 @@ export function PortalResponsavelDashboard({
         </div>
       )}
 
-      {/* Menu — mobile. Bottom nav com scroll horizontal (7 itens não cabem fixos numa tela pequena). */}
+      {/* Menu — mobile. Bottom nav com exatamente 5 itens (4 fixos + "Mais", que abre o drawer
+          com o restante) — diferente do menu lateral desktop, que mostra todos de uma vez. */}
       {dados && (
-        <nav className="bg-background border-border/50 fixed inset-x-0 bottom-0 z-50 flex items-center gap-1 overflow-x-auto border-t px-2 py-1.5 md:hidden">
-          {MENU_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const ativo = secaoAtiva === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSecaoAtiva(item.id)}
-                className={`flex shrink-0 flex-col items-center gap-0.5 rounded-md px-3 py-1.5 text-[11px] transition-colors ${
-                  ativo ? "text-primary" : "text-muted-foreground"
-                }`}
-              >
-                <Icon className={`size-5 ${ativo ? "stroke-[2.5]" : ""}`} />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
+        <>
+          <nav className="bg-background border-border/50 fixed inset-x-0 bottom-0 z-40 flex items-center border-t px-1 py-1.5 md:hidden">
+            {ITENS_BOTTOM_NAV.map((item) => {
+              const Icon = item.icon;
+              const ativo = secaoAtiva === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSecaoAtiva(item.id)}
+                  className={`flex flex-1 flex-col items-center gap-0.5 rounded-md px-2 py-1.5 text-[11px] transition-colors ${
+                    ativo ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <Icon className={`size-5 ${ativo ? "stroke-[2.5]" : ""}`} />
+                  {item.label}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setDrawerAberto(true)}
+              className="text-muted-foreground flex flex-1 flex-col items-center gap-0.5 rounded-md px-2 py-1.5 text-[11px] transition-colors"
+            >
+              <Menu className="size-5" />
+              Mais
+            </button>
+          </nav>
+
+          <Sheet open={drawerAberto} onOpenChange={setDrawerAberto}>
+            <SheetContent side="left" className="flex flex-col">
+              <SheetHeader>
+                <SheetTitle>Mais opções</SheetTitle>
+              </SheetHeader>
+              <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-4">
+                {ITENS_DRAWER_MAIS.map((item) => {
+                  const Icon = item.icon;
+                  const ativo = secaoAtiva === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSecaoAtiva(item.id);
+                        setDrawerAberto(false);
+                      }}
+                      className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                        ativo ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="size-4" />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <SheetFooter className="gap-2">
+                <PwaInstallButton />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => {
+                    setDrawerAberto(false);
+                    onSair();
+                  }}
+                >
+                  <LogOut className="size-4" />
+                  Sair
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
+        </>
       )}
     </div>
   );

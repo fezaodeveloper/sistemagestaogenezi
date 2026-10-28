@@ -4,8 +4,8 @@
 // gerada — mesmo padrão de AcessoPlataformaAluno (bloco "Senha" daquele componente).
 
 import { useState, useTransition } from "react";
-import { Check, Copy, KeyRound } from "lucide-react";
-import { gerarNovaSenhaResponsavel } from "@/app/admin/alunos/actions";
+import { Check, Copy, KeyRound, Send } from "lucide-react";
+import { enviarSenhaPortalResponsavel, gerarNovaSenhaResponsavel } from "@/app/admin/alunos/actions";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -22,12 +22,17 @@ import {
 export function RedefinirSenhaResponsavel({ responsavelId, jaTemSenha }: { responsavelId: string; jaTemSenha: boolean }) {
   const [confirmarAberto, setConfirmarAberto] = useState(false);
   const [senhaGerada, setSenhaGerada] = useState<string | null>(null);
+  const [mensagemWhatsapp, setMensagemWhatsapp] = useState<string | null>(null);
+  const [whatsappEnviado, setWhatsappEnviado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroWhatsapp, setErroWhatsapp] = useState<string | null>(null);
   const [copiada, setCopiada] = useState(false);
   const [gerando, startGerar] = useTransition();
+  const [reenviando, startReenviar] = useTransition();
 
   function handleGerar() {
     setErro(null);
+    setErroWhatsapp(null);
     setCopiada(false);
     startGerar(async () => {
       const resultado = await gerarNovaSenhaResponsavel(responsavelId);
@@ -37,6 +42,32 @@ export function RedefinirSenhaResponsavel({ responsavelId, jaTemSenha }: { respo
         return;
       }
       setSenhaGerada(resultado.senha);
+
+      // Envia por WhatsApp automaticamente, logo após gerar — a senha nunca é gravada em claro
+      // em lugar nenhum, então este é o único momento em que ela existe pra ser enviada.
+      const envio = await enviarSenhaPortalResponsavel(responsavelId, resultado.senha);
+      if ("error" in envio) {
+        setErroWhatsapp(envio.error);
+        return;
+      }
+      setMensagemWhatsapp(envio.mensagem);
+      setWhatsappEnviado(envio.enviado);
+    });
+  }
+
+  // "Reenviar" não gera senha nova — reenvia a mesma que já está na tela (a única que existe em
+  // claro agora; não há como reenviar uma senha anterior, só o hash dela ficou salvo).
+  function handleReenviarWhatsapp() {
+    if (!senhaGerada) return;
+    setErroWhatsapp(null);
+    startReenviar(async () => {
+      const envio = await enviarSenhaPortalResponsavel(responsavelId, senhaGerada);
+      if ("error" in envio) {
+        setErroWhatsapp(envio.error);
+        return;
+      }
+      setMensagemWhatsapp(envio.mensagem);
+      setWhatsappEnviado(envio.enviado);
     });
   }
 
@@ -73,8 +104,8 @@ export function RedefinirSenhaResponsavel({ responsavelId, jaTemSenha }: { respo
             <AlertDialogTitle>{jaTemSenha ? "Redefinir senha do portal" : "Gerar senha do portal"}</AlertDialogTitle>
             <AlertDialogDescription>
               {jaTemSenha
-                ? "A senha atual do responsável será substituída por uma nova senha numérica de 6 dígitos. Ela será exibida uma única vez, nesta tela."
-                : "Será gerada uma senha numérica de 6 dígitos para o responsável acessar o portal. Ela será exibida uma única vez, nesta tela."}
+                ? "A senha atual do responsável será substituída por uma nova senha numérica de 6 dígitos e enviada por WhatsApp. Ela também será exibida uma única vez, nesta tela."
+                : "Será gerada uma senha numérica de 6 dígitos e enviada por WhatsApp ao responsável. Ela também será exibida uma única vez, nesta tela."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -110,6 +141,28 @@ export function RedefinirSenhaResponsavel({ responsavelId, jaTemSenha }: { respo
             Anote esta senha — não será exibida novamente. Repasse ao responsável junto com o link do portal
             (/responsavel).
           </p>
+
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-medium">
+                {whatsappEnviado ? "✅ Enviado por WhatsApp" : "Mensagem do WhatsApp"}
+              </span>
+              <Button type="button" variant="outline" size="sm" disabled={reenviando} onClick={handleReenviarWhatsapp}>
+                <Send />
+                {reenviando ? "Enviando..." : "Reenviar WhatsApp"}
+              </Button>
+            </div>
+            {erroWhatsapp && (
+              <p role="alert" className="text-destructive text-xs">
+                {erroWhatsapp}
+              </p>
+            )}
+            {mensagemWhatsapp && (
+              <pre className="bg-background text-muted-foreground whitespace-pre-wrap rounded-md border p-2 text-xs">
+                {mensagemWhatsapp}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>

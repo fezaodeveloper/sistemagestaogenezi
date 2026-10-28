@@ -1,16 +1,21 @@
 "use client";
 
-// "use client": CPF+senha controlados + submissão via Server Action. Estado de autenticação
-// vive só em useState (memória do componente) — SEM sessionStorage/localStorage/cookie de
-// propósito (restrição da tarefa): fechar/recarregar a aba, ou clicar em "Sair", exige entrar
-// de novo com CPF + senha.
+// "use client": CPF+senha controlados + submissão via Server Action. Sessão em useState,
+// espelhada em sessionStorage (persiste na aba, some ao fechar o browser — ver TAREFA 3).
+//
+// sessionStorage guarda a SESSÃO JÁ AUTENTICADA (o objeto DadosResponsavelLogado inteiro, nunca a
+// senha), não o CPF puro: restaurar a partir do CPF exigiria uma function que buscasse os dados
+// só com o CPF, sem senha — isso reabriria exatamente o buraco de segurança que a TAREFA de
+// login com senha fechou (qualquer CPF de responsável conhecido bastaria pra ver os dados).
+// Guardar a sessão validada (obtida uma vez, com senha) e só reidratar o estado local do React a
+// partir dela no mount é equivalente em UX ("recarregar não desloga") sem reabrir esse buraco.
 //
 // Sem alunoId/nomeAluno como prop (diferente da versão antiga, que vinha da URL
 // /responsavel/[alunoId]): agora o(s) aluno(s) só são conhecidos DEPOIS do login, por
 // autenticarResponsavelGlobal(), que varre responsaveis.cpf em busca de quem digitou — podem vir
 // vários filhos (um responsável pode ter várias linhas em responsaveis, uma por filho).
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { autenticarResponsavelGlobal, type DadosResponsavelLogado } from "@/app/responsavel/actions";
 import { SeletorFilhoResponsavel } from "@/components/responsavel/seletor-filho-responsavel";
 import { PortalResponsavelDashboard } from "@/components/responsavel/portal-responsavel-dashboard";
@@ -19,6 +24,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+const CHAVE_SESSAO = "responsavel_sessao";
+const CHAVE_ALUNO_ID = "responsavel_aluno_id";
 
 export function PortalResponsavelAuth({
   escolaNome,
@@ -30,11 +38,48 @@ export function PortalResponsavelAuth({
   const [sessao, setSessao] = useState<DadosResponsavelLogado | null>(null);
   // null = ainda não escolheu (mostra seletor, só relevante com 2+ filhos) — com 1 filho só,
   // já entra pré-selecionado direto no login validado com sucesso, pulando o seletor.
-  const [alunoIdSelecionado, setAlunoIdSelecionado] = useState<string | null>(null);
+  const [alunoIdSelecionado, setAlunoIdSelecionadoState] = useState<string | null>(null);
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Evita o "flash" da tela de login antes do useEffect de restauração terminar de ler o
+  // sessionStorage (só roda no client, depois do primeiro render).
+  const [restaurando, setRestaurando] = useState(true);
+
+  useEffect(() => {
+    // queueMicrotask evita setState síncrono direto no corpo do efeito
+    // (react-hooks/set-state-in-effect, mesmo padrão de PwaInstallButton) — a leitura do
+    // sessionStorage só existe no client, precisa rodar depois do mount.
+    queueMicrotask(() => {
+      try {
+        const sessaoSalva = sessionStorage.getItem(CHAVE_SESSAO);
+        if (sessaoSalva) {
+          const sessaoRestaurada = JSON.parse(sessaoSalva) as DadosResponsavelLogado;
+          setSessao(sessaoRestaurada);
+          const alunoIdSalvo = sessionStorage.getItem(CHAVE_ALUNO_ID);
+          if (alunoIdSalvo && sessaoRestaurada.filhos.some((filho) => filho.alunoId === alunoIdSalvo)) {
+            setAlunoIdSelecionadoState(alunoIdSalvo);
+          } else if (sessaoRestaurada.filhos.length === 1) {
+            setAlunoIdSelecionadoState(sessaoRestaurada.filhos[0].alunoId);
+          }
+        }
+      } catch {
+        // Modo privado ou storage bloqueado — ignora e segue pra tela de login normal.
+      }
+      setRestaurando(false);
+    });
+  }, []);
+
+  function setAlunoIdSelecionado(alunoId: string | null) {
+    setAlunoIdSelecionadoState(alunoId);
+    try {
+      if (alunoId) sessionStorage.setItem(CHAVE_ALUNO_ID, alunoId);
+      else sessionStorage.removeItem(CHAVE_ALUNO_ID);
+    } catch {
+      // Sem persistência nesta aba (modo privado) — a sessão em memória continua funcionando.
+    }
+  }
 
   function handleSubmit(evento: FormEvent) {
     evento.preventDefault();
@@ -47,17 +92,30 @@ export function PortalResponsavelAuth({
       }
       setSessao(resultado);
       setAlunoIdSelecionado(resultado.filhos.length === 1 ? resultado.filhos[0].alunoId : null);
+      try {
+        sessionStorage.setItem(CHAVE_SESSAO, JSON.stringify(resultado));
+      } catch {
+        // Sem persistência nesta aba (modo privado) — login seguinte em memória continua ok.
+      }
     });
   }
 
-  // "Sair": zera toda a sessão em memória e volta pra tela de CPF+senha — sem confirmação
-  // (ação reversível, basta entrar de novo).
+  // "Sair": zera toda a sessão (memória + sessionStorage) e volta pra tela de CPF+senha — sem
+  // confirmação (ação reversível, basta entrar de novo).
   function handleSair() {
     setSessao(null);
-    setAlunoIdSelecionado(null);
+    setAlunoIdSelecionadoState(null);
     setCpf("");
     setSenha("");
+    try {
+      sessionStorage.removeItem(CHAVE_SESSAO);
+      sessionStorage.removeItem(CHAVE_ALUNO_ID);
+    } catch {
+      // Nada pra limpar se o storage já estava bloqueado.
+    }
   }
+
+  if (restaurando) return null;
 
   if (sessao && alunoIdSelecionado) {
     return (

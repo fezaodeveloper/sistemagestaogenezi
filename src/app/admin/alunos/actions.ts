@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { alunoFormSchema, alunoEditFormSchema, isMinor, onlyDigits } from "@/lib/alunos/schema";
+import { alunoFormSchema, alunoEditFormSchema, isMinor, onlyDigits, formatCpf } from "@/lib/alunos/schema";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { verificarBadgesProgressivos } from "@/lib/gamificacao/badges-progressivos";
@@ -19,6 +19,74 @@ import { enviarEmail } from "@/lib/email/provedor";
 import { renderizarTemplate } from "@/lib/email/templates";
 import { enviarWhatsApp } from "@/lib/whatsapp/enviar";
 import { emSegundoPlano, notificarWhatsappAlunoSemAula } from "@/lib/whatsapp/eventos";
+
+// ===== Portal do Responsável — mensagem com a senha (criação automática + botões do admin) =====
+//
+// Monta o mesmo texto tanto pro envio automático (aluno menor cadastrado/editado, em segundo
+// plano) quanto pros botões explícitos no card do admin ("Gerar/Redefinir senha" e "Reenviar
+// WhatsApp") — reenviar só pode significar "gerar de novo e enviar de novo", já que apenas o
+// hash fica salvo (nunca o texto puro, ver src/lib/responsavel/senha.ts); não existe uma senha
+// antiga pra buscar e reenviar.
+function montarMensagemSenhaPortalResponsavel(nomeResponsavel: string, cpfResponsavel: string, senha: string): string {
+  const linkPortal = `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/responsavel`;
+  return [
+    `Olá, ${nomeResponsavel}!`,
+    "",
+    "Seus dados de acesso ao Portal do Responsável da GÊNEZI:",
+    `CPF: ${formatCpf(cpfResponsavel)}`,
+    `Senha: ${senha}`,
+    "",
+    `Acesse em: ${linkPortal}`,
+  ].join("\n");
+}
+
+// Sem requireRole (chamado tanto de dentro de createAluno/updateAluno, já autenticados como
+// admin, quanto da action exportada abaixo). Telefone ausente não é erro — só loga aviso e
+// devolve enviado:false, pra quem chama decidir o que exibir (REGRAS da tarefa).
+async function enviarMensagemSenhaPortalResponsavelInterno(params: {
+  nome: string;
+  telefone: string | null;
+  cpf: string;
+  senha: string;
+}): Promise<{ ok: boolean; mensagem: string; enviado: boolean; erro?: string }> {
+  const mensagem = montarMensagemSenhaPortalResponsavel(params.nome, params.cpf, params.senha);
+
+  if (!params.telefone) {
+    console.warn("[enviarSenhaPortalResponsavel] responsável sem telefone cadastrado — envio ignorado.");
+    return { ok: true, mensagem, enviado: false };
+  }
+
+  const resultado = await enviarWhatsApp(params.telefone, mensagem);
+  return { ok: resultado.ok, mensagem, enviado: resultado.enviado, erro: resultado.erro };
+}
+
+// Botões "Gerar/Redefinir senha" e "Reenviar WhatsApp" (RedefinirSenhaResponsavel) chamam esta
+// action com a senha que acabaram de gerar (gerarNovaSenhaResponsavel) — devolve a MENSAGEM pra
+// tela exibir junto da senha, além de se o envio de fato aconteceu.
+export async function enviarSenhaPortalResponsavel(
+  responsavelId: string,
+  senha: string,
+): Promise<{ success: true; mensagem: string; enviado: boolean } | { error: string }> {
+  await requireRole("admin");
+
+  const admin = createAdminClient();
+  const { data: responsavel } = await admin
+    .from("responsaveis")
+    .select("nome, telefone, cpf")
+    .eq("id", responsavelId)
+    .maybeSingle();
+  if (!responsavel) return { error: "Responsável não encontrado." };
+
+  const resultado = await enviarMensagemSenhaPortalResponsavelInterno({
+    nome: responsavel.nome,
+    telefone: responsavel.telefone,
+    cpf: responsavel.cpf,
+    senha,
+  });
+
+  if (!resultado.ok) return { error: resultado.erro ?? "Falha ao enviar a mensagem." };
+  return { success: true, mensagem: resultado.mensagem, enviado: resultado.enviado };
+}
 
 type AlunoFieldErrors = Partial<
   Record<
@@ -241,6 +309,11 @@ export async function createAluno(
   }
 
   if (isMinor(data.data_nascimento)) {
+    // Senha do Portal do Responsável já sai gerada na criação (nunca fica sem senha_hash) — só
+    // o hash vai pro banco, a senha em claro só existe aqui pra ser enviada por WhatsApp abaixo.
+    const senhaResponsavel = gerarSenhaNumerica();
+    const senhaHashResponsavel = await gerarHashSenha(senhaResponsavel);
+
     const { error: responsavelError } = await supabase.from("responsaveis").insert({
       aluno_id: userId,
       nome: data.responsavel_nome!,
@@ -248,6 +321,7 @@ export async function createAluno(
       telefone: data.responsavel_telefone!,
       email: data.responsavel_email ?? null,
       complemento: data.responsavel_complemento ?? null,
+      senha_hash: senhaHashResponsavel,
     });
 
     if (responsavelError) {
@@ -258,6 +332,23 @@ export async function createAluno(
         values: echoValues(formData),
       };
     }
+
+    // Em segundo plano (after()) — mesmo motivo de enviarSenhaAlunoWhatsApp: a Evolution API tem
+    // delay anti-banimento de alguns segundos, não deve atrasar o redirect no fim desta action.
+    const nomeResponsavel = data.responsavel_nome!;
+    const telefoneResponsavel = data.responsavel_telefone!;
+    const cpfResponsavel = data.responsavel_cpf!;
+    emSegundoPlano(async () => {
+      const resultado = await enviarMensagemSenhaPortalResponsavelInterno({
+        nome: nomeResponsavel,
+        telefone: telefoneResponsavel,
+        cpf: cpfResponsavel,
+        senha: senhaResponsavel,
+      });
+      if (!resultado.ok) {
+        console.error("[createAluno] falha ao enviar senha do responsável por WhatsApp:", resultado.erro);
+      }
+    });
   }
 
   // Só matrícula disparava notificação no Telegram até aqui — cadastro de aluno (sem matrícula
@@ -420,15 +511,40 @@ export async function updateAluno(
       complemento: data.responsavel_complemento ?? null,
     };
 
+    // Senha automática só quando o responsável está sendo criado agora por esta edição (não
+    // existia antes) — uma linha já existente NUNCA tem senha_hash tocado aqui (nem pra gerar,
+    // nem pra apagar), seja ela manual (gerarNovaSenhaResponsavel) ou automática.
+    const senhaNova = existing ? null : gerarSenhaNumerica();
+    const insertPayload = senhaNova
+      ? { aluno_id: id, ...responsavelPayload, senha_hash: await gerarHashSenha(senhaNova) }
+      : { aluno_id: id, ...responsavelPayload };
+
     const { error: responsavelError } = existing
       ? await supabase.from("responsaveis").update(responsavelPayload).eq("id", existing.id)
-      : await supabase.from("responsaveis").insert({ aluno_id: id, ...responsavelPayload });
+      : await supabase.from("responsaveis").insert(insertPayload);
 
     if (responsavelError) {
       return {
         error: "Não foi possível salvar os dados do responsável. Tente novamente.",
         values: echoedValues,
       };
+    }
+
+    if (senhaNova) {
+      const nomeResponsavel = data.responsavel_nome!;
+      const telefoneResponsavel = data.responsavel_telefone!;
+      const cpfResponsavel = data.responsavel_cpf!;
+      emSegundoPlano(async () => {
+        const resultado = await enviarMensagemSenhaPortalResponsavelInterno({
+          nome: nomeResponsavel,
+          telefone: telefoneResponsavel,
+          cpf: cpfResponsavel,
+          senha: senhaNova,
+        });
+        if (!resultado.ok) {
+          console.error("[updateAluno] falha ao enviar senha do responsável por WhatsApp:", resultado.erro);
+        }
+      });
     }
   }
 
