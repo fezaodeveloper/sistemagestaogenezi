@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateAge } from "@/lib/alunos/schema";
 import { getVagasPublicasConecta } from "@/lib/conecta/publico";
+import { notificarNovoCandidatoTelegram } from "@/lib/conecta/telegram";
 import {
   perfilConectaFormSchema,
   type PerfilConecta,
@@ -118,17 +119,21 @@ export async function toggleVisibilidadePerfil(
   const supabase = await createClient();
 
   let menorComTermoConfirmado = false;
+  let cidade: string | null = null;
+  let estado: string | null = null;
 
   if (visivel) {
     const { data: perfil } = await supabase
       .from("perfis_conecta")
-      .select("whatsapp")
+      .select("whatsapp, cidade, estado")
       .eq("aluno_id", user.id)
       .maybeSingle();
 
     if (!perfil?.whatsapp) {
       return { error: "Informe seu WhatsApp antes de tornar o perfil visível." };
     }
+    cidade = perfil.cidade;
+    estado = perfil.estado;
 
     const { data: aluno } = await supabase.from("alunos").select("data_nascimento").eq("id", user.id).maybeSingle();
     if (aluno?.data_nascimento) {
@@ -162,6 +167,18 @@ export async function toggleVisibilidadePerfil(
 
   if (error) {
     return { error: "Não foi possível atualizar a visibilidade. Tente novamente." };
+  }
+
+  // Notificação Telegram do Conecta (best-effort — já se protege por dentro, nunca lança) só ao
+  // ATIVAR, nunca ao desativar — mesmo recorte do WhatsApp obrigatório/proteção de idade acima.
+  if (visivel) {
+    const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+    await notificarNovoCandidatoTelegram({
+      nome: profile?.full_name ?? "Aluno",
+      tipo: "aluno",
+      cidade,
+      estado,
+    });
   }
 
   revalidatePath("/aluno/conecta");

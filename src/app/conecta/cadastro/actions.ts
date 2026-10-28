@@ -12,6 +12,7 @@ import {
 } from "@/lib/asaas/client";
 import { calculateAge } from "@/lib/alunos/schema";
 import { candidatoExternoCadastroSchema, PLANO_CONECTA_INFO } from "@/lib/conecta/schema";
+import { notificarNovoCandidatoTelegram } from "@/lib/conecta/telegram";
 
 const IDADE_MINIMA_CONECTA = 16;
 
@@ -169,6 +170,16 @@ export async function cadastrarCandidatoExterno(
     await admin.auth.admin.deleteUser(userId);
     return { error: "Não foi possível salvar seu cadastro. Tente novamente." };
   }
+
+  // Best-effort — o cadastro já foi concluído com sucesso acima, antes mesmo da confirmação de
+  // pagamento (que dispara sua própria notificação, de "perfil ativado", no webhook
+  // asaas-conecta). Esta aqui é "alguém se cadastrou", não "pagou".
+  await notificarNovoCandidatoTelegram({
+    nome: data.nome,
+    tipo: "externo",
+    cidade: data.cidade ?? null,
+    estado: data.estado ?? null,
+  });
 
   // Best-effort — o cadastro já foi concluído com sucesso acima; sem o link
   // de pagamento o candidato só cai na página de espera sem o atalho

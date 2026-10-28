@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { enviarAcessoConecta } from "@/lib/resend/emails";
+import { notificarNovoCandidatoTelegram } from "@/lib/conecta/telegram";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
 const APP_URL = "https://sistemagestaogenezi.vercel.app";
@@ -80,7 +81,7 @@ async function processarEvento(
         .from("perfis_conecta")
         .update({ esta_ativo: true, visivel: true })
         .eq("asaas_subscription_id", subscriptionId)
-        .select("nome, email, plano")
+        .select("nome, email, plano, cidade, estado")
         .maybeSingle();
 
       if (error) return "Não foi possível ativar o perfil do candidato.";
@@ -96,6 +97,16 @@ async function processarEvento(
         } catch {
           // Best-effort — ver comentário acima.
         }
+
+        // Notificação Telegram do CONECTA (chat dedicado, ver src/lib/conecta/telegram.ts) —
+        // complementar à de dispararEvento acima, que vai pro Telegram GERAL da escola via
+        // notificarConectaPagamentoConfirmado (handlers/telegram.ts), com um texto diferente.
+        await notificarNovoCandidatoTelegram({
+          nome: perfil.nome ?? "—",
+          tipo: "externo",
+          cidade: perfil.cidade,
+          estado: perfil.estado,
+        });
 
         await enviarLinkAcessoConecta(supabase, perfil);
       }

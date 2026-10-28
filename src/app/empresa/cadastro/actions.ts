@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { empresaCadastroSchema } from "@/lib/conecta/schema";
+import { notificarNovaEmpresaTelegram } from "@/lib/conecta/telegram";
 
 export type CadastroEmpresaState = { error?: string } | undefined;
 
@@ -207,6 +208,15 @@ export async function cadastrarEmpresa(
   } catch {
     // Best-effort — ver comentário acima.
   }
+
+  // Notificação Telegram do CONECTA (chat dedicado, ver src/lib/conecta/telegram.ts) —
+  // complementar à de dispararEvento acima, que vai pro Telegram GERAL da escola via
+  // notificarEmpresaCadastro (handlers/telegram.ts), com um texto diferente.
+  await notificarNovaEmpresaTelegram({
+    nome: data.nome_empresa,
+    cidade: data.cidade ?? null,
+    email: data.email,
+  });
 
   // Sign-in via client autenticado normal (não o admin) — é esse client que
   // grava os cookies de sessão na response, deixando a empresa já logada ao

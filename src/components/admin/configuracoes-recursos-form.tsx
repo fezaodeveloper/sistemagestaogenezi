@@ -3,9 +3,12 @@
 import { useState, useTransition } from "react";
 import {
   salvarConectaHabilitado,
+  salvarConfiguracoesTelegramConecta,
   salvarRecursos,
   type ConfigRecursosValues,
 } from "@/app/admin/configuracoes/actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -39,9 +42,15 @@ function campo(recurso: RecursoChave, tipo: CursoTipoChave) {
 export function ConfiguracoesRecursosForm({
   defaultValues,
   conectaHabilitadoInicial,
+  telegramConectaChatIdInicial,
+  tgConectaNovoCandidatoInicial,
+  tgConectaNovaEmpresaInicial,
 }: {
   defaultValues: ConfigRecursosValues;
   conectaHabilitadoInicial: boolean;
+  telegramConectaChatIdInicial: string;
+  tgConectaNovoCandidatoInicial: boolean;
+  tgConectaNovaEmpresaInicial: boolean;
 }) {
   const [valores, setValores] = useState(defaultValues);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +72,45 @@ export function ConfiguracoesRecursosForm({
         setConectaHabilitado(anterior);
       }
     });
+  }
+
+  // Telegram do Conecta: chat_id é texto livre, salvo só ao clicar "Salvar" — diferente dos
+  // switches abaixo (gravados sozinhos, ao mudar). Os dois toggles salvam junto com o chat_id
+  // atual em memória, pra nunca gravar um valor de chat_id desatualizado por trás do switch.
+  const [chatIdConecta, setChatIdConecta] = useState(telegramConectaChatIdInicial);
+  const [notificarNovoCandidato, setNotificarNovoCandidato] = useState(tgConectaNovoCandidatoInicial);
+  const [notificarNovaEmpresa, setNotificarNovaEmpresa] = useState(tgConectaNovaEmpresaInicial);
+  const [erroTelegramConecta, setErroTelegramConecta] = useState<string | null>(null);
+  const [salvoTelegramConecta, setSalvoTelegramConecta] = useState(false);
+  const [salvandoTelegramConecta, startTransitionTelegramConecta] = useTransition();
+
+  function salvarTelegramConecta(
+    overrides: Partial<{ chatId: string; notificarNovoCandidato: boolean; notificarNovaEmpresa: boolean }> = {},
+  ) {
+    setErroTelegramConecta(null);
+    setSalvoTelegramConecta(false);
+    startTransitionTelegramConecta(async () => {
+      const resultado = await salvarConfiguracoesTelegramConecta({
+        chatId: overrides.chatId ?? chatIdConecta,
+        notificarNovoCandidato: overrides.notificarNovoCandidato ?? notificarNovoCandidato,
+        notificarNovaEmpresa: overrides.notificarNovaEmpresa ?? notificarNovaEmpresa,
+      });
+      if (resultado.error) {
+        setErroTelegramConecta(resultado.error);
+        return;
+      }
+      setSalvoTelegramConecta(true);
+    });
+  }
+
+  function handleToggleNovoCandidato(checked: boolean) {
+    setNotificarNovoCandidato(checked);
+    salvarTelegramConecta({ notificarNovoCandidato: checked });
+  }
+
+  function handleToggleNovaEmpresa(checked: boolean) {
+    setNotificarNovaEmpresa(checked);
+    salvarTelegramConecta({ notificarNovaEmpresa: checked });
   }
 
   function handleToggle(recurso: RecursoChave, tipo: CursoTipoChave, checked: boolean) {
@@ -148,6 +196,71 @@ export function ConfiguracoesRecursosForm({
             {erroConecta}
           </p>
         )}
+
+        <div className="flex flex-col gap-3 border-t pt-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="telegram-conecta-chat-id" className="font-normal">
+              Telegram Chat ID do Conecta
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="telegram-conecta-chat-id"
+                value={chatIdConecta}
+                onChange={(e) => {
+                  setChatIdConecta(e.target.value);
+                  setSalvoTelegramConecta(false);
+                }}
+                placeholder="Ex.: -1001234567890"
+                className="max-w-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={salvandoTelegramConecta}
+                onClick={() => salvarTelegramConecta()}
+              >
+                {salvandoTelegramConecta ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Chat ou grupo do Telegram separado do Telegram geral da escola, dedicado só a
+              notificações do Gênezi Conecta. Deixe em branco para não enviar nenhuma.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="tg-conecta-novo-candidato" className="font-normal">
+              Notificar novo candidato
+            </Label>
+            <Switch
+              id="tg-conecta-novo-candidato"
+              checked={notificarNovoCandidato}
+              disabled={salvandoTelegramConecta}
+              onCheckedChange={(checked) => handleToggleNovoCandidato(checked === true)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="tg-conecta-nova-empresa" className="font-normal">
+              Notificar nova empresa
+            </Label>
+            <Switch
+              id="tg-conecta-nova-empresa"
+              checked={notificarNovaEmpresa}
+              disabled={salvandoTelegramConecta}
+              onCheckedChange={(checked) => handleToggleNovaEmpresa(checked === true)}
+            />
+          </div>
+
+          {erroTelegramConecta && (
+            <p role="alert" className="text-destructive text-sm">
+              {erroTelegramConecta}
+            </p>
+          )}
+          {salvoTelegramConecta && !erroTelegramConecta && (
+            <p className="text-sm text-green-600 dark:text-green-400">Salvo.</p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1006,3 +1006,32 @@ export async function salvarConectaHabilitado(ativo: boolean): Promise<{ error?:
   revalidatePath("/aluno");
   return {};
 }
+
+// Telegram do Conecta: chat/grupo dedicado (telegram_conecta_chat_id), SEPARADO do Telegram
+// geral da escola (env var TELEGRAM_CHAT_ID) — ver src/lib/conecta/telegram.ts. chatId vazio
+// grava null (nenhuma notificação do Conecta sai até o admin preencher de novo).
+export async function salvarConfiguracoesTelegramConecta(dados: {
+  chatId: string;
+  notificarNovoCandidato: boolean;
+  notificarNovaEmpresa: boolean;
+}): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("configuracoes")
+    .update({
+      telegram_conecta_chat_id: dados.chatId.trim() || null,
+      tg_conecta_novo_candidato: dados.notificarNovoCandidato,
+      tg_conecta_nova_empresa: dados.notificarNovaEmpresa,
+      updated_by: user.id,
+    })
+    .eq("id", true);
+
+  if (error) {
+    return { error: "Não foi possível salvar. Tente novamente." };
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return {};
+}
