@@ -36,6 +36,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
@@ -50,15 +51,25 @@ const MODALIDADE_ITEMS = Object.fromEntries(
   MODALIDADES_PREFERIDAS.map((valor) => [valor, MODALIDADE_PREFERIDA_LABELS[valor]]),
 );
 
-function VisibilidadeToggle({ perfil }: { perfil: PerfilConecta | null }) {
+function VisibilidadeToggle({ perfil, idade }: { perfil: PerfilConecta | null; idade: number | null }) {
   const [visivel, setVisivel] = useState(perfil?.visivel ?? false);
+  const [termoAceito, setTermoAceito] = useState(perfil?.menor_com_termo ?? false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Proteção de idade (TAREFA 1) — a checagem de verdade é refeita no servidor
+  // (toggleVisibilidadePerfil), nunca confia só nesta aqui.
+  const menorDe16 = idade !== null && idade < 16;
+  const precisaTermo = idade !== null && idade >= 16 && idade < 18;
+
   function handleChange(novoValor: boolean) {
     setError(null);
+    if (novoValor && precisaTermo && !termoAceito) {
+      setError("Marque a declaração de acompanhamento por responsável legal antes de ativar.");
+      return;
+    }
     startTransition(async () => {
-      const resultado = await toggleVisibilidadePerfil(novoValor);
+      const resultado = await toggleVisibilidadePerfil(novoValor, precisaTermo && termoAceito);
       if (resultado.error) {
         setError(resultado.error);
         return;
@@ -78,8 +89,32 @@ function VisibilidadeToggle({ perfil }: { perfil: PerfilConecta | null }) {
               currículo.
             </p>
           </div>
-          <Switch checked={visivel} onCheckedChange={handleChange} disabled={isPending} />
+          <Switch
+            checked={visivel}
+            onCheckedChange={handleChange}
+            disabled={isPending || menorDe16}
+            title={menorDe16 ? "Você precisa ter 16 anos para participar do Gênezi Conecta" : undefined}
+          />
         </div>
+
+        {menorDe16 && (
+          <p className="text-muted-foreground text-sm">Você poderá participar a partir dos 16 anos.</p>
+        )}
+
+        {precisaTermo && !visivel && (
+          <div className="flex items-start gap-2 border-t pt-3">
+            <Checkbox
+              id="termo_acompanhamento_aluno"
+              checked={termoAceito}
+              onCheckedChange={(checked) => setTermoAceito(checked === true)}
+            />
+            <Label htmlFor="termo_acompanhamento_aluno" className="font-normal text-sm">
+              Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer
+              entrevista de emprego.
+            </Label>
+          </div>
+        )}
+
         {error && (
           <p role="alert" className="text-destructive text-sm">
             {error}
@@ -257,9 +292,11 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
 export function ConectaPerfilForm({
   perfilInicial,
   cursosConcluidos,
+  idade,
 }: {
   perfilInicial: PerfilConecta | null;
   cursosConcluidos: string[];
+  idade: number | null;
 }) {
   const [whatsapp, setWhatsapp] = useState(perfilInicial?.whatsapp ?? "");
   const [resumo, setResumo] = useState(perfilInicial?.resumo ?? "");
@@ -283,7 +320,7 @@ export function ConectaPerfilForm({
 
   return (
     <div className="flex flex-col gap-4 pt-4">
-      <VisibilidadeToggle perfil={perfilInicial} />
+      <VisibilidadeToggle perfil={perfilInicial} idade={idade} />
 
       <Card>
         <CardHeader>

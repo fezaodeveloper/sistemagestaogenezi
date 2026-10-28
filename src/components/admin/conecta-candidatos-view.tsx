@@ -56,12 +56,13 @@ function CancelarAssinaturaButton({ candidato, onCancelado }: { candidato: Perfi
   );
 }
 
-function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, cursosConcluidos }: {
+function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, menorComTermo, cursosConcluidos }: {
   nome: string;
   whatsapp: string | null;
   cidade: string | null;
   disponibilidade: keyof typeof DISPONIBILIDADE_LABELS;
   visivel: boolean;
+  menorComTermo: boolean;
   cursosConcluidos: string[];
 }) {
   return (
@@ -72,15 +73,18 @@ function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, cursosCon
             <UserRound className="text-muted-foreground size-4" />
             <span className="font-medium">{nome}</span>
           </div>
-          <Badge
-            className={
-              visivel
-                ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
-                : "bg-muted text-muted-foreground"
-            }
-          >
-            {visivel ? "Visível" : "Oculto"}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {menorComTermo && <Badge variant="outline">Menor</Badge>}
+            <Badge
+              className={
+                visivel
+                  ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                  : "bg-muted text-muted-foreground"
+              }
+            >
+              {visivel ? "Visível" : "Oculto"}
+            </Badge>
+          </div>
         </div>
         <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
           <span>{whatsapp ?? "—"}</span>
@@ -110,15 +114,18 @@ function CandidatoExternoCard({ candidato, onAtualizado }: { candidato: PerfilCo
             <UserRound className="text-muted-foreground size-4" />
             <span className="font-medium">{candidato.nome ?? "—"}</span>
           </div>
-          <Badge
-            className={
-              candidato.esta_ativo
-                ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
-                : "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400"
-            }
-          >
-            {candidato.esta_ativo ? "Ativo" : "Inativo"}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {candidato.menor_com_termo && <Badge variant="outline">Menor</Badge>}
+            <Badge
+              className={
+                candidato.esta_ativo
+                  ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                  : "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400"
+              }
+            >
+              {candidato.esta_ativo ? "Ativo" : "Inativo"}
+            </Badge>
+          </div>
         </div>
         <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
           <span>{candidato.email ?? "—"}</span>

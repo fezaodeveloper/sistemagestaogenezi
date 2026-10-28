@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getConectaHabilitado } from "@/lib/configuracoes/conecta";
-import { buscarVagasConecta, getCursosConcluidosAluno, getMeuPerfilConecta } from "@/app/aluno/conecta/actions";
+import {
+  buscarVagasConecta,
+  getCursosConcluidosAluno,
+  getIdadeAlunoConecta,
+  getMeuPerfilConecta,
+} from "@/app/aluno/conecta/actions";
 import { getCidadesAprovadas } from "@/lib/conecta/publico";
 import { AlunoConectaView } from "@/components/aluno/aluno-conecta-view";
 
@@ -15,11 +20,12 @@ export default async function AlunoConectaPage() {
     notFound();
   }
 
-  const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas] = await Promise.all([
+  const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas, idade] = await Promise.all([
     getMeuPerfilConecta(),
     getCursosConcluidosAluno(user.id),
     buscarVagasConecta(),
     getCidadesAprovadas(),
+    getIdadeAlunoConecta(user.id),
   ]);
 
   return (
@@ -35,6 +41,7 @@ export default async function AlunoConectaPage() {
         cursosConcluidos={cursosConcluidos}
         vagasResultadoInicial={vagasResultado}
         cidadesAprovadas={cidadesAprovadas}
+        idade={idade}
       />
     </div>
   );

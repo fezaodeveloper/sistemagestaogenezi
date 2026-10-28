@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCidadesAprovadas, getVagasPublicasConecta } from "@/lib/conecta/publico";
 import { VAGA_MODALIDADES, VAGA_TIPOS, type VagaModalidade, type VagaTipo } from "@/lib/conecta/schema";
 import { ConectaVagasPublicasView } from "@/components/conecta/vagas-publicas-view";
@@ -57,11 +58,25 @@ export default async function ConectaVagasPublicasPage({
     .eq("id", true)
     .maybeSingle();
 
+  // Botões "Para empresas" → WhatsApp (TAREFA 3, cadastro via escola) — mesmo padrão já usado
+  // em src/app/conecta/aguardando-pagamento/page.tsx: não existe uma coluna "escola_whatsapp"
+  // dedicada nem uma env var NEXT_PUBLIC_WHATSAPP_ESCOLA no projeto, então reaproveita
+  // escola_telefone. O grant de select em configuracoes pra "anon" só libera escola_logo_url/
+  // login_rodape, por isso o client admin aqui.
+  const admin = createAdminClient();
+  const { data: configuracoesWhatsapp } = await admin
+    .from("configuracoes")
+    .select("escola_telefone")
+    .eq("id", true)
+    .maybeSingle();
+  const whatsappEscolaDigitos = configuracoesWhatsapp?.escola_telefone?.replace(/\D/g, "") ?? null;
+
   const totalPaginas = Math.max(1, Math.ceil(resultado.total / LIMITE));
 
   return (
     <ConectaVagasPublicasView
       logoUrl={configuracoes?.escola_logo_url ?? null}
+      whatsappEscolaDigitos={whatsappEscolaDigitos}
       vagas={resultado.vagas}
       totalRegistros={resultado.total}
       paginaAtual={paginaAtual}

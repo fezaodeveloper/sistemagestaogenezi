@@ -46,6 +46,7 @@ type PerfilAlunoRow = {
   cidade: string | null;
   disponibilidade: AlunoVisivelConecta["disponibilidade"];
   visivel: boolean;
+  menor_com_termo: boolean;
   updated_at: string;
   alunos: { profiles: { full_name: string | null } | null } | null;
 };
@@ -71,7 +72,7 @@ export async function listarAlunosVisiveisConecta(
   const { data } = await supabase
     .from("perfis_conecta")
     .select(
-      "id, aluno_id, whatsapp, cidade, disponibilidade, visivel, updated_at, alunos(profiles!alunos_id_fkey(full_name))",
+      "id, aluno_id, whatsapp, cidade, disponibilidade, visivel, menor_com_termo, updated_at, alunos(profiles!alunos_id_fkey(full_name))",
     )
     .eq("tipo", "aluno")
     .eq("visivel", true)
@@ -106,6 +107,7 @@ export async function listarAlunosVisiveisConecta(
     cidade: perfil.cidade,
     disponibilidade: perfil.disponibilidade,
     visivel: perfil.visivel,
+    menorComTermo: perfil.menor_com_termo,
     cursosConcluidos: perfil.aluno_id
       ? [...(cursosPorAluno.get(perfil.aluno_id) ?? [])].sort((a, b) => a.localeCompare(b))
       : [],

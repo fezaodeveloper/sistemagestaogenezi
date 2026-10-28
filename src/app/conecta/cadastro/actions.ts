@@ -10,7 +10,10 @@ import {
   cancelarAssinaturaConecta,
   buscarCobrancasAssinaturaConecta,
 } from "@/lib/asaas/client";
+import { calculateAge } from "@/lib/alunos/schema";
 import { candidatoExternoCadastroSchema, PLANO_CONECTA_INFO } from "@/lib/conecta/schema";
+
+const IDADE_MINIMA_CONECTA = 16;
 
 export type CadastroCandidatoExternoState = { error?: string } | undefined;
 
@@ -40,6 +43,7 @@ export async function cadastrarCandidatoExterno(
   const parsed = candidatoExternoCadastroSchema.safeParse({
     nome: formData.get("nome"),
     email: formData.get("email"),
+    data_nascimento: formData.get("data_nascimento"),
     whatsapp: formData.get("whatsapp"),
     cpf: formData.get("cpf") || undefined,
     cidade: formData.get("cidade") || undefined,
@@ -53,6 +57,21 @@ export async function cadastrarCandidatoExterno(
   }
 
   const data = parsed.data;
+
+  // Proteção de idade (TAREFA 1) — nunca confia só na checagem do client (cadastro-externo-
+  // form.tsx): refaz o cálculo aqui com a data de nascimento validada pelo Zod.
+  const idade = calculateAge(data.data_nascimento);
+  if (idade < IDADE_MINIMA_CONECTA) {
+    return { error: "Você precisa ter no mínimo 16 anos para se cadastrar no Gênezi Conecta." };
+  }
+  const menorComTermo = idade < 18;
+  if (menorComTermo && formData.get("menor_com_termo") !== "on") {
+    return {
+      error:
+        "É necessário declarar que será acompanhado por um dos pais ou responsável legal em qualquer entrevista.",
+    };
+  }
+
   const admin = createAdminClient();
 
   const { data: perfilExistente } = await admin
@@ -130,6 +149,8 @@ export async function cadastrarCandidatoExterno(
     tipo: "externo",
     nome: data.nome,
     email: data.email,
+    data_nascimento: data.data_nascimento,
+    menor_com_termo: menorComTermo,
     whatsapp: data.whatsapp,
     cidade: data.cidade ?? null,
     estado: data.estado ?? null,

@@ -98,6 +98,17 @@ export async function cadastrarEmpresa(
   _prevState: CadastroEmpresaState,
   formData: FormData,
 ): Promise<CadastroEmpresaState> {
+  // Código de acesso (TAREFA 2) — gate antes de qualquer outra validação/criação de conta;
+  // não é um campo do formulário persistido em empresas_conecta, só um portão de entrada.
+  const codigoEsperado = process.env.CONECTA_EMPRESA_CODIGO_ACESSO;
+  if (!codigoEsperado) {
+    console.error("[cadastrarEmpresa] CONECTA_EMPRESA_CODIGO_ACESSO não configurada no ambiente.");
+    return { error: "Cadastro de empresas temporariamente indisponível. Entre em contato com a escola." };
+  }
+  if (formData.get("codigo_acesso") !== codigoEsperado) {
+    return { error: "Código de acesso inválido. Entre em contato com a escola para obter o código." };
+  }
+
   const parsed = empresaCadastroSchema.safeParse({
     nome_empresa: formData.get("nome_empresa"),
     cnpj: formData.get("cnpj") || undefined,

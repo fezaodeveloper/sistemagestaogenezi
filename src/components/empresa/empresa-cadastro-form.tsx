@@ -34,6 +34,7 @@ export function EmpresaCadastroForm() {
   const [state, formAction] = useActionState<CadastroEmpresaState, FormData>(cadastrarEmpresa, undefined);
   const [isPendingCnpj, startTransitionCnpj] = useTransition();
 
+  const [codigoAcesso, setCodigoAcesso] = useState("");
   const [cnpj, setCnpj] = useState("");
   const [nomeEmpresa, setNomeEmpresa] = useState("");
   const [cidade, setCidade] = useState("");
@@ -71,12 +72,26 @@ export function EmpresaCadastroForm() {
   }
 
   const senhasValidas = senha.length >= 8 && senha === confirmarSenha;
-  const podeSubmeter = senhasValidas && aceiteTermos && !cnpjBloqueado && nomeEmpresa.trim().length > 0;
+  const podeSubmeter =
+    senhasValidas && aceiteTermos && !cnpjBloqueado && nomeEmpresa.trim().length > 0 && codigoAcesso.length > 0;
 
   return (
     <Card>
       <CardContent className="pt-6">
         <form action={formAction} className="flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="codigo_acesso">Código de acesso</Label>
+            <Input
+              id="codigo_acesso"
+              name="codigo_acesso"
+              type="password"
+              placeholder="Informe o código fornecido pela escola"
+              value={codigoAcesso}
+              onChange={(e) => setCodigoAcesso(e.target.value)}
+              required
+            />
+          </div>
+
           <div className="flex flex-col gap-4">
             <h2 className="text-sm font-semibold">Dados da empresa</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

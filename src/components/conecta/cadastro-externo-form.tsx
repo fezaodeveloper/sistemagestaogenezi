@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { cadastrarCandidatoExterno, type CadastroCandidatoExternoState } from "@/app/conecta/cadastro/actions";
+import { calculateAge } from "@/lib/alunos/schema";
 import {
   FORMA_PAGAMENTO_CONECTA_LABELS,
   FORMAS_PAGAMENTO_CONECTA,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/conecta/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CpfInput } from "@/components/ui/cpf-input";
 import { TelefoneInput } from "@/components/ui/telefone-input";
@@ -21,10 +23,12 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 
-function SubmitButton() {
+const IDADE_MINIMA = 16;
+
+function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full">
+    <Button type="submit" disabled={disabled || pending} className="w-full">
       {pending ? "Processando..." : "Acessar o portal →"}
     </Button>
   );
@@ -62,12 +66,21 @@ export function ConectaCadastroExternoForm() {
 
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
+  const [dataNascimento, setDataNascimento] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [cpf, setCpf] = useState("");
   const [cidade, setCidade] = useState("");
   const [estado, setEstado] = useState("");
   const [plano, setPlano] = useState<PlanoConecta>("basico");
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoConecta>("PIX");
+  const [termoAcompanhamento, setTermoAcompanhamento] = useState(false);
+
+  // Feedback imediato no client (a validação de verdade é refeita no servidor, em
+  // cadastrarCandidatoExterno — nunca confia só nesta checagem).
+  const idade = dataNascimento ? calculateAge(dataNascimento) : null;
+  const menorDe16 = idade !== null && idade < IDADE_MINIMA;
+  const precisaTermo = idade !== null && idade >= IDADE_MINIMA && idade < 18;
+  const podeSubmeter = !menorDe16 && (!precisaTermo || termoAcompanhamento);
 
   return (
     <Card>
@@ -105,6 +118,22 @@ export function ConectaCadastroExternoForm() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="data_nascimento">Data de nascimento</Label>
+                <Input
+                  id="data_nascimento"
+                  name="data_nascimento"
+                  type="date"
+                  value={dataNascimento}
+                  onChange={(e) => setDataNascimento(e.target.value)}
+                  required
+                />
+                {menorDe16 && (
+                  <p className="text-destructive text-xs">
+                    Você precisa ter no mínimo 16 anos para se cadastrar no Gênezi Conecta.
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="whatsapp">WhatsApp</Label>
@@ -151,6 +180,21 @@ export function ConectaCadastroExternoForm() {
             </RadioGroup>
           </div>
 
+          {precisaTermo && (
+            <div className="flex items-start gap-2 border-t pt-4">
+              <Checkbox
+                id="termo_acompanhamento"
+                checked={termoAcompanhamento}
+                onCheckedChange={(checked) => setTermoAcompanhamento(checked === true)}
+              />
+              <Label htmlFor="termo_acompanhamento" className="font-normal text-sm">
+                Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer
+                entrevista.
+              </Label>
+              <input type="hidden" name="menor_com_termo" value={termoAcompanhamento ? "on" : ""} />
+            </div>
+          )}
+
           <div className="bg-muted/50 rounded-lg p-4 text-sm">
             💡 Alunos ativos da Gênezi têm acesso GRATUITO ao portal.{" "}
             <Link href="/captacao" className="underline underline-offset-2">
@@ -164,7 +208,7 @@ export function ConectaCadastroExternoForm() {
             </p>
           )}
 
-          <SubmitButton />
+          <SubmitButton disabled={!podeSubmeter} />
         </form>
 
         <p className="text-muted-foreground mt-6 text-center text-sm">

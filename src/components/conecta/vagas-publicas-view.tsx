@@ -40,6 +40,10 @@ const MODALIDADE_ITEMS: Record<string, string> = { [TODAS]: "Todas", ...VAGA_MOD
 
 const CIDADES_DESTAQUE = ["Propriá", "Porto Real do Colégio"] as const;
 
+const MENSAGEM_WHATSAPP_EMPRESAS = encodeURIComponent(
+  "Olá! Tenho interesse em cadastrar minha empresa no Gênezi Conecta e disponibilizar vagas para os alunos.",
+);
+
 function formatSalario(vaga: VagaConectaComEmpresa): string {
   if (vaga.salario_oculto) return "A combinar";
   if (!vaga.salario_min && !vaga.salario_max) return "A combinar";
@@ -241,6 +245,7 @@ export function ConectaVagasPublicasView({
   limite,
   cidadesAprovadas,
   filtrosAtuais,
+  whatsappEscolaDigitos,
 }: {
   logoUrl: string | null;
   vagas: VagaConectaComEmpresa[];
@@ -250,6 +255,7 @@ export function ConectaVagasPublicasView({
   limite: number;
   cidadesAprovadas: CidadeConecta[];
   filtrosAtuais: { q: string; tipo: string; modalidade: string; cidade: string };
+  whatsappEscolaDigitos: string | null;
 }) {
   const router = useRouter();
   const [busca, setBusca] = useState(filtrosAtuais.q);
@@ -306,14 +312,32 @@ export function ConectaVagasPublicasView({
           >
             👨‍🎓 É aluno da Gênezi? Acesse o portal completo →
           </Button>
-          <Button
-            variant="outline"
-            className="h-auto justify-start py-3 text-left whitespace-normal"
-            render={<Link href="/empresa/cadastro" />}
-            nativeButton={false}
-          >
-            🏢 Sua empresa quer contratar? Cadastre-se grátis →
-          </Button>
+          {/* Empresas → WhatsApp (cadastro via escola) */}
+          {whatsappEscolaDigitos ? (
+            <Button
+              variant="outline"
+              className="h-auto justify-start py-3 text-left whitespace-normal"
+              nativeButton={false}
+              render={
+                <a
+                  href={`https://wa.me/55${whatsappEscolaDigitos}?text=${MENSAGEM_WHATSAPP_EMPRESAS}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+            >
+              🏢 Sua empresa quer contratar? Fale com a gente →
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              className="h-auto justify-start py-3 text-left whitespace-normal"
+              render={<Link href="/empresa/cadastro" />}
+              nativeButton={false}
+            >
+              🏢 Sua empresa quer contratar? Cadastre-se grátis →
+            </Button>
+          )}
           <Button
             variant="outline"
             className="h-auto justify-start py-3 text-left whitespace-normal"
@@ -455,10 +479,23 @@ export function ConectaVagasPublicasView({
         <footer className="flex flex-col items-center gap-2 border-t pt-6 text-center">
           <p className="text-muted-foreground text-sm">Gênezi Educação — Propriá/SE</p>
           <div className="text-muted-foreground flex flex-wrap justify-center gap-4 text-sm">
-            <Link href="/empresa/cadastro" className="flex items-center gap-1 underline underline-offset-2">
-              <Building2 className="size-3.5" />
-              Para empresas
-            </Link>
+            {/* Empresas → WhatsApp (cadastro via escola) */}
+            {whatsappEscolaDigitos ? (
+              <a
+                href={`https://wa.me/55${whatsappEscolaDigitos}?text=${MENSAGEM_WHATSAPP_EMPRESAS}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 underline underline-offset-2"
+              >
+                <Building2 className="size-3.5" />
+                Para empresas
+              </a>
+            ) : (
+              <Link href="/empresa/cadastro" className="flex items-center gap-1 underline underline-offset-2">
+                <Building2 className="size-3.5" />
+                Para empresas
+              </Link>
+            )}
             <Link href="/conecta/cadastro" className="flex items-center gap-1 underline underline-offset-2">
               <ExternalLink className="size-3.5" />
               Para candidatos

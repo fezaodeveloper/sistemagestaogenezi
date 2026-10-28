@@ -187,6 +187,10 @@ export type PerfilConecta = {
   esta_ativo: boolean;
   plano: PlanoConecta | null;
   asaas_subscription_id: string | null;
+  // Proteção de idade (candidatos externos preenchem no cadastro; alunos usam a própria
+  // alunos.data_nascimento, não duplicada aqui — ver toggleVisibilidadePerfil).
+  data_nascimento: string | null;
+  menor_com_termo: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -320,6 +324,11 @@ export const candidatoExternoCadastroSchema = z.object({
     .min(1, { error: "Informe seu nome completo." })
     .max(200),
   email: z.email({ error: "Informe um e-mail válido." }),
+  // Proteção de idade (ver TAREFA 1): menor de 16 é bloqueado, 16/17 exige o checkbox de
+  // acompanhamento (validado fora deste schema, na action — depende da idade calculada).
+  data_nascimento: z
+    .string({ error: "Informe sua data de nascimento." })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Data de nascimento inválida." }),
   whatsapp: z
     .string({ error: "Informe seu WhatsApp." })
     .trim()
@@ -392,6 +401,7 @@ export type AlunoVisivelConecta = {
   cidade: string | null;
   disponibilidade: Disponibilidade;
   visivel: boolean;
+  menorComTermo: boolean;
   cursosConcluidos: string[];
 };
 

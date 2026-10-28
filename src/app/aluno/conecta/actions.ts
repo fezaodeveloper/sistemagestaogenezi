@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { calculateAge } from "@/lib/alunos/schema";
 import { getVagasPublicasConecta } from "@/lib/conecta/publico";
 import {
   perfilConectaFormSchema,
@@ -42,6 +43,18 @@ export async function getMeuPerfilConecta(): Promise<PerfilConecta | null> {
     .maybeSingle();
 
   return (data as PerfilConecta | null) ?? null;
+}
+
+// Proteção de idade (TAREFA 1) — data_nascimento do aluno vive em public.alunos, NÃO em
+// profiles nem em perfis_conecta (que só guarda esse campo pra candidatos EXTERNOS, ver
+// migration). perfis_conecta.aluno_id referencia alunos(id), que é o mesmo id da sessão.
+export async function getIdadeAlunoConecta(alunoId: string): Promise<number | null> {
+  await requireRole("aluno");
+
+  const supabase = await createClient();
+  const { data } = await supabase.from("alunos").select("data_nascimento").eq("id", alunoId).maybeSingle();
+
+  return data?.data_nascimento ? calculateAge(data.data_nascimento) : null;
 }
 
 export async function salvarPerfilConecta(formData: FormData): Promise<{ error?: string }> {
@@ -91,13 +104,20 @@ export async function salvarPerfilConecta(formData: FormData): Promise<{ error?:
   return {};
 }
 
-// WhatsApp obrigatório só ao ATIVAR a visibilidade (REGRA da tarefa) — checa
-// o valor já salvo em vez de exigir que o form de dados seja reenviado
-// junto do toggle.
-export async function toggleVisibilidadePerfil(visivel: boolean): Promise<{ error?: string }> {
+// WhatsApp obrigatório só ao ATIVAR a visibilidade (REGRA da tarefa) — checa o valor já salvo
+// em vez de exigir que o form de dados seja reenviado junto do toggle. Proteção de idade
+// (TAREFA 1) só se aplica ao ATIVAR também, pelo mesmo motivo — desativar nunca é bloqueado.
+// menorComTermo vem do client (checkbox já marcado) mas é só um indício: a idade de verdade é
+// recalculada aqui a partir de alunos.data_nascimento, nunca confiando no client.
+export async function toggleVisibilidadePerfil(
+  visivel: boolean,
+  menorComTermo = false,
+): Promise<{ error?: string }> {
   const user = await requireRole("aluno");
 
   const supabase = await createClient();
+
+  let menorComTermoConfirmado = false;
 
   if (visivel) {
     const { data: perfil } = await supabase
@@ -109,10 +129,34 @@ export async function toggleVisibilidadePerfil(visivel: boolean): Promise<{ erro
     if (!perfil?.whatsapp) {
       return { error: "Informe seu WhatsApp antes de tornar o perfil visível." };
     }
+
+    const { data: aluno } = await supabase.from("alunos").select("data_nascimento").eq("id", user.id).maybeSingle();
+    if (aluno?.data_nascimento) {
+      const idade = calculateAge(aluno.data_nascimento);
+      if (idade < 16) {
+        return { error: "Você precisa ter 16 anos para participar do Gênezi Conecta." };
+      }
+      if (idade < 18) {
+        if (!menorComTermo) {
+          return {
+            error: "Declare que será acompanhado por um responsável legal nas entrevistas antes de ativar.",
+          };
+        }
+        menorComTermoConfirmado = true;
+      }
+    }
   }
 
   const { error } = await supabase.from("perfis_conecta").upsert(
-    { aluno_id: user.id, tipo: "aluno", visivel },
+    {
+      aluno_id: user.id,
+      tipo: "aluno",
+      visivel,
+      // Omitido (não incluído no payload) quando não é o caso — upsert com onConflict só
+      // atualiza as colunas presentes aqui, então o valor já salvo (ex.: true de uma ativação
+      // anterior) não é apagado ao simplesmente desativar a visibilidade.
+      ...(menorComTermoConfirmado ? { menor_com_termo: true } : {}),
+    },
     { onConflict: "aluno_id" },
   );
 
