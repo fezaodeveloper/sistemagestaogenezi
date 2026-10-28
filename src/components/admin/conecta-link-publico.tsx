@@ -5,7 +5,7 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const URL_PUBLICA_VAGAS = "https://sistemagestaogenezi.vercel.app/conecta/vagas";
+const URL_PUBLICA_VAGAS = `${(process.env.NEXT_PUBLIC_SITE_URL || "https://escola.genezi.com.br").replace(/\/+$/, "")}/conecta/vagas`;
 
 // Mesmo padrão de ChaveGeradaCard (src/components/admin/api-keys-view.tsx)
 // / PixCopiaCola — clipboard pode não estar disponível, a URL continua

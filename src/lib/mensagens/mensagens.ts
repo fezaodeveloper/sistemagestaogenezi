@@ -191,7 +191,7 @@ export async function enviarMensagemMatriculaCriada(
     const { data } = await admin
       .from("matriculas")
       .select(
-        "turma_id, alunos(id, telefone, email, senha_portal, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))",
+        "turma_id, alunos(id, telefone, email, senha_portal, participa_conecta, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))",
       )
       .eq("id", matriculaId)
       .single();
@@ -204,6 +204,7 @@ export async function enviarMensagemMatriculaCriada(
             telefone: string;
             email: string;
             senha_portal: string | null;
+            participa_conecta: boolean;
             profiles: { full_name: string | null } | null;
           } | null;
           turmas: { nome: string; horario_aula: string | null; cursos: { nome: string } | null } | null;
@@ -243,6 +244,13 @@ export async function enviarMensagemMatriculaCriada(
     // padrão de bearer-implícito via UUID já aceito nas outras rotas públicas do portal.
     const linkContratoTexto = `📝 Assine seu contrato:\n${baseUrl}/contrato/${matriculaId}/assinar`;
 
+    // Gênezi Conecta (TAREFA: matrícula com opção "Participar do Gênezi Conecta") — o termo de
+    // participação em si é assinado dentro do portal (/aluno/conecta, ver
+    // src/app/aluno/conecta/page.tsx), não aqui; esta linha só avisa e leva pro portal.
+    const blocoConectaTexto = matricula.alunos.participa_conecta
+      ? `\n\n📋 Para participar do Gênezi Conecta, acesse seu portal e assine o termo de participação:\n${baseUrl}/aluno/conecta`
+      : "";
+
     await enviarMensagem({
       tipo: "matricula_criada",
       matriculaId,
@@ -261,7 +269,7 @@ export async function enviarMensagemMatriculaCriada(
       // URL em linha própria: no WhatsApp mobile, texto e link na MESMA linha (só um espaço
       // entre eles) nem sempre fica clicável — quebrar antes do link resolve isso. Ordem:
       // credenciais do portal, depois link de assinatura do contrato, depois comprovante.
-      sufixoTexto: `${credenciaisTexto}\n\n${linkContratoTexto}\n\n📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf`,
+      sufixoTexto: `${credenciaisTexto}\n\n${linkContratoTexto}\n\n📄 Baixe seu comprovante de matrícula:\n${baseUrl}/api/comprovantes/${matriculaId}/pdf${blocoConectaTexto}`,
     });
 
     // GênZap Fase 3 — fluxos personalizados com gatilho "matricula_criada", além do template

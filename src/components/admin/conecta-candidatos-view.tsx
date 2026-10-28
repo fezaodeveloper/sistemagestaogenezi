@@ -2,8 +2,12 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, UserRound, XCircle } from "lucide-react";
-import { cancelarAssinaturaCandidato } from "@/app/admin/conecta/candidatos/actions";
+import { Mail, Search, Trash2, UserRound, XCircle } from "lucide-react";
+import {
+  cancelarAssinaturaCandidato,
+  excluirCandidatoExterno,
+  reenviarAcessoCandidato,
+} from "@/app/admin/conecta/candidatos/actions";
 import {
   DISPONIBILIDADE_LABELS,
   PLANO_CONECTA_INFO,
@@ -11,6 +15,17 @@ import {
   type CandidatosExternosResultado,
   type PerfilConecta,
 } from "@/lib/conecta/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -105,6 +120,100 @@ function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, menorComT
   );
 }
 
+function ReenviarAcessoButton({ id }: { id: string }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [enviado, setEnviado] = useState(false);
+
+  function handleClick() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await reenviarAcessoCandidato(id);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setEnviado(true);
+      window.setTimeout(() => setEnviado(false), 3000);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={handleClick}>
+        <Mail className="size-4" />
+        {isPending ? "Enviando..." : enviado ? "Enviado!" : "Reenviar acesso"}
+      </Button>
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
+  );
+}
+
+function ExcluirCandidatoButton({
+  id,
+  nome,
+  onExcluido,
+}: {
+  id: string;
+  nome: string;
+  onExcluido: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleExcluir() {
+    startTransition(async () => {
+      const resultado = await excluirCandidatoExterno(id);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onExcluido();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm" className="text-destructive">
+            <Trash2 className="size-4" />
+            Excluir
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir candidato</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja excluir &quot;{nome}&quot;? Isso cancela a assinatura no Asaas
+            (se houver) e remove o perfil e a conta de acesso. Essa ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+            {isPending ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function CandidatoExternoCard({ candidato, onAtualizado }: { candidato: PerfilConecta; onAtualizado: () => void }) {
   return (
     <Card>
@@ -133,11 +242,19 @@ function CandidatoExternoCard({ candidato, onAtualizado }: { candidato: PerfilCo
           <span>Plano: {candidato.plano ? PLANO_CONECTA_INFO[candidato.plano].label : "—"}</span>
           <span>Cadastrado em {formatDateBR(candidato.created_at)}</span>
         </div>
-        {candidato.esta_ativo && (
-          <div className="flex flex-wrap gap-2">
-            <CancelarAssinaturaButton candidato={candidato} onCancelado={onAtualizado} />
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {candidato.esta_ativo && (
+            <>
+              <ReenviarAcessoButton id={candidato.id} />
+              <CancelarAssinaturaButton candidato={candidato} onCancelado={onAtualizado} />
+            </>
+          )}
+          <ExcluirCandidatoButton
+            nome={candidato.nome ?? "candidato"}
+            id={candidato.id}
+            onExcluido={onAtualizado}
+          />
+        </div>
       </CardContent>
     </Card>
   );

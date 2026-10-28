@@ -164,6 +164,7 @@ export default async function EditarAlunoPage({ params }: { params: Promise<{ id
           estado: aluno.estado ?? "",
           observacoes: aluno.observacoes ?? "",
           status_aluno: aluno.status_aluno,
+          participa_conecta: aluno.participa_conecta,
           responsavel_nome: responsavel?.nome,
           responsavel_cpf: responsavel?.cpf,
           responsavel_telefone: responsavel?.telefone,

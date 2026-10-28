@@ -47,6 +47,7 @@ export type EmpresaConecta = {
   logo_path: string | null;
   descricao: string | null;
   endereco: string | null;
+  numero: string | null;
   link_maps: string | null;
   status: EmpresaStatus;
   aprovada_em: string | null;
@@ -191,6 +192,8 @@ export type PerfilConecta = {
   // alunos.data_nascimento, não duplicada aqui — ver toggleVisibilidadePerfil).
   data_nascimento: string | null;
   menor_com_termo: boolean;
+  termo_conecta_aceito: boolean;
+  termo_conecta_data: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -260,6 +263,11 @@ export const empresaCadastroSchema = z.object({
   estado: z.string().trim().max(2).optional(),
   site: z.string().trim().max(300).optional(),
   endereco: z.string().trim().max(300).optional(),
+  numero: z
+    .string({ error: "Informe o número." })
+    .trim()
+    .min(1, { error: "Informe o número." })
+    .max(20),
   link_maps: z.string().trim().max(500).optional(),
   nome_responsavel: z
     .string({ error: "Informe o nome do responsável." })

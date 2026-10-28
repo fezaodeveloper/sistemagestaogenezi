@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExternalLink, MessageCircle, QrCode } from "lucide-react";
 import { buscarCobrancaAsaas, buscarQrCodePixConecta } from "@/lib/asaas/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { AguardandoPagamentoPoller } from "@/components/conecta/aguardando-pagamento-poller";
 import { PixCopiaCola } from "@/components/conecta/pix-copia-cola";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -78,6 +79,8 @@ export default async function ConectaAguardandoPagamentoPage({
             </p>
           </CardContent>
         </Card>
+
+        {paymentId && <AguardandoPagamentoPoller paymentId={paymentId} />}
 
         {(pix ?? cobranca?.invoiceUrl) && (
           <Card>

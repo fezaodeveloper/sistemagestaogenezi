@@ -128,6 +128,7 @@ type AlunoFormValuesEcho = {
   estado: string;
   observacoes: string;
   status_aluno: string;
+  participa_conecta: boolean;
   responsavel_nome: string;
   responsavel_cpf: string;
   responsavel_telefone: string;
@@ -168,6 +169,7 @@ function echoEditValues(formData: FormData): AlunoFormValuesEcho {
     estado: String(formData.get("estado") ?? ""),
     observacoes: String(formData.get("observacoes") ?? ""),
     status_aluno: String(formData.get("status_aluno") ?? "ativo"),
+    participa_conecta: formData.get("participa_conecta") === "on",
     responsavel_nome: String(formData.get("responsavel_nome") ?? ""),
     responsavel_cpf: String(formData.get("responsavel_cpf") ?? ""),
     responsavel_telefone: String(formData.get("responsavel_telefone") ?? ""),
@@ -196,6 +198,7 @@ function parseCommonFields(formData: FormData) {
     estado: formData.get("estado") || undefined,
     observacoes: formData.get("observacoes") || undefined,
     status_aluno: formData.get("status_aluno") || undefined,
+    participa_conecta: formData.get("participa_conecta") === "on",
     responsavel_nome: formData.get("responsavel_nome") || undefined,
     responsavel_cpf: formData.get("responsavel_cpf") || undefined,
     responsavel_telefone: formData.get("responsavel_telefone") || undefined,
@@ -283,6 +286,7 @@ export async function createAluno(
     estado: data.estado ?? null,
     observacoes: data.observacoes ?? null,
     status_aluno: data.status_aluno,
+    participa_conecta: data.participa_conecta,
     // user_id é redundante com o próprio id (ambos apontam pro mesmo usuário
     // Auth recém-criado) — a coluna existe pra permitir, futuramente, um
     // aluno cujo cadastro não tenha (ainda) uma conta vinculada.
@@ -448,6 +452,7 @@ export async function updateAluno(
     estado: data.estado ?? null,
     observacoes: data.observacoes ?? null,
     status_aluno: data.status_aluno,
+    participa_conecta: data.participa_conecta,
   };
   // Debug temporário — investigar "salva sem erro mas não persiste". id vai junto: se o filtro
   // .eq("id", id) estiver com o valor errado, o UPDATE não erra, só não afeta linha nenhuma (RLS

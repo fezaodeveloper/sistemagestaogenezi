@@ -5,6 +5,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { enviarWhatsappEmpresaAprovada } from "@/lib/conecta/whatsapp";
+import { enviarEmpresaAprovada } from "@/lib/resend/emails";
 import { getContagemCandidatosDisponiveis, getVagasDaEmpresa } from "@/lib/conecta/empresas";
 import type {
   AtividadeRecenteConecta,
@@ -190,13 +192,25 @@ export async function ativarEmpresa(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: empresa, error } = await supabase
     .from("empresas_conecta")
     .update({ status: "ativa", aprovada_em: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("nome_empresa, email, whatsapp")
+    .maybeSingle();
 
   if (error) {
     return { error: "Não foi possível ativar a empresa. Tente novamente." };
+  }
+
+  // Best-effort — a aprovação já aconteceu com sucesso acima. Nunca inclui a senha em texto
+  // puro (o Supabase Auth nunca devolve a senha de volta, só o hash) — a mensagem só orienta a
+  // empresa a usar a senha que ela mesma cadastrou.
+  if (empresa) {
+    await enviarEmpresaAprovada(empresa.email, empresa.nome_empresa);
+    if (empresa.whatsapp) {
+      await enviarWhatsappEmpresaAprovada(empresa.whatsapp, empresa.nome_empresa, empresa.email);
+    }
   }
 
   revalidatePath("/admin/conecta");

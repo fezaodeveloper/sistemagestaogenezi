@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateAge } from "@/lib/alunos/schema";
+import { cancelarAssinaturaConecta } from "@/lib/asaas/client";
 import { getVagasPublicasConecta } from "@/lib/conecta/publico";
 import { notificarNovoCandidatoTelegram } from "@/lib/conecta/telegram";
 import {
@@ -81,10 +82,15 @@ export async function salvarPerfilConecta(formData: FormData): Promise<{ error?:
   // upsert com onConflict em aluno_id (unique na tabela) — cobre tanto o
   // primeiro salvamento (linha ainda não existe) quanto edições
   // seguintes, sem precisar checar antes se já existe uma linha.
+  // tipo NUNCA entra no payload: a coluna tem default 'aluno' (cobre o INSERT de uma linha
+  // nova), mas se já existir uma linha 'externo' (candidato pago editando o próprio perfil em
+  // /aluno/conecta, que usa a mesma role 'aluno'), incluir tipo:"aluno" aqui sobrescreveria o
+  // ON CONFLICT e flipparia esse candidato pra 'aluno' — a policy RLS de visibilidade pra
+  // empresas libera QUALQUER perfil tipo='aluno' sem checar assinatura, então isso seria um
+  // jeito de burlar a cobrança (ver "Empresas veem perfis visiveis e ativos" na migration).
   const { error } = await supabase.from("perfis_conecta").upsert(
     {
       aluno_id: user.id,
-      tipo: "aluno",
       whatsapp: data.whatsapp ?? null,
       cidade: data.cidade ?? null,
       estado: data.estado ?? null,
@@ -125,12 +131,18 @@ export async function toggleVisibilidadePerfil(
   if (visivel) {
     const { data: perfil } = await supabase
       .from("perfis_conecta")
-      .select("whatsapp, cidade, estado")
+      .select("whatsapp, cidade, estado, termo_conecta_aceito")
       .eq("aluno_id", user.id)
       .maybeSingle();
 
     if (!perfil?.whatsapp) {
       return { error: "Informe seu WhatsApp antes de tornar o perfil visível." };
+    }
+    // Termo de participação (TAREFA: matrícula com opção "Participar do Gênezi Conecta") —
+    // nunca confia só na checagem do client (VisibilidadeToggle já desabilita o switch antes
+    // de aceitar), checa de novo aqui o valor já salvo em aceitarTermoParticipacaoConecta.
+    if (!perfil.termo_conecta_aceito) {
+      return { error: "Aceite o termo de participação antes de tornar o perfil visível." };
     }
     cidade = perfil.cidade;
     estado = perfil.estado;
@@ -155,7 +167,7 @@ export async function toggleVisibilidadePerfil(
   const { error } = await supabase.from("perfis_conecta").upsert(
     {
       aluno_id: user.id,
-      tipo: "aluno",
+      // tipo NUNCA entra no payload — ver comentário em salvarPerfilConecta acima.
       visivel,
       // Omitido (não incluído no payload) quando não é o caso — upsert com onConflict só
       // atualiza as colunas presentes aqui, então o valor já salvo (ex.: true de uma ativação
@@ -185,6 +197,66 @@ export async function toggleVisibilidadePerfil(
   return {};
 }
 
+// Termo de participação (TAREFA: matrícula com opção "Participar do Gênezi Conecta") — exigido
+// antes de ativar a visibilidade (ver toggleVisibilidadePerfil acima). Diferente do termo de
+// acompanhamento de menor (menor_com_termo): este é pedido a QUALQUER participante (aluno ou
+// externo), não só a quem tem 16-17 anos.
+export async function aceitarTermoParticipacaoConecta(): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  // tipo NUNCA entra no payload — ver comentário em salvarPerfilConecta (acima, neste arquivo).
+  const { error } = await supabase.from("perfis_conecta").upsert(
+    { aluno_id: user.id, termo_conecta_aceito: true, termo_conecta_data: new Date().toISOString() },
+    { onConflict: "aluno_id" },
+  );
+
+  if (error) {
+    return { error: "Não foi possível registrar o aceite do termo. Tente novamente." };
+  }
+
+  revalidatePath("/aluno/conecta");
+  return {};
+}
+
+// Cancelamento self-service pro candidato EXTERNO (diferente de cancelarAssinaturaCandidato em
+// src/app/admin/conecta/candidatos/actions.ts, que é a mesma operação feita pelo admin) —
+// confirma que a assinatura pertence mesmo ao usuário logado antes de cancelar no Asaas.
+export async function cancelarMinhaAssinaturaConecta(): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  const { data: perfil } = await supabase
+    .from("perfis_conecta")
+    .select("asaas_subscription_id")
+    .eq("aluno_id", user.id)
+    .eq("tipo", "externo")
+    .maybeSingle();
+
+  if (!perfil?.asaas_subscription_id) {
+    return { error: "Nenhuma assinatura ativa encontrada." };
+  }
+
+  try {
+    await cancelarAssinaturaConecta(perfil.asaas_subscription_id);
+  } catch {
+    // Best-effort — segue pra desativar o perfil local mesmo se a assinatura já não existir
+    // mais no Asaas (mesmo padrão de cancelarAssinaturaCandidato, admin/conecta/candidatos).
+  }
+
+  const { error } = await supabase
+    .from("perfis_conecta")
+    .update({ esta_ativo: false, visivel: false })
+    .eq("aluno_id", user.id);
+
+  if (error) {
+    return { error: "Não foi possível cancelar a assinatura. Tente novamente." };
+  }
+
+  revalidatePath("/aluno/conecta");
+  return {};
+}
+
 // Upload em si acontece do lado do client, direto pro Supabase Storage
 // (mesmo padrão de foto-aluno-upload.tsx) — essa action só grava o path já
 // pronto na tabela. curriculo_url guarda o NOME ORIGINAL do arquivo (só
@@ -199,8 +271,9 @@ export async function uploadCurriculoConecta(
   const user = await requireRole("aluno");
 
   const supabase = await createClient();
+  // tipo NUNCA entra no payload — ver comentário em salvarPerfilConecta (acima, neste arquivo).
   const { error } = await supabase.from("perfis_conecta").upsert(
-    { aluno_id: user.id, tipo: "aluno", curriculo_path: path, curriculo_url: nomeArquivo },
+    { aluno_id: user.id, curriculo_path: path, curriculo_url: nomeArquivo },
     { onConflict: "aluno_id" },
   );
 

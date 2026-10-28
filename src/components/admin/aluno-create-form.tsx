@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CpfInput } from "@/components/ui/cpf-input";
 import { TelefoneInput } from "@/components/ui/telefone-input";
@@ -98,6 +99,7 @@ export function AlunoCreateForm({
   const [responsavelTelefone, setResponsavelTelefone] = useState(values?.responsavel_telefone ?? "");
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState<string | null>(null);
+  const [participaConecta, setParticipaConecta] = useState(values?.participa_conecta ?? false);
   const [senhaTemporaria, setSenhaTemporaria] = useState(values?.senha_temporaria ?? "");
   const [copiado, setCopiado] = useState(false);
   const [erroSenha, setErroSenha] = useState<string | null>(null);
@@ -336,6 +338,17 @@ export function AlunoCreateForm({
               {errors.observacoes[0]}
             </p>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="participa_conecta"
+            checked={participaConecta}
+            onCheckedChange={(checked) => setParticipaConecta(checked === true)}
+          />
+          <Label htmlFor="participa_conecta" className="font-normal">
+            Participar do Gênezi Conecta
+          </Label>
+          <input type="hidden" name="participa_conecta" value={participaConecta ? "on" : ""} />
         </div>
       </div>
       </div>

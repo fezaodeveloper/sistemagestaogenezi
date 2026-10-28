@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { empresaCadastroSchema } from "@/lib/conecta/schema";
 import { notificarNovaEmpresaTelegram } from "@/lib/conecta/telegram";
+import { enviarWhatsappCadastroEmpresa } from "@/lib/conecta/whatsapp";
+import { enviarCadastroRecebidoEmpresa } from "@/lib/resend/emails";
 
 export type CadastroEmpresaState = { error?: string } | undefined;
 
@@ -99,17 +101,8 @@ export async function cadastrarEmpresa(
   _prevState: CadastroEmpresaState,
   formData: FormData,
 ): Promise<CadastroEmpresaState> {
-  // Código de acesso (TAREFA 2) — gate antes de qualquer outra validação/criação de conta;
-  // não é um campo do formulário persistido em empresas_conecta, só um portão de entrada.
-  const codigoEsperado = process.env.CONECTA_EMPRESA_CODIGO_ACESSO;
-  if (!codigoEsperado) {
-    console.error("[cadastrarEmpresa] CONECTA_EMPRESA_CODIGO_ACESSO não configurada no ambiente.");
-    return { error: "Cadastro de empresas temporariamente indisponível. Entre em contato com a escola." };
-  }
-  if (formData.get("codigo_acesso") !== codigoEsperado) {
-    return { error: "Código de acesso inválido. Entre em contato com a escola para obter o código." };
-  }
-
+  // Código de acesso REMOVIDO (TAREFA: remover código de acesso, qualquer empresa pode se
+  // cadastrar; aprovação é feita manualmente pelo admin via ativarEmpresa, que já existia).
   const parsed = empresaCadastroSchema.safeParse({
     nome_empresa: formData.get("nome_empresa"),
     cnpj: formData.get("cnpj") || undefined,
@@ -118,6 +111,7 @@ export async function cadastrarEmpresa(
     estado: formData.get("estado") || undefined,
     site: formData.get("site") || undefined,
     endereco: formData.get("endereco") || undefined,
+    numero: formData.get("numero"),
     link_maps: formData.get("link_maps") || undefined,
     nome_responsavel: formData.get("nome_responsavel"),
     email: formData.get("email"),
@@ -177,6 +171,7 @@ export async function cadastrarEmpresa(
       telefone: data.telefone ?? null,
       site: data.site ?? null,
       endereco: data.endereco ?? null,
+      numero: data.numero,
       link_maps: data.link_maps ?? null,
       setor: data.setor ?? null,
       cidade: data.cidade ?? null,
@@ -217,6 +212,11 @@ export async function cadastrarEmpresa(
     cidade: data.cidade ?? null,
     email: data.email,
   });
+
+  // Email + WhatsApp "cadastro recebido" pra EMPRESA (diferente da notificação Telegram acima,
+  // que é pro ADMIN) — best-effort, mesmo motivo dos demais.
+  await enviarCadastroRecebidoEmpresa(data.email, data.nome_empresa);
+  await enviarWhatsappCadastroEmpresa(data.whatsapp, data.nome_empresa, data.email);
 
   // Sign-in via client autenticado normal (não o admin) — é esse client que
   // grava os cookies de sessão na response, deixando a empresa já logada ao

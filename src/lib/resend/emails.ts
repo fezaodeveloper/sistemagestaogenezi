@@ -5,7 +5,9 @@ import { renderizarTemplate } from "@/lib/email/templates";
 import {
   templateAcessoConecta,
   templateBoasVindas,
+  templateCadastroRecebidoEmpresa,
   templateCertificado,
+  templateEmpresaAprovada,
   templateLembretePagamento,
   templatePremioDigital,
   templateRecuperacaoSenha,
@@ -36,6 +38,26 @@ export async function enviarAcessoConecta(
   if (!(await emailConfigurado())) return false;
   try {
     const { subject, html } = templateAcessoConecta(nome, recoveryLink, plano, para);
+    return await enviarEmail({ to: para, subject, html });
+  } catch {
+    return false;
+  }
+}
+
+export async function enviarCadastroRecebidoEmpresa(para: string, nomeEmpresa: string): Promise<boolean> {
+  if (!(await emailConfigurado())) return false;
+  try {
+    const { subject, html } = templateCadastroRecebidoEmpresa(nomeEmpresa, para);
+    return await enviarEmail({ to: para, subject, html });
+  } catch {
+    return false;
+  }
+}
+
+export async function enviarEmpresaAprovada(para: string, nomeEmpresa: string): Promise<boolean> {
+  if (!(await emailConfigurado())) return false;
+  try {
+    const { subject, html } = templateEmpresaAprovada(nomeEmpresa, para);
     return await enviarEmail({ to: para, subject, html });
   } catch {
     return false;

@@ -3,6 +3,12 @@ import "server-only";
 // Layout HTML compartilhado por todos os templates de email — inline de
 // propósito (REGRA da tarefa: sem CSS externo, a maioria dos clientes de
 // email não carrega <style> em <head> nem arquivos externos).
+const URL_SITE_PADRAO = "https://escola.genezi.com.br";
+
+function urlPortal(): string {
+  return (process.env.NEXT_PUBLIC_SITE_URL || URL_SITE_PADRAO).replace(/\/+$/, "");
+}
+
 const COR_HEADER = "#0f172a";
 const COR_TEXTO = "#1e293b";
 const COR_CTA = "#06b6d4";
@@ -49,7 +55,7 @@ export function templateBoasVindas(nome: string, email: string, senha: string): 
     <p><strong>Seus dados de acesso:</strong><br>
     Email: ${email}<br>
     Senha temporária: ${senha}</p>
-    ${botaoCta("Acessar o portal →", "https://sistemagestaogenezi.vercel.app/entrar")}
+    ${botaoCta("Acessar o portal →", `${urlPortal()}/entrar`)}
     <p>Recomendamos trocar a senha no primeiro acesso.</p>
   `;
   return { subject: "🎓 Bem-vindo à Gênezi Educação!", html: layoutBase(email, conteudo) };
@@ -67,9 +73,28 @@ export function templateAcessoConecta(
     <p>Clique no botão abaixo para criar sua senha e acessar o portal de empregos:</p>
     ${botaoCta("Criar minha senha →", recoveryLink)}
     <p>O link expira em 24 horas.</p>
-    <p>Após criar a senha, acesse: sistemagestaogenezi.vercel.app/entrar</p>
+    <p>Após criar a senha, acesse: ${urlPortal().replace(/^https?:\/\//, "")}/entrar</p>
   `;
   return { subject: "🎉 Gênezi Conecta — Seu acesso está pronto!", html: layoutBase(email, conteudo) };
+}
+
+export function templateCadastroRecebidoEmpresa(nomeEmpresa: string, email: string): EmailTemplate {
+  const conteudo = `
+    <p>Olá, ${nomeEmpresa}!</p>
+    <p>Recebemos seu cadastro na Gênezi Conecta e ele está em análise.</p>
+    <p>Em breve você receberá uma confirmação.</p>
+  `;
+  return { subject: "Cadastro recebido — Gênezi Conecta", html: layoutBase(email, conteudo) };
+}
+
+export function templateEmpresaAprovada(nomeEmpresa: string, email: string): EmailTemplate {
+  const conteudo = `
+    <p>Olá, ${nomeEmpresa}!</p>
+    <p>Seu cadastro na Gênezi Conecta foi aprovado! 🎉</p>
+    ${botaoCta("Acessar o painel →", `${urlPortal()}/empresa/login`)}
+    <p>Use o e-mail ${email} e a senha cadastrada no seu cadastro.</p>
+  `;
+  return { subject: "Seu cadastro foi aprovado! — Gênezi Conecta", html: layoutBase(email, conteudo) };
 }
 
 export function templateRecuperacaoSenha(nome: string, recoveryLink: string, email: string): EmailTemplate {

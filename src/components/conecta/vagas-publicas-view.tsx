@@ -6,14 +6,35 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
-import type { CidadeConectaComContagem } from "@/lib/conecta/schema";
+import { PLANOS_CONECTA, PLANO_CONECTA_INFO, type CidadeConectaComContagem, type PlanoConecta } from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ConectaHeader } from "@/components/conecta/conecta-header";
 import { ConectaCidadePopup } from "@/components/conecta/conecta-cidade-popup";
 import { ConectaFaq } from "@/components/conecta/conecta-faq";
 import { ConectaWhatsappFlutuante } from "@/components/conecta/conecta-whatsapp-flutuante";
+
+function PlanoPublicoCard({ plano }: { plano: PlanoConecta }) {
+  const info = PLANO_CONECTA_INFO[plano];
+  const href = plano === "basico" ? "/conecta/cadastro" : `/conecta/cadastro?plano=${plano}`;
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-2 py-6 text-center">
+        <span className="text-primary text-sm font-semibold uppercase">{info.label}</span>
+        <span className="text-2xl font-bold">
+          R$ {info.valor.toFixed(2).replace(".", ",")}
+          <span className="text-muted-foreground text-sm font-normal">/mês</span>
+        </span>
+        <p className="text-muted-foreground text-sm">{info.descricao}</p>
+        <Button nativeButton={false} render={<Link href={href} />} className="mt-2">
+          Assinar
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 const COMO_FUNCIONA_ITENS = [
   { emoji: "🎓", titulo: "Alunos Gênezi", texto: "Acesso gratuito. Acesse o portal do aluno e candidate-se com seu perfil." },
@@ -83,6 +104,24 @@ export function ConectaVagasPublicasView({
               className="pl-9"
             />
           </div>
+        </section>
+
+        <section id="planos" className="flex flex-col gap-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold">Acesse as vagas — Escolha seu plano</h2>
+            <p className="text-muted-foreground text-sm">Para quem não é aluno da Gênezi.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {PLANOS_CONECTA.map((plano) => (
+              <PlanoPublicoCard key={plano} plano={plano} />
+            ))}
+          </div>
+          <p className="text-muted-foreground text-center text-sm">
+            Aluno da Gênezi?{" "}
+            <Link href="/aluno/conecta" className="text-foreground underline underline-offset-2">
+              Acesso gratuito →
+            </Link>
+          </p>
         </section>
 
         <section id="cidades" className="flex flex-col gap-4">

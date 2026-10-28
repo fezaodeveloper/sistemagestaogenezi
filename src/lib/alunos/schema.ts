@@ -136,6 +136,7 @@ const commonAlunoFields = {
   estado: z.string().trim().max(2, { error: "Use a sigla do estado (2 letras)." }).optional(),
   observacoes: z.string().trim().max(2000, { error: "Observações muito longas." }).optional(),
   status_aluno: z.enum(STATUS_ALUNO_VALUES).default("ativo"),
+  participa_conecta: z.boolean().default(false),
   responsavel_nome: z.string().trim().optional(),
   responsavel_cpf: z.string().trim().optional(),
   responsavel_telefone: z.string().trim().optional(),
@@ -220,6 +221,7 @@ export type Aluno = {
   estado: string | null;
   observacoes: string | null;
   status_aluno: StatusAluno;
+  participa_conecta: boolean;
   user_id: string | null;
   foto_url: string | null;
   foto_path: string | null;

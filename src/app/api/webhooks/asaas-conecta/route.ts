@@ -1,10 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
-import { enviarAcessoConecta } from "@/lib/resend/emails";
+import { enviarAcessoConectaCandidato } from "@/lib/conecta/acesso";
 import { notificarNovoCandidatoTelegram } from "@/lib/conecta/telegram";
 
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN ?? "";
-const APP_URL = "https://sistemagestaogenezi.vercel.app";
 
 // Endpoint SEPARADO do webhook financeiro (src/app/api/webhooks/asaas/route.ts,
 // REGRA da tarefa) — Gênezi Conecta cobra por assinatura recorrente, não por
@@ -26,47 +25,6 @@ type AsaasConectaWebhookPayload = {
   };
 };
 
-// Best-effort de verdade: nunca deve impedir a ativação do perfil (que já
-// aconteceu com sucesso antes desta chamada) — qualquer falha aqui (Resend
-// não configurado, generateLink com erro, e-mail sem match) só é
-// engolida. O candidato nunca soube a senha temporária gerada no cadastro
-// (REGRA da tarefa) — este link de recovery é a única forma dele criar a
-// própria senha e conseguir entrar em /entrar depois.
-//
-// O link enviado por email é construído a partir de hashed_token, NÃO do
-// action_link cru devolvido por generateLink: action_link aponta pro
-// endpoint hospedado do próprio Supabase (auth/v1/verify), que verifica o
-// token e redireciona de volta com os tokens de sessão no FRAGMENTO da URL
-// (#access_token=...) — invisível pro nosso /auth/callback, que é um Route
-// Handler server-side (nunca recebe fragmento). Construindo o link direto
-// pro nosso /auth/callback com token_hash+type na query string, o
-// verifyOtp de lá funciona de verdade — mesmo padrão que o próprio Supabase
-// documenta pra quem envia o email de recovery por conta própria (não pelo
-// SMTP integrado dele).
-async function enviarLinkAcessoConecta(
-  supabase: ReturnType<typeof createAdminClient>,
-  perfil: { nome: string | null; email: string | null; plano: string | null },
-): Promise<void> {
-  if (!perfil.email) return;
-
-  try {
-    const { data: linkData } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email: perfil.email,
-      options: { redirectTo: `${APP_URL}/conecta/criar-senha` },
-    });
-
-    const hashedToken = linkData?.properties?.hashed_token;
-    if (!hashedToken) return;
-
-    const recoveryLink = `${APP_URL}/auth/callback?token_hash=${hashedToken}&type=recovery`;
-
-    await enviarAcessoConecta(perfil.email, perfil.nome ?? "candidato", recoveryLink, perfil.plano ?? "—");
-  } catch {
-    // Best-effort — ver comentário acima.
-  }
-}
-
 async function processarEvento(
   supabase: ReturnType<typeof createAdminClient>,
   payload: AsaasConectaWebhookPayload,
@@ -81,37 +39,39 @@ async function processarEvento(
         .from("perfis_conecta")
         .update({ esta_ativo: true, visivel: true })
         .eq("asaas_subscription_id", subscriptionId)
-        .select("nome, email, plano, cidade, estado")
+        .select("nome, email, whatsapp, plano, cidade, estado")
         .maybeSingle();
 
       if (error) return "Não foi possível ativar o perfil do candidato.";
+      if (!perfil) return "Nenhum perfil encontrado para esta assinatura (asaas_subscription_id sem match).";
 
       // Best-effort — a ativação já aconteceu com sucesso acima.
-      if (perfil) {
-        try {
-          await dispararEvento(
-            "conecta.pagamento.confirmado",
-            { nome: perfil.nome ?? "—", plano: perfil.plano ?? "—" },
-            `conecta-pagamento-confirmado-${subscriptionId}`,
-          );
-        } catch {
-          // Best-effort — ver comentário acima.
-        }
-
-        // Notificação Telegram do CONECTA (chat dedicado, ver src/lib/conecta/telegram.ts) —
-        // complementar à de dispararEvento acima, que vai pro Telegram GERAL da escola via
-        // notificarConectaPagamentoConfirmado (handlers/telegram.ts), com um texto diferente.
-        await notificarNovoCandidatoTelegram({
-          nome: perfil.nome ?? "—",
-          tipo: "externo",
-          cidade: perfil.cidade,
-          estado: perfil.estado,
-        });
-
-        await enviarLinkAcessoConecta(supabase, perfil);
+      try {
+        await dispararEvento(
+          "conecta.pagamento.confirmado",
+          { nome: perfil.nome ?? "—", plano: perfil.plano ?? "—" },
+          `conecta-pagamento-confirmado-${subscriptionId}`,
+        );
+      } catch {
+        // Best-effort — ver comentário acima.
       }
 
-      return null;
+      // Notificação Telegram do CONECTA (chat dedicado, ver src/lib/conecta/telegram.ts) —
+      // complementar à de dispararEvento acima, que vai pro Telegram GERAL da escola via
+      // notificarConectaPagamentoConfirmado (handlers/telegram.ts), com um texto diferente.
+      await notificarNovoCandidatoTelegram({
+        nome: perfil.nome ?? "—",
+        tipo: "externo",
+        cidade: perfil.cidade,
+        estado: perfil.estado,
+      });
+
+      // Email + WhatsApp de acesso (link de criação de senha) — o retorno NÃO bloqueia a
+      // ativação (que já aconteceu com sucesso acima), mas o erro é propagado pro log
+      // (log_webhooks_conecta.erro) em vez de engolido em silêncio: foi exatamente esse silêncio
+      // que escondeu o incidente original (candidato pago sem receber nenhum acesso).
+      const resultadoAcesso = await enviarAcessoConectaCandidato(perfil);
+      return resultadoAcesso.erro;
     }
     case "PAYMENT_OVERDUE": {
       const subscriptionId = payload.payment?.subscription;

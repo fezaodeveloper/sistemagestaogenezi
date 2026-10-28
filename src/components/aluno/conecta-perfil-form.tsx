@@ -3,6 +3,8 @@
 import { useRef, useState, useTransition } from "react";
 import { Eye, FileText, RotateCw, Trash2 } from "lucide-react";
 import {
+  aceitarTermoParticipacaoConecta,
+  cancelarMinhaAssinaturaConecta,
   getUrlCurriculoConecta,
   removerCurriculoConecta,
   salvarPerfilConecta,
@@ -20,6 +22,7 @@ import {
   DISPONIBILIDADES,
   MODALIDADE_PREFERIDA_LABELS,
   MODALIDADES_PREFERIDAS,
+  PLANO_CONECTA_INFO,
   type PerfilConecta,
 } from "@/lib/conecta/schema";
 import {
@@ -62,6 +65,8 @@ function VisibilidadeToggle({
 }) {
   const [visivel, setVisivel] = useState(perfil?.visivel ?? false);
   const [termoAceito, setTermoAceito] = useState(perfil?.menor_com_termo ?? false);
+  const [termoParticipacaoAceito, setTermoParticipacaoAceito] = useState(perfil?.termo_conecta_aceito ?? false);
+  const [isPendingTermoParticipacao, startTransitionTermoParticipacao] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -70,8 +75,24 @@ function VisibilidadeToggle({
   const menorDe16 = idade !== null && idade < 16;
   const precisaTermo = idade !== null && idade >= 16 && idade < 18;
 
+  function handleAceitarTermoParticipacao() {
+    setError(null);
+    startTransitionTermoParticipacao(async () => {
+      const resultado = await aceitarTermoParticipacaoConecta();
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setTermoParticipacaoAceito(true);
+    });
+  }
+
   function handleChange(novoValor: boolean) {
     setError(null);
+    if (novoValor && !termoParticipacaoAceito) {
+      setError("Aceite o termo de participação antes de ativar.");
+      return;
+    }
     if (novoValor && precisaTermo && !termoAceito) {
       setError("Marque a declaração de acompanhamento por responsável legal antes de ativar.");
       return;
@@ -100,13 +121,31 @@ function VisibilidadeToggle({
           <Switch
             checked={visivel}
             onCheckedChange={handleChange}
-            disabled={isPending || menorDe16}
+            disabled={isPending || menorDe16 || !termoParticipacaoAceito}
             title={menorDe16 ? "Você precisa ter 16 anos para participar do Gênezi Conecta" : undefined}
           />
         </div>
 
         {menorDe16 && (
           <p className="text-muted-foreground text-sm">Você poderá participar a partir dos 16 anos.</p>
+        )}
+
+        {!termoParticipacaoAceito && !menorDe16 && (
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <p className="text-sm">
+              Para participar do Gênezi Conecta, você precisa aceitar o termo de participação.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="w-fit"
+              disabled={isPendingTermoParticipacao}
+              onClick={handleAceitarTermoParticipacao}
+            >
+              {isPendingTermoParticipacao ? "Registrando..." : "Aceitar termo de participação"}
+            </Button>
+          </div>
         )}
 
         {precisaTermo && !visivel && (
@@ -296,6 +335,93 @@ function CurriculoUpload({ perfil }: { perfil: PerfilConecta | null }) {
   );
 }
 
+// Só pra candidato EXTERNO (assinante pago) — aluno não tem plano/assinatura, não renderiza.
+function MinhaAssinaturaConecta({ perfil }: { perfil: PerfilConecta }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleCancelar() {
+    startTransition(async () => {
+      const resultado = await cancelarMinhaAssinaturaConecta();
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+    });
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 py-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="font-medium">Minha assinatura</p>
+            <p className="text-muted-foreground text-sm">
+              Plano {perfil.plano ? PLANO_CONECTA_INFO[perfil.plano].label : "—"}
+            </p>
+          </div>
+          <Badge
+            className={
+              perfil.esta_ativo
+                ? "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                : "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400"
+            }
+          >
+            {perfil.esta_ativo ? "Ativa" : "Inativa"}
+          </Badge>
+        </div>
+
+        {!perfil.esta_ativo && (
+          <p className="text-muted-foreground text-sm">
+            ⚠️ Aguardando confirmação do pagamento. Se você já pagou e isso não mudou, fale com a
+            escola.
+          </p>
+        )}
+
+        {perfil.esta_ativo && (
+          <AlertDialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+              setOpen(nextOpen);
+              if (nextOpen) setError(null);
+            }}
+          >
+            <AlertDialogTrigger
+              render={
+                <Button type="button" variant="outline" size="sm" className="text-destructive w-fit">
+                  Cancelar assinatura
+                </Button>
+              }
+            />
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancelar assinatura</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja cancelar sua assinatura do Gênezi Conecta? Seu perfil
+                  deixa de ficar visível para empresas.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {error && (
+                <p role="alert" className="text-destructive text-sm">
+                  {error}
+                </p>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleCancelar}>
+                  {isPending ? "Cancelando..." : "Cancelar assinatura"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ConectaPerfilForm({
   perfilInicial,
   cursosConcluidos,
@@ -330,6 +456,8 @@ export function ConectaPerfilForm({
   return (
     <div className="flex flex-col gap-4 pt-4">
       <VisibilidadeToggle perfil={perfilInicial} idade={idade} textoTermoMenor={textoTermoMenor} />
+
+      {perfilInicial?.tipo === "externo" && <MinhaAssinaturaConecta perfil={perfilInicial} />}
 
       <Card>
         <CardHeader>

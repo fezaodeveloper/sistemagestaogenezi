@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { cadastrarCandidatoExterno, type CadastroCandidatoExternoState } from "@/app/conecta/cadastro/actions";
 import { calculateAge } from "@/lib/alunos/schema";
+import { UFS_BRASIL, type UfBrasil } from "@/lib/campanha-paginas/schema";
 import {
   FORMA_PAGAMENTO_CONECTA_LABELS,
   FORMAS_PAGAMENTO_CONECTA,
@@ -21,7 +22,10 @@ import { CpfInput } from "@/components/ui/cpf-input";
 import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const UF_ITEMS = Object.fromEntries(UFS_BRASIL.map((uf) => [uf, uf]));
 
 const IDADE_MINIMA = 16;
 
@@ -58,7 +62,13 @@ function PlanoCard({ plano, selecionado }: { plano: PlanoConecta; selecionado: b
   );
 }
 
-export function ConectaCadastroExternoForm({ textoTermoMenor }: { textoTermoMenor: string }) {
+export function ConectaCadastroExternoForm({
+  textoTermoMenor,
+  planoInicial,
+}: {
+  textoTermoMenor: string;
+  planoInicial?: PlanoConecta;
+}) {
   const [state, formAction] = useActionState<CadastroCandidatoExternoState, FormData>(
     cadastrarCandidatoExterno,
     undefined,
@@ -69,11 +79,37 @@ export function ConectaCadastroExternoForm({ textoTermoMenor }: { textoTermoMeno
   const [dataNascimento, setDataNascimento] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [cpf, setCpf] = useState("");
+  const [estado, setEstado] = useState<UfBrasil | "">("");
   const [cidade, setCidade] = useState("");
-  const [estado, setEstado] = useState("");
-  const [plano, setPlano] = useState<PlanoConecta>("basico");
+  const [municipiosCarregados, setMunicipiosCarregados] = useState<{ uf: UfBrasil; lista: readonly string[] } | null>(
+    null,
+  );
+  const [plano, setPlano] = useState<PlanoConecta>(planoInicial ?? "basico");
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoConecta>("PIX");
   const [termoAcompanhamento, setTermoAcompanhamento] = useState(false);
+
+  // Município por UF — lista estática do IBGE (ver src/lib/ibge/municipios.ts), mesmo padrão já
+  // usado no formulário público de campanha (src/components/campanha/campanha-publica-view.tsx):
+  // import dinâmico porque o arquivo é grande (5571 municípios), só carrega quando alguém
+  // escolhe um estado.
+  useEffect(() => {
+    if (!estado) return;
+    let cancelado = false;
+    import("@/lib/ibge/municipios").then(({ MUNICIPIOS_POR_UF }) => {
+      if (!cancelado) setMunicipiosCarregados({ uf: estado, lista: MUNICIPIOS_POR_UF[estado] });
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [estado]);
+
+  const municipios = municipiosCarregados?.uf === estado ? municipiosCarregados.lista : [];
+  const municipioItems = Object.fromEntries(municipios.map((municipio) => [municipio, municipio]));
+
+  function escolherEstado(uf: string | null) {
+    setEstado((uf ?? "") as UfBrasil | "");
+    setCidade("");
+  }
 
   // Feedback imediato no client (a validação de verdade é refeita no servidor, em
   // cadastrarCandidatoExterno — nunca confia só nesta checagem).
@@ -144,19 +180,40 @@ export function ConectaCadastroExternoForm({ textoTermoMenor }: { textoTermoMeno
                 <CpfInput id="cpf" name="cpf" value={cpf} onValueChange={setCpf} required />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cidade">Cidade</Label>
-                <Input id="cidade" name="cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} />
+                <Label htmlFor="estado">Estado</Label>
+                <Select name="estado" items={UF_ITEMS} value={estado} onValueChange={escolherEstado}>
+                  <SelectTrigger id="estado" className="w-full">
+                    <SelectValue placeholder="Selecione o estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UFS_BRASIL.map((uf) => (
+                      <SelectItem key={uf} value={uf}>
+                        {uf}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="estado">Estado</Label>
-                <Input
-                  id="estado"
-                  name="estado"
-                  maxLength={2}
-                  placeholder="UF"
-                  value={estado}
-                  onChange={(e) => setEstado(e.target.value.toUpperCase())}
-                />
+                <Label htmlFor="cidade">Cidade</Label>
+                <Select
+                  name="cidade"
+                  items={municipioItems}
+                  value={cidade}
+                  onValueChange={(valor) => setCidade(valor ?? "")}
+                  disabled={!estado}
+                >
+                  <SelectTrigger id="cidade" className="w-full">
+                    <SelectValue placeholder={estado ? "Selecione a cidade" : "Selecione o estado primeiro"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {municipios.map((municipio) => (
+                      <SelectItem key={municipio} value={municipio}>
+                        {municipio}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

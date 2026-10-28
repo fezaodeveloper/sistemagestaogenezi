@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { cancelarAssinaturaConecta } from "@/lib/asaas/client";
+import { enviarAcessoConectaCandidato } from "@/lib/conecta/acesso";
 import type {
   AlunoVisivelConecta,
   AlunosVisiveisFiltro,
@@ -152,6 +154,86 @@ export async function cancelarAssinaturaCandidato(id: string): Promise<{ error?:
 
   if (error) {
     return { error: "Não foi possível cancelar a assinatura. Tente novamente." };
+  }
+
+  revalidatePath("/admin/conecta/candidatos");
+  return {};
+}
+
+// Ferramenta manual pro incidente "candidato pagou e não recebeu acesso" (ver
+// src/lib/conecta/acesso.ts): reenvia o mesmo email+WhatsApp de ativação que o webhook
+// asaas-conecta dispara automaticamente, pra casos em que o envio original falhou (domínio de
+// email mal configurado, WhatsApp desligado no momento, etc.) e o candidato já está com
+// esta_ativo = true mas nunca recebeu o link.
+export async function reenviarAcessoCandidato(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data: perfil } = await supabase
+    .from("perfis_conecta")
+    .select("nome, email, whatsapp, plano, esta_ativo")
+    .eq("id", id)
+    .eq("tipo", "externo")
+    .maybeSingle();
+
+  if (!perfil) {
+    return { error: "Candidato não encontrado." };
+  }
+  if (!perfil.esta_ativo) {
+    return { error: "O perfil ainda não está ativo (pagamento não confirmado)." };
+  }
+
+  const resultado = await enviarAcessoConectaCandidato(perfil);
+  if (resultado.erro) {
+    return { error: resultado.erro };
+  }
+
+  return {};
+}
+
+// Exclusão de verdade (diferente de cancelarAssinaturaCandidato acima, que só desativa/oculta):
+// cancela a assinatura no Asaas (se houver) e remove o candidato por completo — perfil e conta de
+// acesso. Client admin de propósito: delete em perfis_conecta e auth.admin.deleteUser exigem o
+// bypass do service_role (mesmo padrão de deleteAluno em admin/alunos/actions.ts).
+export async function excluirCandidatoExterno(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const admin = createAdminClient();
+  const { data: perfil } = await admin
+    .from("perfis_conecta")
+    .select("aluno_id, asaas_subscription_id")
+    .eq("id", id)
+    .eq("tipo", "externo")
+    .maybeSingle();
+
+  if (!perfil) {
+    return { error: "Candidato não encontrado." };
+  }
+
+  if (perfil.asaas_subscription_id) {
+    try {
+      await cancelarAssinaturaConecta(perfil.asaas_subscription_id);
+    } catch {
+      // Best-effort — segue pra excluir o perfil local mesmo se a assinatura já não existir mais
+      // no Asaas (ex.: já tinha sido cancelada antes).
+    }
+  }
+
+  const { error } = await admin.from("perfis_conecta").delete().eq("id", id);
+  if (error) {
+    return { error: "Não foi possível excluir o candidato. Tente novamente." };
+  }
+
+  // aluno_id é o próprio auth.users.id do candidato externo (ver cadastrarCandidatoExterno) —
+  // remover a conta de acesso junto, senão o email fica "preso" numa conta órfã que nunca mais
+  // consegue se cadastrar de novo.
+  if (perfil.aluno_id) {
+    try {
+      await admin.auth.admin.deleteUser(perfil.aluno_id);
+    } catch {
+      // Best-effort — o perfil já foi excluído com sucesso acima; a conta Auth órfã pode ser
+      // limpa manualmente depois, não bloqueia a exclusão.
+    }
   }
 
   revalidatePath("/admin/conecta/candidatos");

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CpfInput } from "@/components/ui/cpf-input";
 import { TelefoneInput } from "@/components/ui/telefone-input";
@@ -55,6 +56,7 @@ type AlunoEditDefaults = {
   estado?: string;
   observacoes?: string;
   status_aluno?: string;
+  participa_conecta?: boolean;
   responsavel_nome?: string;
   responsavel_cpf?: string;
   responsavel_telefone?: string;
@@ -88,6 +90,7 @@ export function AlunoEditForm({
   const [estado, setEstado] = useState(values.estado ?? "");
   const [responsavelCpf, setResponsavelCpf] = useState(values.responsavel_cpf ?? "");
   const [responsavelTelefone, setResponsavelTelefone] = useState(values.responsavel_telefone ?? "");
+  const [participaConecta, setParticipaConecta] = useState(values.participa_conecta ?? false);
   const [enviandoLinkPortal, startEnvioLinkPortal] = useTransition();
   const [resultadoLinkPortal, setResultadoLinkPortal] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(
     null,
@@ -268,6 +271,17 @@ export function AlunoEditForm({
               {errors.observacoes[0]}
             </p>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="participa_conecta"
+            checked={participaConecta}
+            onCheckedChange={(checked) => setParticipaConecta(checked === true)}
+          />
+          <Label htmlFor="participa_conecta" className="font-normal">
+            Participar do Gênezi Conecta
+          </Label>
+          <input type="hidden" name="participa_conecta" value={participaConecta ? "on" : ""} />
         </div>
       </div>
       </div>
