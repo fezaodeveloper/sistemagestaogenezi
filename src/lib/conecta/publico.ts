@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   CidadeConecta,
+  CidadeConectaComContagem,
   EmpresaConecta,
   VagaConecta,
   VagaConectaComEmpresa,
@@ -130,6 +131,35 @@ export async function getCidadesAprovadas(): Promise<CidadeConecta[]> {
     .order("ordem", { ascending: true });
 
   return (data as CidadeConecta[] | null) ?? [];
+}
+
+// Redesign da página pública /conecta/vagas (cards por cidade, em vez de lista de vagas
+// direta) — vagas_conecta.cidade sempre guarda o nome exato de uma conecta_cidades.nome
+// (o form de vaga da empresa preenche via hidden input a partir da cidade selecionada no
+// Select, ver VagaFormFields em src/components/empresa/vagas-view.tsx), então a contagem por
+// string bate sem precisar de join.
+export async function getCidadesComContagemVagas(): Promise<CidadeConectaComContagem[]> {
+  const admin = createAdminClient();
+
+  const [{ data: cidadesData }, { data: vagasAtivasData }] = await Promise.all([
+    admin
+      .from("conecta_cidades")
+      .select("*")
+      .eq("ativa", true)
+      .order("estado", { ascending: true })
+      .order("ordem", { ascending: true }),
+    admin.from("vagas_conecta").select("cidade").eq("status", "ativa"),
+  ]);
+
+  const contagemPorCidade = new Map<string, number>();
+  for (const vaga of (vagasAtivasData as { cidade: string }[] | null) ?? []) {
+    contagemPorCidade.set(vaga.cidade, (contagemPorCidade.get(vaga.cidade) ?? 0) + 1);
+  }
+
+  return ((cidadesData as CidadeConecta[] | null) ?? []).map((cidade) => ({
+    ...cidade,
+    totalVagas: contagemPorCidade.get(cidade.nome) ?? 0,
+  }));
 }
 
 export async function getVagasAtivasDaEmpresaPublica(empresaId: string): Promise<VagaConecta[]> {

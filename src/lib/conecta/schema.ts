@@ -440,6 +440,9 @@ export type CidadeConecta = {
   created_at: string;
 };
 
+// Redesign da página pública /conecta/vagas — cards por cidade em vez de lista de vagas direta.
+export type CidadeConectaComContagem = CidadeConecta & { totalVagas: number };
+
 export const cidadeConectaSchema = z.object({
   nome: z
     .string({ error: "Informe o nome da cidade." })
