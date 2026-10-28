@@ -11,12 +11,14 @@ export function AlunoConectaView({
   vagasResultadoInicial,
   cidadesAprovadas,
   idade,
+  textoTermoMenor,
 }: {
   perfilInicial: PerfilConecta | null;
   cursosConcluidos: string[];
   vagasResultadoInicial: VagasConectaResultado;
   cidadesAprovadas: CidadeConecta[];
   idade: number | null;
+  textoTermoMenor: string;
 }) {
   return (
     <Tabs defaultValue="vagas">
@@ -28,7 +30,12 @@ export function AlunoConectaView({
         <ConectaVagasView resultadoInicial={vagasResultadoInicial} cidadesAprovadas={cidadesAprovadas} />
       </TabsContent>
       <TabsContent value="perfil">
-        <ConectaPerfilForm perfilInicial={perfilInicial} cursosConcluidos={cursosConcluidos} idade={idade} />
+        <ConectaPerfilForm
+          perfilInicial={perfilInicial}
+          cursosConcluidos={cursosConcluidos}
+          idade={idade}
+          textoTermoMenor={textoTermoMenor}
+        />
       </TabsContent>
     </Tabs>
   );

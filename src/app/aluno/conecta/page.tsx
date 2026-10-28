@@ -9,7 +9,11 @@ import {
   getMeuPerfilConecta,
 } from "@/app/aluno/conecta/actions";
 import { getCidadesAprovadas } from "@/lib/conecta/publico";
+import { getTermoLegalPublico, textoPlanoDoTermo } from "@/lib/termos-legais/get-termo";
 import { AlunoConectaView } from "@/components/aluno/aluno-conecta-view";
+
+const TEXTO_TERMO_MENOR_PADRAO =
+  "Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer entrevista de emprego.";
 
 export default async function AlunoConectaPage() {
   const user = await requireRole("aluno");
@@ -20,13 +24,18 @@ export default async function AlunoConectaPage() {
     notFound();
   }
 
-  const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas, idade] = await Promise.all([
+  const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas, idade, termoMenor] = await Promise.all([
     getMeuPerfilConecta(),
     getCursosConcluidosAluno(user.id),
     buscarVagasConecta(),
     getCidadesAprovadas(),
     getIdadeAlunoConecta(user.id),
+    getTermoLegalPublico("conecta_menor_termo"),
   ]);
+
+  const textoTermoMenor = termoMenor?.conteudo?.trim()
+    ? textoPlanoDoTermo(termoMenor.conteudo)
+    : TEXTO_TERMO_MENOR_PADRAO;
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,6 +51,7 @@ export default async function AlunoConectaPage() {
         vagasResultadoInicial={vagasResultado}
         cidadesAprovadas={cidadesAprovadas}
         idade={idade}
+        textoTermoMenor={textoTermoMenor}
       />
     </div>
   );

@@ -38,12 +38,14 @@ export function TermoLegalEditor({
   conteudoInicial,
   atualizadoEm,
   atualizadoPorNome,
+  previewHref,
 }: {
   chave: TermoLegalChave;
   titulo: string;
   conteudoInicial: string;
   atualizadoEm: string;
   atualizadoPorNome: string | null;
+  previewHref: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [salvo, setSalvo] = useState(false);
@@ -203,8 +205,8 @@ export function TermoLegalEditor({
         <Button type="button" onClick={handleSalvar} disabled={isPending || !editor}>
           {isPending ? "Salvando..." : "Salvar alterações"}
         </Button>
-        <Button type="button" variant="outline" render={<a href={`/aluno/legal/${chave}`} target="_blank" rel="noopener noreferrer" />} nativeButton={false}>
-          Visualizar como aluno
+        <Button type="button" variant="outline" render={<a href={previewHref} target="_blank" rel="noopener noreferrer" />} nativeButton={false}>
+          Visualizar página pública
         </Button>
       </div>
     </div>

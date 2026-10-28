@@ -51,7 +51,15 @@ const MODALIDADE_ITEMS = Object.fromEntries(
   MODALIDADES_PREFERIDAS.map((valor) => [valor, MODALIDADE_PREFERIDA_LABELS[valor]]),
 );
 
-function VisibilidadeToggle({ perfil, idade }: { perfil: PerfilConecta | null; idade: number | null }) {
+function VisibilidadeToggle({
+  perfil,
+  idade,
+  textoTermoMenor,
+}: {
+  perfil: PerfilConecta | null;
+  idade: number | null;
+  textoTermoMenor: string;
+}) {
   const [visivel, setVisivel] = useState(perfil?.visivel ?? false);
   const [termoAceito, setTermoAceito] = useState(perfil?.menor_com_termo ?? false);
   const [error, setError] = useState<string | null>(null);
@@ -109,8 +117,7 @@ function VisibilidadeToggle({ perfil, idade }: { perfil: PerfilConecta | null; i
               onCheckedChange={(checked) => setTermoAceito(checked === true)}
             />
             <Label htmlFor="termo_acompanhamento_aluno" className="font-normal text-sm">
-              Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer
-              entrevista de emprego.
+              {textoTermoMenor}
             </Label>
           </div>
         )}
@@ -293,10 +300,12 @@ export function ConectaPerfilForm({
   perfilInicial,
   cursosConcluidos,
   idade,
+  textoTermoMenor,
 }: {
   perfilInicial: PerfilConecta | null;
   cursosConcluidos: string[];
   idade: number | null;
+  textoTermoMenor: string;
 }) {
   const [whatsapp, setWhatsapp] = useState(perfilInicial?.whatsapp ?? "");
   const [resumo, setResumo] = useState(perfilInicial?.resumo ?? "");
@@ -320,7 +329,7 @@ export function ConectaPerfilForm({
 
   return (
     <div className="flex flex-col gap-4 pt-4">
-      <VisibilidadeToggle perfil={perfilInicial} idade={idade} />
+      <VisibilidadeToggle perfil={perfilInicial} idade={idade} textoTermoMenor={textoTermoMenor} />
 
       <Card>
         <CardHeader>

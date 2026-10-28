@@ -45,6 +45,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/conecta/vagas", label: "Vagas", icon: Briefcase },
     { href: "/admin/conecta/candidatos", label: "Candidatos", icon: Users },
     { href: "/admin/conecta/cidades", label: "Cidades", icon: MapPin },
+    { href: "/admin/conecta/termos", label: "Termos Legais", icon: FileText },
   ]},
   { id: "financeiro", label: "Financeiro", icon: Banknote, items: [
     { href: "/admin/financeiro", label: "Mensalidades", icon: Banknote },

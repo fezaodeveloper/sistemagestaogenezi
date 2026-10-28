@@ -2,14 +2,15 @@ import Link from "next/link";
 import { Camera, ChevronRight, FileText, Lock, Shield, type LucideIcon } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { TERMO_LEGAL_CHAVES, type TermoLegalChave } from "@/lib/termos-legais/schema";
+import { TERMO_LEGAL_CHAVES_ALUNO, type TermoLegalChave } from "@/lib/termos-legais/schema";
 import { Card, CardContent } from "@/components/ui/card";
 
 // Índice dos documentos legais do portal do aluno: em vez de 4 links soltos no
 // rodapé da sidebar, um único ponto de entrada ("Termos e Privacidade") com um
-// card por documento.
+// card por documento. Só as 4 chaves do aluno — as 5 do Conecta (prefixo
+// "conecta_") não têm um documento equivalente no portal do aluno.
 const DOCUMENTOS: Record<
-  TermoLegalChave,
+  (typeof TERMO_LEGAL_CHAVES_ALUNO)[number],
   { titulo: string; descricao: string; icone: LucideIcon; href: string }
 > = {
   privacidade: {
@@ -44,7 +45,10 @@ export default async function DocumentosLegaisPage() {
   await requireRole("aluno");
 
   const supabase = await createClient();
-  const { data } = await supabase.from("termos_legais").select("chave, conteudo, atualizado_em");
+  const { data } = await supabase
+    .from("termos_legais")
+    .select("chave, conteudo, atualizado_em")
+    .in("chave", TERMO_LEGAL_CHAVES_ALUNO);
   const linhas = (data as LinhaTermo[] | null) ?? [];
 
   return (
@@ -57,7 +61,7 @@ export default async function DocumentosLegaisPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {TERMO_LEGAL_CHAVES.map((chave) => {
+        {TERMO_LEGAL_CHAVES_ALUNO.map((chave) => {
           const documento = DOCUMENTOS[chave];
           const Icone = documento.icone;
           const linha = linhas.find((l) => l.chave === chave);

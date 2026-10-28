@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { TERMO_LEGAL_CHAVES, type TermoLegalChave } from "@/lib/termos-legais/schema";
+import { TERMO_LEGAL_CAMINHO_PUBLICO, TERMO_LEGAL_CHAVES_ALUNO, type TermoLegalChave } from "@/lib/termos-legais/schema";
 import { TermoLegalEditor } from "@/components/admin/termo-legal-editor";
 
 type TermoLegalRow = {
@@ -19,7 +19,9 @@ export default async function EditarTermoLegalPage({
   await requireRole("admin");
   const { chave: chaveParam } = await params;
 
-  if (!(TERMO_LEGAL_CHAVES as readonly string[]).includes(chaveParam)) {
+  // Só as 4 chaves do aluno — as 5 do Conecta (prefixo "conecta_") têm página admin própria
+  // em /admin/conecta/termos, não aqui (REGRA da tarefa: um link, uma página com abas).
+  if (!(TERMO_LEGAL_CHAVES_ALUNO as readonly string[]).includes(chaveParam)) {
     notFound();
   }
   const chave = chaveParam as TermoLegalChave;
@@ -44,6 +46,7 @@ export default async function EditarTermoLegalPage({
       conteudoInicial={termo.conteudo}
       atualizadoEm={termo.atualizado_em}
       atualizadoPorNome={termo.atualizado_por?.full_name ?? null}
+      previewHref={TERMO_LEGAL_CAMINHO_PUBLICO[chave]}
     />
   );
 }

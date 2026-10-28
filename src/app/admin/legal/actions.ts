@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { TERMO_LEGAL_CHAVES, type TermoLegalChave } from "@/lib/termos-legais/schema";
+import {
+  TERMO_LEGAL_CAMINHO_PUBLICO,
+  TERMO_LEGAL_CHAVES,
+  TERMO_LEGAL_CHAVES_CONECTA,
+  type TermoLegalChave,
+} from "@/lib/termos-legais/schema";
 
 // UPDATE, não upsert de verdade: as 4 linhas (uma por chave) já existem
 // desde a seed da migration (supabase/migrations/20260917600000_termos_legais.sql)
@@ -37,7 +42,13 @@ export async function salvarTermoLegal(
     return { error: "Não foi possível salvar. Tente novamente." };
   }
 
-  revalidatePath(`/admin/legal/${chave}`);
-  revalidatePath(`/aluno/legal/${chave}`);
+  // Chaves do Conecta vivem numa única página admin com abas (/admin/conecta/termos), não em
+  // /admin/legal/[chave] como as 4 do aluno — cada grupo revalida sua própria rota de edição.
+  if ((TERMO_LEGAL_CHAVES_CONECTA as readonly string[]).includes(chave)) {
+    revalidatePath("/admin/conecta/termos");
+  } else {
+    revalidatePath(`/admin/legal/${chave}`);
+  }
+  revalidatePath(TERMO_LEGAL_CAMINHO_PUBLICO[chave]);
   return {};
 }

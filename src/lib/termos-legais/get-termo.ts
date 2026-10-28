@@ -15,6 +15,17 @@ export async function getTermoLegal(chave: TermoLegalChave): Promise<TermoLegal 
   return data as TermoLegal | null;
 }
 
+// Tira as tags do HTML salvo pelo editor Tiptap — usado só pro texto do checkbox de
+// acompanhamento (conecta_menor_termo), que precisa ficar dentro de um <Label> de uma linha,
+// não de um bloco com dangerouslySetInnerHTML como as páginas legais inteiras.
+export function textoPlanoDoTermo(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Mesma leitura, mas via service_role — pra contextos SEM sessão (fluxo público de assinatura
 // do termo de imagem por CPF, src/app/termo-imagem/[matriculaId]/). getTermoLegal() usa
 // createClient() normal, que exige role "authenticated" (o grant de select em termos_legais só

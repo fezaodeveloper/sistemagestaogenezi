@@ -1,12 +1,23 @@
 import Link from "next/link";
 import { GraduationCap, MapPin, ShieldCheck } from "lucide-react";
+import { getTermoLegalPublico, textoPlanoDoTermo } from "@/lib/termos-legais/get-termo";
 import { ConectaCadastroExternoForm } from "@/components/conecta/cadastro-externo-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+const TEXTO_TERMO_MENOR_PADRAO =
+  "Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer entrevista de emprego.";
+
 // Pública de propósito — cadastro de candidato externo não exige login
 // prévio (REGRA da tarefa). Sem requireRole aqui.
-export default function ConectaCadastroPage() {
+export default async function ConectaCadastroPage() {
+  // conecta_menor_termo é editável em /admin/conecta/termos — texto do checkbox de
+  // acompanhamento exibido a candidatos de 16-17 anos (ver TAREFA de proteção de idade).
+  const termoMenor = await getTermoLegalPublico("conecta_menor_termo");
+  const textoTermoMenor = termoMenor?.conteudo?.trim()
+    ? textoPlanoDoTermo(termoMenor.conteudo)
+    : TEXTO_TERMO_MENOR_PADRAO;
+
   return (
     <main className="dark bg-background text-foreground min-h-svh p-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 py-8">
@@ -15,7 +26,7 @@ export default function ConectaCadastroPage() {
           <p className="text-muted-foreground text-sm">Fique visível para empresas da região</p>
         </div>
 
-        <ConectaCadastroExternoForm />
+        <ConectaCadastroExternoForm textoTermoMenor={textoTermoMenor} />
 
         <div className="flex flex-col gap-4">
           <h2 className="text-center text-lg font-semibold">Por que ser aluno da Gênezi?</h2>

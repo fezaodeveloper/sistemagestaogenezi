@@ -58,7 +58,7 @@ function PlanoCard({ plano, selecionado }: { plano: PlanoConecta; selecionado: b
   );
 }
 
-export function ConectaCadastroExternoForm() {
+export function ConectaCadastroExternoForm({ textoTermoMenor }: { textoTermoMenor: string }) {
   const [state, formAction] = useActionState<CadastroCandidatoExternoState, FormData>(
     cadastrarCandidatoExterno,
     undefined,
@@ -188,8 +188,7 @@ export function ConectaCadastroExternoForm() {
                 onCheckedChange={(checked) => setTermoAcompanhamento(checked === true)}
               />
               <Label htmlFor="termo_acompanhamento" className="font-normal text-sm">
-                Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer
-                entrevista.
+                {textoTermoMenor}
               </Label>
               <input type="hidden" name="menor_com_termo" value={termoAcompanhamento ? "on" : ""} />
             </div>
