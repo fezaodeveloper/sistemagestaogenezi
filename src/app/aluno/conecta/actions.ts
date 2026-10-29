@@ -79,6 +79,10 @@ export async function salvarPerfilConecta(formData: FormData): Promise<{ error?:
 
   const data = parsed.data;
   const supabase = await createClient();
+  // perfis_conecta.nome não é usado pra exibir o nome de alunos em nenhuma tela (todas usam o
+  // join alunos->profiles.full_name, que reflete o nome atual) — mantido em sincronia aqui só
+  // como backfill defensivo, pra qualquer leitura futura que selecione a coluna direto.
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
   // upsert com onConflict em aluno_id (unique na tabela) — cobre tanto o
   // primeiro salvamento (linha ainda não existe) quanto edições
   // seguintes, sem precisar checar antes se já existe uma linha.
@@ -91,6 +95,7 @@ export async function salvarPerfilConecta(formData: FormData): Promise<{ error?:
   const { error } = await supabase.from("perfis_conecta").upsert(
     {
       aluno_id: user.id,
+      nome: profile?.full_name ?? null,
       whatsapp: data.whatsapp ?? null,
       cidade: data.cidade ?? null,
       estado: data.estado ?? null,
@@ -367,9 +372,12 @@ export async function candidatarAluno(vagaId: string): Promise<{ error?: string 
   if (!perfilId) {
     // tipo NUNCA entra no payload — ver comentário em salvarPerfilConecta (acima, neste
     // arquivo). Sem linha existente, o default 'aluno' da coluna resolve certo aqui.
+    // nome: mesmo backfill defensivo de salvarPerfilConecta — aqui a linha pode estar sendo
+    // criada pela primeira vez direto na vaga, sem o candidato ter passado pelo form de perfil.
+    const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
     const { data: perfilCriado, error: erroPerfil } = await supabase
       .from("perfis_conecta")
-      .insert({ aluno_id: user.id })
+      .insert({ aluno_id: user.id, nome: profile?.full_name ?? null })
       .select("id")
       .single();
 
