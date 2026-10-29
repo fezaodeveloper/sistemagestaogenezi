@@ -8,7 +8,7 @@ import {
   getContagemVagasAtivas,
   getEmpresaPorProfileId,
 } from "@/lib/conecta/empresas";
-import { EMPRESA_STATUS_LABELS } from "@/lib/conecta/schema";
+import { EMPRESA_STATUS_LABELS, nomeExibicaoEmpresa } from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,7 @@ export default async function EmpresaPainelPage() {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-semibold">Olá, {empresa.nome_empresa}</h1>
+          <h1 className="text-2xl font-semibold">Olá, {nomeExibicaoEmpresa(empresa)}</h1>
           <Badge variant="outline" className="mt-1">
             {EMPRESA_STATUS_LABELS[empresa.status]}
           </Badge>
@@ -65,7 +65,7 @@ export default async function EmpresaPainelPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Olá, {empresa.nome_empresa}</h1>
+          <h1 className="text-2xl font-semibold">Olá, {nomeExibicaoEmpresa(empresa)}</h1>
           <p className="text-muted-foreground text-sm">Bem-vindo ao painel da sua empresa.</p>
         </div>
         <Button render={<Link href="/empresa/vagas" />} nativeButton={false}>

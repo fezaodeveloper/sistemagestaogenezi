@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
-import { empresaCadastroSchema } from "@/lib/conecta/schema";
+import { empresaCadastroSchema, limparNomeReceita } from "@/lib/conecta/schema";
 import { notificarNovaEmpresaTelegram } from "@/lib/conecta/telegram";
 import { enviarWhatsappCadastroEmpresa } from "@/lib/conecta/whatsapp";
 import { enviarCadastroRecebidoEmpresa } from "@/lib/resend/emails";
@@ -70,7 +70,7 @@ export async function consultarCnpj(cnpjBruto: string): Promise<ConsultaCnpjResu
 
     return {
       ok: true,
-      nomeEmpresa: data.nome ?? "",
+      nomeEmpresa: data.nome ? limparNomeReceita(data.nome) : "",
       cidade: data.municipio ?? "",
       estado: data.uf ?? "",
     };

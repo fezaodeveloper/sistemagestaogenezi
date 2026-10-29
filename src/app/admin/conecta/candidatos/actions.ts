@@ -38,7 +38,27 @@ export async function listarCandidatosExternos(
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  return { candidatos: (data as PerfilConecta[] | null) ?? [], total: count ?? 0 };
+  const candidatos = (data as PerfilConecta[] | null) ?? [];
+
+  // Contagem de candidaturas por perfil (TAREFA: coluna "Candidaturas") — uma query extra só
+  // com os ids desta página, não a listagem inteira.
+  const perfilIds = candidatos.map((c) => c.id);
+  const candidaturasPorPerfil = new Map<string, number>();
+  if (perfilIds.length > 0) {
+    const { data: candidaturasData } = await supabase
+      .from("candidaturas_conecta")
+      .select("perfil_id")
+      .in("perfil_id", perfilIds);
+    for (const row of candidaturasData ?? []) {
+      const atual = candidaturasPorPerfil.get(row.perfil_id as string) ?? 0;
+      candidaturasPorPerfil.set(row.perfil_id as string, atual + 1);
+    }
+  }
+
+  return {
+    candidatos: candidatos.map((c) => ({ ...c, totalCandidaturas: candidaturasPorPerfil.get(c.id) ?? 0 })),
+    total: count ?? 0,
+  };
 }
 
 type PerfilAlunoRow = {
@@ -83,6 +103,20 @@ export async function listarAlunosVisiveisConecta(
   const perfis = (data as unknown as PerfilAlunoRow[] | null) ?? [];
   const alunoIds = perfis.map((p) => p.aluno_id).filter((id): id is string => Boolean(id));
 
+  // Contagem de candidaturas por perfil (TAREFA: coluna "Candidaturas").
+  const perfilIds = perfis.map((p) => p.id);
+  const candidaturasPorPerfil = new Map<string, number>();
+  if (perfilIds.length > 0) {
+    const { data: candidaturasData } = await supabase
+      .from("candidaturas_conecta")
+      .select("perfil_id")
+      .in("perfil_id", perfilIds);
+    for (const row of candidaturasData ?? []) {
+      const atual = candidaturasPorPerfil.get(row.perfil_id as string) ?? 0;
+      candidaturasPorPerfil.set(row.perfil_id as string, atual + 1);
+    }
+  }
+
   const cursosPorAluno = new Map<string, Set<string>>();
   if (alunoIds.length > 0) {
     const { data: matriculasData } = await supabase
@@ -113,6 +147,7 @@ export async function listarAlunosVisiveisConecta(
     cursosConcluidos: perfil.aluno_id
       ? [...(cursosPorAluno.get(perfil.aluno_id) ?? [])].sort((a, b) => a.localeCompare(b))
       : [],
+    totalCandidaturas: candidaturasPorPerfil.get(perfil.id) ?? 0,
   }));
 
   const termo = filtro.query?.trim().toLowerCase();

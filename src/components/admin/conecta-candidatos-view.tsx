@@ -71,7 +71,16 @@ function CancelarAssinaturaButton({ candidato, onCancelado }: { candidato: Perfi
   );
 }
 
-function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, menorComTermo, cursosConcluidos }: {
+function AlunoCard({
+  nome,
+  whatsapp,
+  cidade,
+  disponibilidade,
+  visivel,
+  menorComTermo,
+  cursosConcluidos,
+  totalCandidaturas,
+}: {
   nome: string;
   whatsapp: string | null;
   cidade: string | null;
@@ -79,6 +88,7 @@ function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, menorComT
   visivel: boolean;
   menorComTermo: boolean;
   cursosConcluidos: string[];
+  totalCandidaturas: number;
 }) {
   return (
     <Card>
@@ -105,6 +115,7 @@ function AlunoCard({ nome, whatsapp, cidade, disponibilidade, visivel, menorComT
           <span>{whatsapp ?? "—"}</span>
           <span>{cidade ?? "—"}</span>
           <span>{DISPONIBILIDADE_LABELS[disponibilidade]}</span>
+          <span>{totalCandidaturas} candidatura{totalCandidaturas === 1 ? "" : "s"}</span>
         </div>
         {cursosConcluidos.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -241,6 +252,9 @@ function CandidatoExternoCard({ candidato, onAtualizado }: { candidato: PerfilCo
           <span>{candidato.whatsapp ?? "—"}</span>
           <span>Plano: {candidato.plano ? PLANO_CONECTA_INFO[candidato.plano].label : "—"}</span>
           <span>Cadastrado em {formatDateBR(candidato.created_at)}</span>
+          <span>
+            {candidato.totalCandidaturas ?? 0} candidatura{(candidato.totalCandidaturas ?? 0) === 1 ? "" : "s"}
+          </span>
         </div>
         <div className="flex flex-wrap gap-2">
           {candidato.esta_ativo && (

@@ -1,8 +1,10 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireEmpresa } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { SETORES_CONECTA } from "@/lib/conecta/schema";
 import { z } from "zod";
 
@@ -174,4 +176,49 @@ export async function trocarSenhaEmpresa(
   }
 
   return { success: true };
+}
+
+// Exclusão de conta (TAREFA: mobile PWA e navegação inferior para empresa). Diferente de
+// excluirCandidatoExterno (perfis_conecta) e excluirEmpresa (admin/conecta/actions.ts, mesma
+// operação feita PELO ADMIN): esta é a auto-exclusão feita pela própria empresa logada.
+// Empresas não têm assinatura no Asaas (quem paga é o CANDIDATO externo em perfis_conecta — ver
+// PLANOS_CONECTA; empresas são gratuitas, aprovação é manual pelo admin), então não há nada pra
+// cancelar ali, diferente do que o pedido original presumia.
+export async function excluirMinhaContaEmpresa(): Promise<{ error?: string }> {
+  const user = await requireEmpresa();
+
+  const admin = createAdminClient();
+  const { data: empresa } = await admin
+    .from("empresas_conecta")
+    .select("id, logo_path")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  if (empresa?.logo_path) {
+    try {
+      await admin.storage.from("logos-conecta").remove([empresa.logo_path]);
+    } catch {
+      // Best-effort — a exclusão da conta segue mesmo se o arquivo não puder ser removido.
+    }
+  }
+
+  const { error } = await admin.from("empresas_conecta").delete().eq("profile_id", user.id);
+  if (error) {
+    return { error: "Não foi possível excluir a conta. Tente novamente." };
+  }
+
+  await admin.auth.admin.deleteUser(user.id);
+
+  // Encerra a sessão/cookies do navegador explicitamente — deleteUser invalida o usuário no
+  // servidor, mas sem isso o cookie de sessão continuaria no browser até expirar, podendo gerar
+  // erros de auth confusos em vez de um redirect limpo.
+  try {
+    const supabase = await createClient();
+    await supabase.auth.signOut();
+  } catch {
+    // Best-effort — a conta já foi excluída com sucesso acima; o cookie stale, se sobrar, só
+    // vai falhar a checagem de auth na próxima navegação (requireEmpresa manda pro login).
+  }
+
+  redirect("/empresa/cadastro?excluida=true");
 }

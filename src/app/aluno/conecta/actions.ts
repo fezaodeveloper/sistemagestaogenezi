@@ -129,12 +129,19 @@ export async function toggleVisibilidadePerfil(
   let estado: string | null = null;
 
   if (visivel) {
-    const { data: perfil } = await supabase
+    const { data: perfil, error: erroSelect } = await supabase
       .from("perfis_conecta")
       .select("whatsapp, cidade, estado, termo_conecta_aceito")
       .eq("aluno_id", user.id)
       .maybeSingle();
 
+    // Distingue "coluna/tabela com erro de verdade" (ex.: migration de termo_conecta_aceito
+    // ainda não aplicada no banco) de "perfil existe mas sem whatsapp" — sem isso, as duas
+    // situações caíam na MESMA mensagem genérica ("Informe seu WhatsApp"), escondendo um erro de
+    // schema por trás de uma mensagem que parecia erro de preenchimento do usuário.
+    if (erroSelect) {
+      return { error: "Não foi possível verificar seu perfil agora. Tente novamente em alguns minutos." };
+    }
     if (!perfil?.whatsapp) {
       return { error: "Informe seu WhatsApp antes de tornar o perfil visível." };
     }
@@ -321,6 +328,95 @@ export async function buscarVagasConecta(
 ): Promise<VagasConectaResultado> {
   await requireRole("aluno");
   return getVagasPublicasConecta(filtro);
+}
+
+// IDs das vagas que o candidato logado (aluno ou externo) já se candidatou — usado pra desenhar
+// o botão como "Já candidatado ✓" em vez de "Me candidatar" (TAREFA: candidatura interna).
+export async function getMinhasCandidaturasVagaIds(): Promise<string[]> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  const { data: perfil } = await supabase
+    .from("perfis_conecta")
+    .select("id")
+    .eq("aluno_id", user.id)
+    .maybeSingle();
+
+  if (!perfil) return [];
+
+  const { data } = await supabase.from("candidaturas_conecta").select("vaga_id").eq("perfil_id", perfil.id);
+  return (data ?? []).map((row) => row.vaga_id as string);
+}
+
+// Candidatura interna (TAREFA: remover "Candidatar via WhatsApp" direto) — cria o perfil em
+// perfis_conecta se o candidato ainda não tiver um (primeira ação no Conecta pode ser direto
+// "Me candidatar" numa vaga, sem ter passado pela aba "Meu perfil profissional" antes).
+export async function candidatarAluno(vagaId: string): Promise<{ error?: string }> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+
+  const { data: perfilExistente } = await supabase
+    .from("perfis_conecta")
+    .select("id")
+    .eq("aluno_id", user.id)
+    .maybeSingle();
+
+  let perfilId = perfilExistente?.id as string | undefined;
+
+  if (!perfilId) {
+    // tipo NUNCA entra no payload — ver comentário em salvarPerfilConecta (acima, neste
+    // arquivo). Sem linha existente, o default 'aluno' da coluna resolve certo aqui.
+    const { data: perfilCriado, error: erroPerfil } = await supabase
+      .from("perfis_conecta")
+      .insert({ aluno_id: user.id })
+      .select("id")
+      .single();
+
+    if (erroPerfil || !perfilCriado) {
+      return { error: "Não foi possível registrar sua candidatura. Tente novamente." };
+    }
+    perfilId = perfilCriado.id;
+  }
+
+  const { error } = await supabase
+    .from("candidaturas_conecta")
+    .insert({ vaga_id: vagaId, perfil_id: perfilId });
+
+  // 23505 = unique_violation (vaga_id, perfil_id) — candidatura duplicada não é erro de
+  // verdade pro usuário, só significa que ele já tinha se candidatado antes.
+  if (error && error.code !== "23505") {
+    return { error: "Não foi possível registrar sua candidatura. Tente novamente." };
+  }
+
+  // Notificação da EMPRESA (não é Telegram — empresas não têm chat próprio configurado, só a
+  // ESCOLA tem telegram_conecta_chat_id; o canal já existente pra "avisar a empresa" é
+  // notificacoes_empresa + badge em /empresa/notificacoes, usado por enviarNotificacaoEmpresa).
+  // Client admin de propósito: a policy "Admins gerenciam notificacoes" só libera INSERT pra
+  // admin via RLS — candidato não tem policy própria pra inserir aí, nem deveria ganhar uma só
+  // pra isso (escreveria linhas marcadas como "vindas do admin" sem ter sido o admin quem
+  // criou). Best-effort — a candidatura já foi registrada com sucesso acima.
+  try {
+    const { data: vaga } = await supabase
+      .from("vagas_conecta")
+      .select("titulo, empresa_id")
+      .eq("id", vagaId)
+      .maybeSingle();
+
+    if (vaga) {
+      const admin = createAdminClient();
+      await admin.from("notificacoes_empresa").insert({
+        empresa_id: vaga.empresa_id,
+        titulo: "Novo candidato",
+        mensagem: `Um candidato se inscreveu na vaga "${vaga.titulo}".`,
+      });
+    }
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+
+  revalidatePath("/aluno/conecta");
+  return {};
 }
 
 // Signed URL de curta duração (60s) — mesmo padrão de materiais/certificados

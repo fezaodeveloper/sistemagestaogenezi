@@ -19,14 +19,21 @@ import {
 export function EmpresaSidebar({
   user,
   notificacoesNaoLidas,
+  logoUrl,
 }: {
   user: CurrentUser;
   notificacoesNaoLidas: number;
+  logoUrl: string | null;
 }) {
   return (
     <Sidebar>
       <SidebarHeader>
-        <span className="px-2 py-1 text-sm font-semibold">GÊNEZI Conecta</span>
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- URL externa (Storage), fora do domínio otimizado pelo next/image sem configurar remotePatterns
+          <img src={logoUrl} alt="Gênezi" className="h-10 w-auto object-contain px-2 py-1" />
+        ) : (
+          <span className="px-2 py-1 text-sm font-semibold">GÊNEZI Conecta</span>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

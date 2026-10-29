@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Building2, ExternalLink, MapPin, MessageCircle, Search } from "lucide-react";
-import { buscarVagasConecta } from "@/app/aluno/conecta/actions";
+import { Building2, Check, ExternalLink, MapPin, Search, Send } from "lucide-react";
+import { buscarVagasConecta, candidatarAluno } from "@/app/aluno/conecta/actions";
 import {
   VAGA_MODALIDADE_LABELS,
   VAGA_MODALIDADES,
@@ -92,36 +92,64 @@ function LogoOuIniciais({ vaga, className }: { vaga: VagaConectaComEmpresa; clas
   );
 }
 
-function BotaoWhatsapp({ vaga, className }: { vaga: VagaConectaComEmpresa; className?: string }) {
-  const whatsappDigitos = vaga.empresaWhatsapp?.replace(/\D/g, "");
-  const mensagem = encodeURIComponent(
-    `Olá! Vi a vaga de ${vaga.titulo} no Gênezi Conecta e tenho interesse.`,
-  );
+// Substitui o antigo "Candidatar via WhatsApp" (abria o WhatsApp direto com a empresa) —
+// candidatura agora é interna (TAREFA): cria um registro em candidaturas_conecta, e a empresa
+// só vê o WhatsApp do candidato depois de abrir os detalhes da candidatura dela.
+function BotaoCandidatar({
+  vagaId,
+  jaCandidatado,
+  onCandidatado,
+  className,
+}: {
+  vagaId: string;
+  jaCandidatado: boolean;
+  onCandidatado: (vagaId: string) => void;
+  className?: string;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
-  if (!whatsappDigitos) {
+  if (jaCandidatado) {
     return (
-      <Button disabled title="Empresa não informou WhatsApp para contato." className={className}>
-        <MessageCircle className="size-4" />
-        Candidatar via WhatsApp
+      <Button disabled className={className}>
+        <Check className="size-4" />
+        Já candidatado ✓
       </Button>
     );
   }
 
-  return (
-    <Button
-      className={`bg-green-600 hover:bg-green-700 ${className ?? ""}`}
-      nativeButton={false}
-      render={
-        <a href={`https://wa.me/55${whatsappDigitos}?text=${mensagem}`} target="_blank" rel="noreferrer" />
+  function handleClick() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await candidatarAluno(vagaId);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
       }
-    >
-      <MessageCircle className="size-4" />
-      Candidatar via WhatsApp
-    </Button>
+      onCandidatado(vagaId);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button className={className} disabled={isPending} onClick={handleClick}>
+        <Send className="size-4" />
+        {isPending ? "Enviando..." : "Me candidatar"}
+      </Button>
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
   );
 }
 
-function VagaDetalhesDialog({ vaga }: { vaga: VagaConectaComEmpresa }) {
+function VagaDetalhesDialog({
+  vaga,
+  jaCandidatado,
+  onCandidatado,
+}: {
+  vaga: VagaConectaComEmpresa;
+  jaCandidatado: boolean;
+  onCandidatado: (vagaId: string) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -225,14 +253,27 @@ function VagaDetalhesDialog({ vaga }: { vaga: VagaConectaComEmpresa }) {
         </div>
 
         <DialogFooter>
-          <BotaoWhatsapp vaga={vaga} className="w-full" />
+          <BotaoCandidatar
+            vagaId={vaga.id}
+            jaCandidatado={jaCandidatado}
+            onCandidatado={onCandidatado}
+            className="w-full"
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
+function VagaCard({
+  vaga,
+  jaCandidatado,
+  onCandidatado,
+}: {
+  vaga: VagaConectaComEmpresa;
+  jaCandidatado: boolean;
+  onCandidatado: (vagaId: string) => void;
+}) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 py-4">
@@ -274,8 +315,8 @@ function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
         )}
 
         <div className="flex flex-col gap-2 pt-1">
-          <BotaoWhatsapp vaga={vaga} />
-          <VagaDetalhesDialog vaga={vaga} />
+          <BotaoCandidatar vagaId={vaga.id} jaCandidatado={jaCandidatado} onCandidatado={onCandidatado} />
+          <VagaDetalhesDialog vaga={vaga} jaCandidatado={jaCandidatado} onCandidatado={onCandidatado} />
         </div>
       </CardContent>
     </Card>
@@ -285,11 +326,14 @@ function VagaCard({ vaga }: { vaga: VagaConectaComEmpresa }) {
 export function ConectaVagasView({
   resultadoInicial,
   cidadesAprovadas,
+  candidaturasVagaIdsIniciais,
 }: {
   resultadoInicial: VagasConectaResultado;
   cidadesAprovadas: CidadeConecta[];
+  candidaturasVagaIdsIniciais: string[];
 }) {
   const [resultado, setResultado] = useState(resultadoInicial);
+  const [candidaturasVagaIds, setCandidaturasVagaIds] = useState(new Set(candidaturasVagaIdsIniciais));
   const [busca, setBusca] = useState("");
   const [tipo, setTipo] = useState(TIPO_FILTRO_TODOS);
   const [modalidade, setModalidade] = useState(MODALIDADE_FILTRO_TODAS);
@@ -433,7 +477,12 @@ export function ConectaVagasView({
           </p>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             {resultado.vagas.map((vaga) => (
-              <VagaCard key={vaga.id} vaga={vaga} />
+              <VagaCard
+                key={vaga.id}
+                vaga={vaga}
+                jaCandidatado={candidaturasVagaIds.has(vaga.id)}
+                onCandidatado={(vagaId) => setCandidaturasVagaIds((atual) => new Set(atual).add(vagaId))}
+              />
             ))}
           </div>
         </>

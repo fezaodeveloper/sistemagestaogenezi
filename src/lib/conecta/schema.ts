@@ -59,6 +59,24 @@ export type EmpresaConecta = {
 // vêm de empresas_conecta diretamente (total_vagas é contado à parte em
 // vagas_conecta; ultimo_acesso vem da Admin API do Auth, já que
 // auth.users.last_sign_in_at não é uma coluna de profiles/empresas_conecta).
+// Razão social de MEI (Microempreendedor Individual) no Brasil segue o padrão oficial da
+// Receita Federal "<8 primeiros dígitos do CNPJ> <NOME DO TITULAR>" (ex.: "60297147 CLEVERSSON
+// DANTAS SALGUEIRO") — usado tanto no autofill do cadastro (consultarCnpj, src/app/empresa/
+// cadastro/actions.ts) quanto aqui, na exibição, pra limpar empresas que já foram cadastradas
+// com esse prefixo cru ANTES dessa limpeza existir (TAREFA: empresa aparecia com "Olá,
+// 60.297.147 CLEVERSSON..." no painel).
+export function limparNomeReceita(nome: string): string {
+  return nome.replace(/^[\d.\-/\s]+/, "").trim() || nome;
+}
+
+// Nome de exibição da empresa ("Olá, {nome}") — nunca mostra o CNPJ/razão social completa: se
+// nome_empresa estiver vazio, usa só a primeira palavra do email; se vier com o prefixo de CNPJ
+// de MEI (cadastro antigo, antes da limpeza em consultarCnpj), remove esse prefixo na exibição.
+export function nomeExibicaoEmpresa(empresa: { nome_empresa: string | null; email: string }): string {
+  if (!empresa.nome_empresa?.trim()) return empresa.email.split("@")[0];
+  return limparNomeReceita(empresa.nome_empresa);
+}
+
 export type EmpresaConectaComExtras = EmpresaConecta & {
   totalVagas: number;
   ultimoAcesso: string | null;
@@ -196,6 +214,9 @@ export type PerfilConecta = {
   termo_conecta_data: string | null;
   created_at: string;
   updated_at: string;
+  // Só populado pela listagem do admin (listarCandidatosExternos) — TAREFA: coluna
+  // "Candidaturas" em /admin/conecta/candidatos.
+  totalCandidaturas?: number;
 };
 
 export type CandidatosExternosFiltro = {
@@ -411,6 +432,7 @@ export type AlunoVisivelConecta = {
   visivel: boolean;
   menorComTermo: boolean;
   cursosConcluidos: string[];
+  totalCandidaturas: number;
 };
 
 export type AlunosVisiveisFiltro = { query?: string; page?: number; limit?: number };
@@ -496,3 +518,36 @@ export const vagaFormSchema = z.object({
   prazo_candidatura: z.string().trim().max(10).optional(),
 });
 export type VagaFormValues = z.infer<typeof vagaFormSchema>;
+
+// ===== Candidatura interna (TAREFA: remover "Candidatar via WhatsApp" direto) =====
+
+export const CANDIDATURA_STATUSES = ["pendente", "visualizado", "contato", "rejeitado"] as const;
+export type CandidaturaStatus = (typeof CANDIDATURA_STATUSES)[number];
+export const CANDIDATURA_STATUS_LABELS: Record<CandidaturaStatus, string> = {
+  pendente: "Pendente",
+  visualizado: "Visualizado",
+  contato: "Em contato",
+  rejeitado: "Rejeitado",
+};
+export const CANDIDATURA_STATUS_BADGE_CLASS: Record<CandidaturaStatus, string> = {
+  pendente: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  visualizado: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+  contato: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  rejeitado: "bg-muted text-muted-foreground",
+};
+
+// Candidatura do ponto de vista da EMPRESA — WhatsApp do candidato só é exposto aqui depois que
+// a empresa abre os detalhes (ver marcarCandidaturaVisualizada), nunca na listagem.
+export type CandidaturaEmpresa = {
+  id: string;
+  status: CandidaturaStatus;
+  mensagem: string | null;
+  createdAt: string;
+  vagaId: string;
+  vagaTitulo: string;
+  candidatoNome: string;
+  candidatoWhatsapp: string | null;
+  candidatoResumo: string | null;
+  candidatoCurriculoPath: string | null;
+  candidatoCursosConcluidos: string[];
+};
