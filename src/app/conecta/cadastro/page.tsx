@@ -2,7 +2,6 @@ import Link from "next/link";
 import { GraduationCap, MapPin, ShieldCheck } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTermoLegalPublico, textoPlanoDoTermo } from "@/lib/termos-legais/get-termo";
-import { PLANOS_CONECTA, type PlanoConecta } from "@/lib/conecta/schema";
 import { ConectaCadastroExternoForm } from "@/components/conecta/cadastro-externo-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,19 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 const TEXTO_TERMO_MENOR_PADRAO =
   "Declaro que serei acompanhado por um dos meus pais ou responsável legal em qualquer entrevista de emprego.";
 
-function planoValido(valor: string | undefined): PlanoConecta | undefined {
-  return (PLANOS_CONECTA as readonly string[]).includes(valor ?? "") ? (valor as PlanoConecta) : undefined;
-}
-
 // Pública de propósito — cadastro de candidato externo não exige login
-// prévio (REGRA da tarefa). Sem requireRole aqui.
-export default async function ConectaCadastroPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ plano?: string }>;
-}) {
-  const { plano } = await searchParams;
-
+// prévio (REGRA da tarefa). Sem requireRole aqui. Único plano oferecido é o Básico (TAREFA:
+// desativar PRO/PREMIUM) — não recebe mais ?plano= por query string.
+export default async function ConectaCadastroPage() {
   // conecta_menor_termo é editável em /admin/conecta/termos — texto do checkbox de
   // acompanhamento exibido a candidatos de 16-17 anos (ver TAREFA de proteção de idade).
   // Logo via configuracoes.escola_logo_url (client admin, mesmo padrão de
@@ -51,7 +41,7 @@ export default async function ConectaCadastroPage({
           <p className="text-muted-foreground text-sm">Fique visível para empresas da região</p>
         </div>
 
-        <ConectaCadastroExternoForm textoTermoMenor={textoTermoMenor} planoInicial={planoValido(plano)} />
+        <ConectaCadastroExternoForm textoTermoMenor={textoTermoMenor} />
 
         <div className="flex flex-col gap-4">
           <h2 className="text-center text-lg font-semibold">Por que ser aluno da Gênezi?</h2>

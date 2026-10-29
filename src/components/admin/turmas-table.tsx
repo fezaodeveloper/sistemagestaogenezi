@@ -32,10 +32,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DIA_SEMANA_LABELS,
   TURMA_STATUS_BADGE_CLASS,
   TURMA_STATUS_LABELS,
   TURNO_BADGE_CLASS,
   TURNO_LABELS,
+  type DIAS_SEMANA,
   type TurmaWithCurso,
 } from "@/lib/turmas/schema";
 
@@ -49,6 +51,14 @@ const TURNO_FILTRO_TODOS = "todos";
 const TURNO_FILTRO_ITEMS: Record<string, string> = {
   [TURNO_FILTRO_TODOS]: "Todos os turnos",
   ...TURNO_LABELS,
+};
+
+const CURSO_FILTRO_TODOS = "todos";
+
+const DIA_FILTRO_TODOS = "todos";
+const DIA_FILTRO_ITEMS: Record<string, string> = {
+  [DIA_FILTRO_TODOS]: "Todos os dias",
+  ...DIA_SEMANA_LABELS,
 };
 
 const ORDER_BY_ITEMS: Record<string, string> = {
@@ -203,7 +213,20 @@ export function TurmasTable({
   });
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
   const [turnoFiltro, setTurnoFiltro] = useState<string>(TURNO_FILTRO_TODOS);
+  const [cursoFiltro, setCursoFiltro] = useState<string>(CURSO_FILTRO_TODOS);
+  const [diaFiltro, setDiaFiltro] = useState<string>(DIA_FILTRO_TODOS);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+
+  // Opções do filtro de curso vêm dos próprios cursos presentes na página atual (não existe um
+  // enum fixo de cursos, diferente de status/turno) — mesma limitação já aceita no filtro de
+  // status/turno abaixo: filtra só a página carregada, não o total de turmas do banco.
+  const cursoFiltroItems = useMemo(() => {
+    const items: Record<string, string> = { [CURSO_FILTRO_TODOS]: "Todos os cursos" };
+    for (const turma of turmas) {
+      if (turma.cursos?.nome) items[turma.curso_id] = turma.cursos.nome;
+    }
+    return items;
+  }, [turmas]);
 
   // Mesma convenção de URL "limpa" de construirHref (paginacao.tsx): só
   // entra na URL o que difere do padrão. Volta pra página 1 ao trocar a
@@ -224,9 +247,15 @@ export function TurmasTable({
     return turmas.filter((turma) => {
       if (statusFiltro !== STATUS_FILTRO_TODOS && turma.status !== statusFiltro) return false;
       if (turnoFiltro !== TURNO_FILTRO_TODOS && turma.turno !== turnoFiltro) return false;
+      if (cursoFiltro !== CURSO_FILTRO_TODOS && turma.curso_id !== cursoFiltro) return false;
+      if (
+        diaFiltro !== DIA_FILTRO_TODOS &&
+        !turma.cadencia_dias_semana?.includes(diaFiltro as (typeof DIAS_SEMANA)[number])
+      )
+        return false;
       return true;
     });
-  }, [turmas, statusFiltro, turnoFiltro]);
+  }, [turmas, statusFiltro, turnoFiltro, cursoFiltro, diaFiltro]);
 
   async function handleImprimir() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -290,6 +319,40 @@ export function TurmasTable({
               {Object.keys(TURNO_FILTRO_ITEMS).map((turno) => (
                 <SelectItem key={turno} value={turno}>
                   {TURNO_FILTRO_ITEMS[turno]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={cursoFiltroItems}
+            value={cursoFiltro}
+            onValueChange={(value) => setCursoFiltro(value as string)}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(cursoFiltroItems).map((cursoId) => (
+                <SelectItem key={cursoId} value={cursoId}>
+                  {cursoFiltroItems[cursoId]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={DIA_FILTRO_ITEMS}
+            value={diaFiltro}
+            onValueChange={(value) => setDiaFiltro(value as string)}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(DIA_FILTRO_ITEMS).map((dia) => (
+                <SelectItem key={dia} value={dia}>
+                  {DIA_FILTRO_ITEMS[dia]}
                 </SelectItem>
               ))}
             </SelectContent>

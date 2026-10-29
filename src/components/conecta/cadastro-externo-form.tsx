@@ -10,9 +10,7 @@ import {
   FORMA_PAGAMENTO_CONECTA_LABELS,
   FORMAS_PAGAMENTO_CONECTA,
   PLANO_CONECTA_INFO,
-  PLANOS_CONECTA,
   type FormaPagamentoConecta,
-  type PlanoConecta,
 } from "@/lib/conecta/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +21,6 @@ import { TelefoneInput } from "@/components/ui/telefone-input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 const UF_ITEMS = Object.fromEntries(UFS_BRASIL.map((uf) => [uf, uf]));
 
@@ -38,37 +35,7 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
   );
 }
 
-function PlanoCard({ plano, selecionado }: { plano: PlanoConecta; selecionado: boolean }) {
-  const info = PLANO_CONECTA_INFO[plano];
-  return (
-    <Label
-      htmlFor={`plano-${plano}`}
-      className={cn(
-        "flex cursor-pointer flex-col gap-2 rounded-lg border p-4 transition-colors",
-        selecionado ? "border-primary bg-primary/5" : "border-input",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">{info.label}</span>
-        <RadioGroupItem value={plano} id={`plano-${plano}`} />
-      </div>
-      <span className="text-2xl font-bold">
-        R$ {info.valor.toFixed(2).replace(".", ",")}
-        <span className="text-muted-foreground text-sm font-normal">/mês</span>
-      </span>
-      <span className="text-sm">{info.descricao}</span>
-      <span className="text-muted-foreground text-xs">{info.beneficio}</span>
-    </Label>
-  );
-}
-
-export function ConectaCadastroExternoForm({
-  textoTermoMenor,
-  planoInicial,
-}: {
-  textoTermoMenor: string;
-  planoInicial?: PlanoConecta;
-}) {
+export function ConectaCadastroExternoForm({ textoTermoMenor }: { textoTermoMenor: string }) {
   const [state, formAction] = useActionState<CadastroCandidatoExternoState, FormData>(
     cadastrarCandidatoExterno,
     undefined,
@@ -84,7 +51,6 @@ export function ConectaCadastroExternoForm({
   const [municipiosCarregados, setMunicipiosCarregados] = useState<{ uf: UfBrasil; lista: readonly string[] } | null>(
     null,
   );
-  const [plano, setPlano] = useState<PlanoConecta>(planoInicial ?? "basico");
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoConecta>("PIX");
   const [termoAcompanhamento, setTermoAcompanhamento] = useState(false);
 
@@ -123,17 +89,18 @@ export function ConectaCadastroExternoForm({
       <CardContent className="pt-6">
         <form action={formAction} className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold">Escolha seu plano</h2>
-            <RadioGroup
-              name="plano"
-              value={plano}
-              onValueChange={(value) => setPlano(value as PlanoConecta)}
-              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-            >
-              {PLANOS_CONECTA.map((opcao) => (
-                <PlanoCard key={opcao} plano={opcao} selecionado={plano === opcao} />
-              ))}
-            </RadioGroup>
+            <h2 className="text-sm font-semibold">Plano</h2>
+            <div className="flex items-center justify-between gap-2 rounded-lg border p-4">
+              <div>
+                <span className="font-semibold">{PLANO_CONECTA_INFO.basico.label}</span>
+                <p className="text-muted-foreground text-sm">{PLANO_CONECTA_INFO.basico.descricao}</p>
+              </div>
+              <span className="text-2xl font-bold">
+                R$ {PLANO_CONECTA_INFO.basico.valor.toFixed(2).replace(".", ",")}
+                <span className="text-muted-foreground text-sm font-normal">/mês</span>
+              </span>
+            </div>
+            <input type="hidden" name="plano" value="basico" />
           </div>
 
           <div className="flex flex-col gap-4 border-t pt-4">

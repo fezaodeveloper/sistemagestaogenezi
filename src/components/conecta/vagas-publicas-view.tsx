@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
-import { PLANOS_CONECTA, PLANO_CONECTA_INFO, type CidadeConectaComContagem, type PlanoConecta } from "@/lib/conecta/schema";
+import { PLANOS_CONECTA_ATIVOS, PLANO_CONECTA_INFO, type CidadeConectaComContagem, type PlanoConecta } from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +18,6 @@ import { ConectaWhatsappFlutuante } from "@/components/conecta/conecta-whatsapp-
 
 function PlanoPublicoCard({ plano }: { plano: PlanoConecta }) {
   const info = PLANO_CONECTA_INFO[plano];
-  const href = plano === "basico" ? "/conecta/cadastro" : `/conecta/cadastro?plano=${plano}`;
   return (
     <Card>
       <CardContent className="flex flex-col gap-2 py-6 text-center">
@@ -28,7 +27,7 @@ function PlanoPublicoCard({ plano }: { plano: PlanoConecta }) {
           <span className="text-muted-foreground text-sm font-normal">/mês</span>
         </span>
         <p className="text-muted-foreground text-sm">{info.descricao}</p>
-        <Button nativeButton={false} render={<Link href={href} />} className="mt-2">
+        <Button nativeButton={false} render={<Link href="/conecta/cadastro" />} className="mt-2">
           Assinar
         </Button>
       </CardContent>
@@ -111,8 +110,8 @@ export function ConectaVagasPublicasView({
             <h2 className="text-2xl font-bold">Acesse as vagas — Escolha seu plano</h2>
             <p className="text-muted-foreground text-sm">Para quem não é aluno da Gênezi.</p>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {PLANOS_CONECTA.map((plano) => (
+          <div className="mx-auto w-full max-w-sm">
+            {PLANOS_CONECTA_ATIVOS.map((plano) => (
               <PlanoPublicoCard key={plano} plano={plano} />
             ))}
           </div>

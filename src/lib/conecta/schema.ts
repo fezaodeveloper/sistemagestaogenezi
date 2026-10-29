@@ -314,6 +314,12 @@ export type EmpresaCadastroValues = z.infer<typeof empresaCadastroSchema>;
 export const PLANOS_CONECTA = ["basico", "pro", "premium"] as const;
 export type PlanoConecta = (typeof PLANOS_CONECTA)[number];
 
+// Planos oferecidos a NOVOS cadastros (TAREFA: desativar PRO/PREMIUM) — PLANOS_CONECTA continua
+// com os 3 valores porque assinantes já existentes com plano 'pro'/'premium' continuam
+// aparecendo normalmente no admin (badge, cancelamento, etc.), só a oferta pra quem ainda não
+// assinou é que fica restrita ao básico.
+export const PLANOS_CONECTA_ATIVOS = ["basico"] as const satisfies readonly PlanoConecta[];
+
 export const PLANO_CONECTA_INFO: Record<
   PlanoConecta,
   { label: string; valor: number; descricao: string; beneficio: string }
@@ -373,7 +379,10 @@ export const candidatoExternoCadastroSchema = z.object({
     .max(20),
   cidade: z.string().trim().max(100).optional(),
   estado: z.string().trim().max(2).optional(),
-  plano: z.enum(PLANOS_CONECTA, { error: "Escolha um plano." }),
+  // z.enum em PLANOS_CONECTA_ATIVOS (só 'basico'), não no PLANOS_CONECTA completo — garante que
+  // um POST direto com plano=pro/premium também seja rejeitado pelo servidor, não só escondido
+  // na UI (TAREFA: desativar PRO/PREMIUM pra novos cadastros).
+  plano: z.enum(PLANOS_CONECTA_ATIVOS, { error: "Escolha um plano." }),
   forma_pagamento: z.enum(FORMAS_PAGAMENTO_CONECTA, { error: "Escolha a forma de pagamento." }),
 });
 export type CandidatoExternoCadastroValues = z.infer<typeof candidatoExternoCadastroSchema>;
