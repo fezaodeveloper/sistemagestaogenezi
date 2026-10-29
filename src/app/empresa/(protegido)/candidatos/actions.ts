@@ -36,7 +36,7 @@ export async function getCandidatosDisponiveis(): Promise<CandidatoConecta[]> {
 
   const admin = createAdminClient();
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from("perfis_conecta")
     .select(
       "id, aluno_id, nome, whatsapp, cidade, estado, resumo, experiencias, linkedin_url, disponibilidade, modalidade_preferida, curriculo_path, alunos(profiles!alunos_id_fkey(full_name))",
@@ -44,6 +44,14 @@ export async function getCandidatosDisponiveis(): Promise<CandidatoConecta[]> {
     .eq("visivel", true)
     .or("tipo.eq.aluno,esta_ativo.eq.true")
     .order("updated_at", { ascending: false });
+
+  // Erro de query antes era descartado em silêncio (data vinha undefined, perfis ficava [] sem
+  // nenhum rastro) — sem isso, um erro de verdade (embed do PostgREST, grant faltando) parecia
+  // exatamente igual a "não tem candidato disponível". Logado aqui pra aparecer nos logs da
+  // função no Vercel na próxima vez que isso acontecer.
+  if (error) {
+    console.error("[getCandidatosDisponiveis] erro ao buscar perfis_conecta:", error);
+  }
 
   const perfis = (data as unknown as PerfilConectaRow[] | null) ?? [];
   const alunoIds = perfis.map((p) => p.aluno_id).filter((id): id is string => Boolean(id));
@@ -150,17 +158,29 @@ export async function getCandidaturasEmpresa(): Promise<CandidaturaEmpresa[]> {
   if (!empresa) return [];
 
   const admin = createAdminClient();
-  const { data: vagasDaEmpresa } = await admin.from("vagas_conecta").select("id").eq("empresa_id", empresa.id);
+  const { data: vagasDaEmpresa, error: erroVagas } = await admin
+    .from("vagas_conecta")
+    .select("id")
+    .eq("empresa_id", empresa.id);
+  if (erroVagas) {
+    console.error("[getCandidaturasEmpresa] erro ao buscar vagas_conecta:", erroVagas);
+  }
   const vagaIds = (vagasDaEmpresa ?? []).map((v) => v.id as string);
   if (vagaIds.length === 0) return [];
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from("candidaturas_conecta")
     .select(
       "id, status, mensagem, created_at, vaga_id, vagas_conecta(titulo), perfis_conecta(aluno_id, nome, whatsapp, resumo, curriculo_path, alunos(profiles!alunos_id_fkey(full_name)))",
     )
     .in("vaga_id", vagaIds)
     .order("created_at", { ascending: false });
+
+  // Mesmo motivo do log em getCandidatosDisponiveis (acima) — sem isso, um erro real de query
+  // (ex.: embed do PostgREST) é indistinguível de "nenhuma candidatura ainda" na tela da empresa.
+  if (error) {
+    console.error("[getCandidaturasEmpresa] erro ao buscar candidaturas_conecta:", error);
+  }
 
   const candidaturas = (data as unknown as CandidaturaRow[] | null) ?? [];
   const alunoIds = candidaturas
