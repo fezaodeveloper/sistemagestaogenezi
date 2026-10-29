@@ -20,17 +20,20 @@ type PerfilConectaRow = {
   disponibilidade: CandidatoConecta["disponibilidade"];
   modalidade_preferida: CandidatoConecta["modalidadePreferida"];
   curriculo_path: string | null;
-  alunos: { profiles: { full_name: string | null } | null } | null;
+  profiles: { full_name: string | null } | null;
 };
 
 // Client admin de propósito: perfis_conecta não tem policy de select pra
 // empresa ler perfis de OUTRO usuário (só "Aluno gerencia proprio perfil" e
 // "Admins gerenciam perfis") — a policy "Empresas veem perfis visiveis e
 // ativos" existe e cobriria o filtro certo pelo client autenticado normal,
-// mas o embed até profiles (perfis_conecta -> alunos -> profiles) exige
-// visibilidade de leitura em alunos/profiles também, que a empresa não
-// tem. Sem migration nova (REGRA): bypass via service_role, mesmo padrão
-// já usado em buscarVagasConecta.
+// mas o embed até profiles exige visibilidade de leitura em profiles
+// também, que a empresa não tem. Sem migration nova (REGRA): bypass via
+// service_role, mesmo padrão já usado em buscarVagasConecta.
+//
+// nome vem de profiles.full_name direto (NÃO via alunos->profiles): perfis_conecta.aluno_id
+// referencia profiles(id), não alunos(id) — ver comentário em listarAlunosVisiveisConecta
+// (admin/conecta/candidatos/actions.ts) sobre o PGRST200 real causado por esse embed errado.
 export async function getCandidatosDisponiveis(): Promise<CandidatoConecta[]> {
   await requireEmpresa();
 
@@ -39,7 +42,7 @@ export async function getCandidatosDisponiveis(): Promise<CandidatoConecta[]> {
   const { data, error } = await admin
     .from("perfis_conecta")
     .select(
-      "id, aluno_id, nome, whatsapp, cidade, estado, resumo, experiencias, linkedin_url, disponibilidade, modalidade_preferida, curriculo_path, alunos(profiles!alunos_id_fkey(full_name))",
+      "id, aluno_id, nome, whatsapp, cidade, estado, resumo, experiencias, linkedin_url, disponibilidade, modalidade_preferida, curriculo_path, profiles!perfis_conecta_aluno_id_fkey(full_name)",
     )
     .eq("visivel", true)
     .or("tipo.eq.aluno,esta_ativo.eq.true")
@@ -79,7 +82,7 @@ export async function getCandidatosDisponiveis(): Promise<CandidatoConecta[]> {
   return perfis.map((perfil) => ({
     id: perfil.id,
     alunoId: perfil.aluno_id,
-    nome: perfil.alunos?.profiles?.full_name ?? perfil.nome ?? "Candidato",
+    nome: perfil.profiles?.full_name ?? perfil.nome ?? "Candidato",
     whatsapp: perfil.whatsapp,
     cidade: perfil.cidade,
     estado: perfil.estado,
@@ -143,13 +146,18 @@ type CandidaturaRow = {
     whatsapp: string | null;
     resumo: string | null;
     curriculo_path: string | null;
-    alunos: { profiles: { full_name: string | null } | null } | null;
+    profiles: { full_name: string | null } | null;
   } | null;
 };
 
 // Client admin de propósito: o embed até perfis_conecta exige visibilidade de leitura que a
 // empresa não tem pra candidatos sem visivel=true (candidatura é independente do toggle geral
 // de visibilidade) — mesmo motivo/padrão já usado em getCandidatosDisponiveis, acima.
+//
+// nome vem de profiles.full_name direto (NÃO via alunos->profiles) — ver comentário em
+// listarAlunosVisiveisConecta (admin/conecta/candidatos/actions.ts) sobre o PGRST200 real
+// ("Could not find a relationship between 'perfis_conecta' and 'alunos'") causado pelo embed
+// antigo: perfis_conecta.aluno_id referencia profiles(id), não alunos(id).
 export async function getCandidaturasEmpresa(): Promise<CandidaturaEmpresa[]> {
   const user = await requireEmpresa();
 
@@ -171,7 +179,7 @@ export async function getCandidaturasEmpresa(): Promise<CandidaturaEmpresa[]> {
   const { data, error } = await admin
     .from("candidaturas_conecta")
     .select(
-      "id, status, mensagem, created_at, vaga_id, vagas_conecta(titulo), perfis_conecta(aluno_id, nome, whatsapp, resumo, curriculo_path, alunos(profiles!alunos_id_fkey(full_name)))",
+      "id, status, mensagem, created_at, vaga_id, vagas_conecta(titulo), perfis_conecta(aluno_id, nome, whatsapp, resumo, curriculo_path, profiles!perfis_conecta_aluno_id_fkey(full_name))",
     )
     .in("vaga_id", vagaIds)
     .order("created_at", { ascending: false });
@@ -212,7 +220,7 @@ export async function getCandidaturasEmpresa(): Promise<CandidaturaEmpresa[]> {
     createdAt: c.created_at,
     vagaId: c.vaga_id,
     vagaTitulo: c.vagas_conecta?.titulo ?? "—",
-    candidatoNome: c.perfis_conecta?.alunos?.profiles?.full_name ?? c.perfis_conecta?.nome ?? "Candidato",
+    candidatoNome: c.perfis_conecta?.profiles?.full_name ?? c.perfis_conecta?.nome ?? "Candidato",
     candidatoWhatsapp: c.perfis_conecta?.whatsapp ?? null,
     candidatoResumo: c.perfis_conecta?.resumo ?? null,
     candidatoCurriculoPath: c.perfis_conecta?.curriculo_path ?? null,

@@ -70,14 +70,18 @@ type PerfilAlunoRow = {
   visivel: boolean;
   menor_com_termo: boolean;
   updated_at: string;
-  alunos: { profiles: { full_name: string | null } | null } | null;
+  profiles: { full_name: string | null } | null;
 };
 
-// Nome vem de alunos->profiles, não de perfis_conecta.nome (essa coluna é
-// só pra candidatos EXTERNOS, ver comentário na migration/schema) — mesmo
-// join já usado em getCandidatosDisponiveis (portal da empresa), aqui via
-// client autenticado normal porque admin já tem RLS "is_admin()" liberando
-// select em perfis_conecta/alunos/profiles (não precisa do bypass de
+// Nome vem de profiles.full_name direto (NÃO via alunos->profiles): perfis_conecta.aluno_id
+// referencia profiles(id), não alunos(id) — a FK foi trocada de propósito em
+// 20260917100000_conecta_webhook_log.sql pra cobrir candidatos EXTERNOS também (que não têm
+// linha em alunos). Um embed alunos(profiles!alunos_id_fkey(...)) a partir de perfis_conecta
+// falha com PGRST200 ("no relationship between perfis_conecta and alunos") porque esse
+// relacionamento não existe — bug real que já causou "alunos não aparecem"/"candidaturas não
+// aparecem" (confirmado via log do Vercel). Mesmo embed corrigido em getCandidatosDisponiveis e
+// getCandidaturasEmpresa (portal da empresa), aqui via client autenticado normal porque admin já
+// tem RLS "is_admin()" liberando select em perfis_conecta/profiles (não precisa do bypass de
 // service_role que a empresa precisa).
 // Filtro de busca e paginação em JS pelo mesmo motivo de
 // getVagasAdminConecta: nome vem de uma tabela embutida (join aninhado),
@@ -91,14 +95,18 @@ export async function listarAlunosVisiveisConecta(
   const limit = filtro.limit && filtro.limit > 0 ? filtro.limit : LIMITE_PADRAO;
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("perfis_conecta")
     .select(
-      "id, aluno_id, whatsapp, cidade, disponibilidade, visivel, menor_com_termo, updated_at, alunos(profiles!alunos_id_fkey(full_name))",
+      "id, aluno_id, whatsapp, cidade, disponibilidade, visivel, menor_com_termo, updated_at, profiles!perfis_conecta_aluno_id_fkey(full_name)",
     )
     .eq("tipo", "aluno")
     .eq("visivel", true)
     .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("[listarAlunosVisiveisConecta] erro ao buscar perfis_conecta:", error);
+  }
 
   const perfis = (data as unknown as PerfilAlunoRow[] | null) ?? [];
   const alunoIds = perfis.map((p) => p.aluno_id).filter((id): id is string => Boolean(id));
@@ -138,7 +146,7 @@ export async function listarAlunosVisiveisConecta(
   const todos: AlunoVisivelConecta[] = perfis.map((perfil) => ({
     id: perfil.id,
     alunoId: perfil.aluno_id,
-    nome: perfil.alunos?.profiles?.full_name ?? "Aluno",
+    nome: perfil.profiles?.full_name ?? "Aluno",
     whatsapp: perfil.whatsapp,
     cidade: perfil.cidade,
     disponibilidade: perfil.disponibilidade,
