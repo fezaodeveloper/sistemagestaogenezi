@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RotateCcw, Trash2, Upload, X } from "lucide-react";
+import { Monitor, Plus, RotateCcw, Smartphone, Trash2, Upload, X } from "lucide-react";
 import { atualizarCampanhaPagina, criarCampanhaPagina } from "@/app/admin/comercial/paginas-campanha/actions";
 import { createClient } from "@/lib/supabase/client";
 import { UtmLinkGenerator } from "@/components/admin/utm-link-generator";
@@ -402,6 +402,9 @@ export function CampanhaEditor({
   const [tipografia, setTipografia] = useState<Tipografia>(() => resolverTipografia(pagina?.tipografia));
   // Incrementa pra remontar o preview do zero (volta à primeira etapa, campos vazios).
   const [previewKey, setPreviewKey] = useState(0);
+  // TAREFA campanha 2.5 (PARTE 2) — só troca a largura/moldura do container; o mesmo
+  // CampanhaPublicaView continua sendo renderizado, sem recarregar nada.
+  const [visualizacaoPreview, setVisualizacaoPreview] = useState<"desktop" | "mobile">("desktop");
 
   const [mostrarLgpd, setMostrarLgpd] = useState(pagina?.mostrar_lgpd ?? true);
   const [textoLgpd, setTextoLgpd] = useState(pagina?.texto_lgpd ?? "");
@@ -1141,19 +1144,56 @@ export function CampanhaEditor({
               alimentado pelo estado do editor. Fica FORA do <form> — Enter num
               campo do preview não pode disparar o "Salvar" do editor. */}
           <div className="lg:sticky lg:top-20 lg:self-start">
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-muted-foreground text-xs font-medium uppercase">Preview em tempo real</p>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewKey((k) => k + 1)}>
-                <RotateCcw className="size-3.5" />
-                Reiniciar
-              </Button>
+              <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5 rounded-md border p-0.5" role="group" aria-label="Largura do preview">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant={visualizacaoPreview === "desktop" ? "secondary" : "ghost"}
+                    aria-pressed={visualizacaoPreview === "desktop"}
+                    onClick={() => setVisualizacaoPreview("desktop")}
+                    aria-label="Preview desktop"
+                    title="Desktop"
+                  >
+                    <Monitor className="size-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant={visualizacaoPreview === "mobile" ? "secondary" : "ghost"}
+                    aria-pressed={visualizacaoPreview === "mobile"}
+                    onClick={() => setVisualizacaoPreview("mobile")}
+                    aria-label="Preview mobile"
+                    title="Mobile"
+                  >
+                    <Smartphone className="size-3.5" />
+                  </Button>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewKey((k) => k + 1)}>
+                  <RotateCcw className="size-3.5" />
+                  Reiniciar
+                </Button>
+              </div>
             </div>
             <div
-              className="max-h-[calc(100svh-9rem)] overflow-y-auto rounded-lg border p-4"
-              style={{ backgroundColor: corFundo, color: tema === "escuro" ? "#f8fafc" : "#0f172a" }}
+              className={
+                visualizacaoPreview === "mobile"
+                  ? "mx-auto w-[390px] max-w-full rounded-[2rem] border-8 border-neutral-800 p-1 shadow-xl dark:border-neutral-700"
+                  : ""
+              }
             >
-              <div className="mx-auto w-full max-w-lg py-2">
-                <CampanhaPublicaView key={previewKey} pagina={paginaPreview} preview />
+              <div
+                className={
+                  "max-h-[calc(100svh-9rem)] overflow-y-auto p-4 " +
+                  (visualizacaoPreview === "mobile" ? "rounded-[1.5rem]" : "rounded-lg border")
+                }
+                style={{ backgroundColor: corFundo, color: tema === "escuro" ? "#f8fafc" : "#0f172a" }}
+              >
+                <div className="mx-auto w-full max-w-lg py-2">
+                  <CampanhaPublicaView key={previewKey} pagina={paginaPreview} preview />
+                </div>
               </div>
             </div>
             <p className="text-muted-foreground mt-2 text-xs">

@@ -292,6 +292,8 @@ export function CampanhaPublicaView({
   encerrada = false,
   preview = false,
   utm,
+  escolaTelefone = null,
+  escolaEndereco = null,
 }: {
   pagina: CampanhaPagina;
   encerrada?: boolean;
@@ -299,6 +301,10 @@ export function CampanhaPublicaView({
   // TAREFA CRM 2.2 (PARTE 3) — lido em page.tsx (searchParams, Server Component) e só
   // repassado aqui pro FormData do envio; nenhum campo visível/editável pelo visitante.
   utm?: { source: string | null; medium: string | null; campaign: string | null };
+  // TAREFA campanha 2.5 (PARTE 3) — rodapé com contato da escola; opcional porque o preview do
+  // editor (campanha-editor.tsx) não busca configuracoes.
+  escolaTelefone?: string | null;
+  escolaEndereco?: string | null;
 }) {
   const escuro = pagina.tema === "escuro";
   const tipografia = useMemo(() => resolverTipografia(pagina.tipografia), [pagina.tipografia]);
@@ -534,7 +540,7 @@ export function CampanhaPublicaView({
       <div className="flex flex-col items-center gap-3 text-center">
         {pagina.imagem_topo_url && (
           // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
-          <img src={pagina.imagem_topo_url} alt="" className="w-full rounded-lg object-cover" />
+          <img src={pagina.imagem_topo_url} alt="" className="max-h-56 w-full rounded-lg object-cover sm:max-h-72" />
         )}
         {/* Logo ABAIXO do banner/imagem principal. */}
         {pagina.logo_url && (
@@ -594,7 +600,7 @@ export function CampanhaPublicaView({
               { label: "Seg", valor: contagem.segundos },
             ].map((item) => (
               <div key={item.label} className="flex flex-col">
-                <span className="text-2xl font-bold" style={{ color: "var(--cor-primaria)" }}>
+                <span className="text-2xl font-bold sm:text-3xl" style={{ color: "var(--cor-primaria)" }}>
                   {String(item.valor).padStart(2, "0")}
                 </span>
                 <span className="text-[10px] uppercase" style={{ color: pagina.cor_fonte }}>
@@ -701,7 +707,7 @@ export function CampanhaPublicaView({
                   onChange={setCidade}
                 />
               </div>
-              <Button type="button" className={escalaTexto} disabled={!podeAvancarDadosBasicos()} style={{ backgroundColor: pagina.cor_primaria }} onClick={avancar}>
+              <Button type="button" className={`w-full ${escalaTexto}`} disabled={!podeAvancarDadosBasicos()} style={{ backgroundColor: pagina.cor_primaria }} onClick={avancar}>
                 Continuar para a Etapa 2
               </Button>
             </div>
@@ -856,6 +862,13 @@ export function CampanhaPublicaView({
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {(escolaTelefone || escolaEndereco) && (
+        <div className="flex flex-col items-center gap-0.5 pt-2 text-center text-[0.75em] opacity-70" style={{ color: pagina.cor_fonte }}>
+          {escolaTelefone && <p>📞 {escolaTelefone}</p>}
+          {escolaEndereco && <p>📍 {escolaEndereco}</p>}
+        </div>
       )}
     </div>
   );

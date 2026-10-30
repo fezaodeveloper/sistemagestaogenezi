@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampanhaPaginaPublica, contarRespostasAdmin } from "@/lib/campanha-paginas/campanha-paginas";
@@ -10,6 +11,30 @@ import { PixelsScripts } from "@/components/pixels/pixels-scripts";
 // momento, não pode ser congelado como estática no build (mesmo motivo de
 // /captacao e /agendar/[slug]).
 export const dynamic = "force-dynamic";
+
+// TAREFA campanha 2.5 (PARTE 4) — favicon dinâmico (logo da escola) + Open Graph (título,
+// descrição, imagem) pra link bonito ao compartilhar no WhatsApp/Instagram. Página sem slug
+// correspondente cai no not-found.tsx deste segmento (metadata genérica, sem consultar nada).
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const admin = createAdminClient();
+  const [pagina, { data: config }] = await Promise.all([
+    getCampanhaPaginaPublica(admin, slug),
+    admin.from("configuracoes").select("escola_nome, escola_logo_url").eq("id", true).maybeSingle(),
+  ]);
+  if (!pagina) return { title: "Página não encontrada" };
+
+  const titulo = `${pagina.titulo} · ${config?.escola_nome ?? "Gênezi"}`;
+  const descricao = pagina.subtitulo ?? pagina.descricao ?? "Preencha seus dados e garanta sua vaga.";
+  const imagem = pagina.imagem_topo_url ?? pagina.logo_url ?? config?.escola_logo_url ?? undefined;
+
+  return {
+    title: titulo,
+    description: descricao,
+    icons: config?.escola_logo_url ? { icon: config.escola_logo_url } : undefined,
+    openGraph: { title: titulo, description: descricao, images: imagem ? [imagem] : undefined },
+  };
+}
 
 export default async function CampanhaPage({
   params,
@@ -35,7 +60,10 @@ export default async function CampanhaPage({
 
   const encerrada = pagina.status === "encerrada" || !!(pagina.data_fim && new Date() > new Date(pagina.data_fim));
 
-  const totalRespostas = pagina.vagas_limite ? await contarRespostasAdmin(admin, pagina.id) : 0;
+  const [totalRespostas, { data: config }] = await Promise.all([
+    pagina.vagas_limite ? contarRespostasAdmin(admin, pagina.id) : Promise.resolve(0),
+    admin.from("configuracoes").select("escola_telefone, escola_endereco").eq("id", true).maybeSingle(),
+  ]);
   const vagasEsgotadas = !!pagina.vagas_limite && totalRespostas >= pagina.vagas_limite;
 
   const escuro = pagina.tema === "escuro";
@@ -54,14 +82,25 @@ export default async function CampanhaPage({
             encerradas!" no topo e bloqueia o formulário (o cabeçalho, com título e
             cards, continua visível). */}
         {encerrada ? (
-          <CampanhaPublicaView pagina={pagina} encerrada utm={utm} />
+          <CampanhaPublicaView
+            pagina={pagina}
+            encerrada
+            utm={utm}
+            escolaTelefone={config?.escola_telefone ?? null}
+            escolaEndereco={config?.escola_endereco ?? null}
+          />
         ) : vagasEsgotadas ? (
           <div className="flex flex-col items-center gap-2 py-20 text-center">
             <p className="text-xl font-semibold">Vagas esgotadas</p>
             <p className="text-sm opacity-70">Todas as vagas dessa campanha já foram preenchidas.</p>
           </div>
         ) : (
-          <CampanhaPublicaView pagina={pagina} utm={utm} />
+          <CampanhaPublicaView
+            pagina={pagina}
+            utm={utm}
+            escolaTelefone={config?.escola_telefone ?? null}
+            escolaEndereco={config?.escola_endereco ?? null}
+          />
         )}
       </div>
     </main>

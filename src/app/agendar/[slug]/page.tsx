@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,6 +16,28 @@ const JANELA_DIAS = AGENDAMENTO_JANELA_DIAS;
 // vagas ocupadas) muda a qualquer momento, não pode ser congelada como
 // estática no build (mesmo motivo de /captacao).
 export const dynamic = "force-dynamic";
+
+// TAREFA agendamentos 2.4/campanha 2.5 (PARTE 4) — favicon dinâmico (logo da escola) + Open
+// Graph pra link bonito ao compartilhar no WhatsApp/Instagram.
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const [pagina, { data: config }] = await Promise.all([
+    getAgendamentoPaginaPublica(supabase, slug),
+    createAdminClient().from("configuracoes").select("escola_nome, escola_logo_url").eq("id", true).maybeSingle(),
+  ]);
+  if (!pagina) return { title: "Página não encontrada" };
+
+  const titulo = `${pagina.titulo} · ${config?.escola_nome ?? "Gênezi"}`;
+  const descricao = pagina.descricao ?? "Agende seu horário.";
+
+  return {
+    title: titulo,
+    description: descricao,
+    icons: config?.escola_logo_url ? { icon: config.escola_logo_url } : undefined,
+    openGraph: { title: titulo, description: descricao, images: config?.escola_logo_url ? [config.escola_logo_url] : undefined },
+  };
+}
 
 export default async function AgendarPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

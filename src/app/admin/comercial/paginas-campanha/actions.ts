@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, LIMITE_PADRAO } from "@/lib/paginacao";
@@ -11,6 +12,7 @@ import {
   type CampanhaPaginaComContagem,
 } from "@/lib/campanha-paginas/campanha-paginas";
 import { campanhaPaginaFormSchema, type CampanhaPagina, type CampanhaResposta } from "@/lib/campanha-paginas/schema";
+import { CAMPANHA_TEMPLATE_IDS, CAMPANHA_TEMPLATES, type CampanhaTemplateId } from "@/lib/campanha-paginas/templates";
 
 export type CampanhaPaginasResultado = {
   itens: CampanhaPaginaComContagem[];
@@ -135,6 +137,100 @@ export async function criarCampanhaPagina(formData: FormData): Promise<{ error?:
 
   revalidatePath("/admin/comercial/paginas-campanha");
   return { id: data.id };
+}
+
+function slugify(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const SLUG_MAXIMO = 100;
+const TENTATIVAS_SLUG = 20;
+
+const criarDeTemplateSchema = z.object({
+  templateId: z.enum(CAMPANHA_TEMPLATE_IDS),
+  titulo: z.string().trim().min(1, { error: "Informe o título principal." }).max(200),
+  subtitulo: z.string().trim().max(300).optional(),
+  cursoId: z.string().trim().optional(),
+  dataLimite: z.string().trim().optional(),
+});
+
+// TAREFA campanha 2.5 (PARTE 1) — cria a página já populada com um dos 4 templates prontos
+// (src/lib/campanha-paginas/templates.ts) + os poucos campos que a modal de personalização
+// rápida pede, e devolve o id pra o client abrir o editor completo em seguida. Mesma lógica de
+// slug único de duplicarAgendamentoPagina (sufixo "-2", "-3"... se o slugify do título colidir).
+export async function criarCampanhaPaginaDeTemplate(dados: {
+  templateId: CampanhaTemplateId;
+  titulo: string;
+  subtitulo: string;
+  cursoId: string;
+  dataLimite: string;
+}): Promise<{ error?: string; id?: string }> {
+  const user = await requireRole("admin");
+
+  const parsed = criarDeTemplateSchema.safeParse(dados);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const template = CAMPANHA_TEMPLATES[parsed.data.templateId];
+  const campos = template.gerar({
+    titulo: parsed.data.titulo,
+    subtitulo: parsed.data.subtitulo ?? "",
+    dataLimite: parsed.data.dataLimite,
+  });
+
+  const supabase = await createClient();
+  const baseSlug = slugify(parsed.data.titulo) || template.id;
+
+  for (let tentativa = 1; tentativa <= TENTATIVAS_SLUG; tentativa++) {
+    const sufixo = tentativa === 1 ? "" : `-${tentativa}`;
+    const slug = `${baseSlug.slice(0, SLUG_MAXIMO - sufixo.length)}${sufixo}`;
+
+    const { data, error } = await supabase
+      .from("campanha_paginas")
+      .insert({
+        titulo: campos.titulo,
+        slug,
+        subtitulo: campos.subtitulo || null,
+        descricao: campos.descricao || null,
+        curso_id: template.pedeCurso && parsed.data.cursoId ? parsed.data.cursoId : null,
+        cor_primaria: campos.cor_primaria,
+        cor_fundo: campos.cor_fundo,
+        cor_fonte: campos.cor_fonte,
+        tema: campos.tema,
+        status: campos.status,
+        mostrar_contador: campos.mostrar_contador,
+        contador_data_fim: campos.contador_data_fim,
+        coletar_email: campos.coletar_email,
+        coletar_cidade: campos.coletar_cidade,
+        cards_destaque: campos.cards_destaque,
+        etapas: campos.etapas,
+        mostrar_lgpd: true,
+        mostrar_declaracao: false,
+        titulo_sucesso: campos.titulo_sucesso,
+        mensagem_sucesso: campos.mensagem_sucesso,
+        notificar_telegram: true,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (error?.code === "23505") continue; // slug já existe — tenta o próximo sufixo
+    if (error || !data) {
+      return { error: "Não foi possível criar a página a partir do template. Tente novamente." };
+    }
+
+    revalidatePath("/admin/comercial/paginas-campanha");
+    return { id: data.id };
+  }
+
+  return { error: "Não foi possível gerar um slug único para a página." };
 }
 
 export async function atualizarCampanhaPagina(id: string, formData: FormData): Promise<{ error?: string; id?: string }> {
