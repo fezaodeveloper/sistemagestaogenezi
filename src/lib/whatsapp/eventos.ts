@@ -81,56 +81,52 @@ function urlPortal(): string {
 
 // ----- Agendamento: lembrete D-1 (cron lembrete-agendamentos) -----
 
+// local/link_gerenciar (fix pós agendamentos 2.4): um lembrete separado de "2h antes" exigiria
+// um cron de hora em hora, incompatível com o plano Vercel Hobby (crons só 1x/dia) — eliminado.
+// Em vez disso, esses dois dados (que o lembrete de 2h levaria) entraram neste único lembrete
+// D-1 que já existia, dentro do mesmo cron diário (ver vercel.json).
 export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Promise<void> {
   return (async () => {
     try {
       if (!(await whatsappToggleHabilitado("wz_lembrete_agendamento"))) return;
 
-      const { data } = await createAdminClient()
+      const admin = createAdminClient();
+      const { data } = await admin
         .from("agendamentos")
-        .select("nome, whatsapp, data_agendada, horario")
+        .select("nome, whatsapp, data_agendada, horario, pagina_id")
         .eq("id", agendamentoId)
         .maybeSingle();
-      const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string } | null;
+      const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string; pagina_id: string } | null;
       if (!agendamento?.whatsapp) return;
+
+      // Consulta separada e best-effort: local_atendimento/slug (migration 20261030500000) são
+      // colunas novas — se ainda não existirem, local/link_gerenciar saem em branco, mas o
+      // lembrete D-1 (que já funciona hoje) continua saindo normalmente.
+      let slug = "";
+      let local = "";
+      try {
+        const { data: pagina } = await admin
+          .from("agendamento_paginas")
+          .select("slug, local_atendimento")
+          .eq("id", agendamento.pagina_id)
+          .maybeSingle();
+        slug = (pagina?.slug as string | undefined) ?? "";
+        local = (pagina?.local_atendimento as string | null | undefined) ?? "";
+      } catch {
+        // Mantém slug/local vazios — ver comentário acima.
+      }
 
       const mensagem = await renderTemplate("agendamento_lembrete", {
         nome: primeiroNome(agendamento.nome) || agendamento.nome,
         data: dataBR(agendamento.data_agendada),
         horario: agendamento.horario,
         dia_semana: diaDaSemana(agendamento.data_agendada),
+        local: local || "A confirmar",
+        link_gerenciar: slug ? `${urlPortal()}/agendar/${slug}/meu-agendamento/${agendamentoId}` : "",
       });
       await enviarWhatsApp(agendamento.whatsapp, mensagem);
     } catch (erro) {
       console.error("[whatsapp] falha no lembrete de agendamento", erro);
-    }
-  })();
-}
-
-// TAREFA agendamentos 2.4 (PARTE 5) — segundo lembrete, ~2h antes. Mesmo toggle do lembrete D-1
-// acima ("wz_lembrete_agendamento") — sem toggle próprio, de propósito: mesma categoria de aviso.
-export function notificarWhatsappAgendamentoLembrete2h(agendamentoId: string): Promise<void> {
-  return (async () => {
-    try {
-      if (!(await whatsappToggleHabilitado("wz_lembrete_agendamento"))) return;
-
-      const { data } = await createAdminClient()
-        .from("agendamentos")
-        .select("nome, whatsapp, data_agendada, horario")
-        .eq("id", agendamentoId)
-        .maybeSingle();
-      const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string } | null;
-      if (!agendamento?.whatsapp) return;
-
-      const mensagem = await renderTemplate("agendamento_lembrete_2h", {
-        nome: primeiroNome(agendamento.nome) || agendamento.nome,
-        data: dataBR(agendamento.data_agendada),
-        horario: agendamento.horario,
-        dia_semana: diaDaSemana(agendamento.data_agendada),
-      });
-      await enviarWhatsApp(agendamento.whatsapp, mensagem);
-    } catch (erro) {
-      console.error("[whatsapp] falha no lembrete de agendamento (2h)", erro);
     }
   })();
 }

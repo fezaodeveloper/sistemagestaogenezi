@@ -209,7 +209,6 @@ export type Agendamento = {
   email?: string | null;
   remarcado_de?: string | null;
   cancelado_por?: "admin" | "cliente" | null;
-  lembrete_2h_enviado?: boolean;
   // Já existia na tabela desde o início (ver agendar/[slug]/actions.ts), mas nunca tinha entrado
   // neste tipo — select("*") sempre trouxe a coluna, só faltava declarar.
   lead_id?: string | null;

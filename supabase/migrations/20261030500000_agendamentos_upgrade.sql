@@ -7,7 +7,7 @@
 --    (ver CLAUDE.md). profiles.id É o id de auth.users (1:1), então o efeito é o mesmo, mas fica
 --    consistente com o resto do schema (e com o select de nome pra popular o <select> do admin).
 --
--- 2) NÃO adiciona `lembrete_1d_enviado` nem repete `motivo_cancelamento`:
+-- 2) NÃO adiciona `lembrete_1d_enviado`, `lembrete_2h_enviado` nem repete `motivo_cancelamento`:
 --    - motivo_cancelamento JÁ EXISTE desde 20261015100000_add_motivo_cancelamento_agendamento.sql
 --      (PERGUNTA DE FATO 1 do resumo) — reafirmar aqui só duplicaria uma migration já escrita.
 --    - o lembrete D-1 JÁ FUNCIONA de ponta a ponta hoje: cron /api/cron/lembrete-agendamentos
@@ -15,9 +15,13 @@
 --      notificarWhatsappAgendamentoLembrete (src/lib/whatsapp/eventos.ts) + SMS + Telegram, e já
 --      usa a coluna `lembrete_enviado` (da migration original) como flag de "já mandei". Criar
 --      `lembrete_1d_enviado` do zero recriaria esse mesmo mecanismo em paralelo, arriscando
---      mandar o lembrete D-1 DUAS VEZES (uma pela flag antiga, outra pela nova) sem motivo — o
---      que falta de verdade é só o lembrete de 2H, que não tem coluna nem cron nenhum ainda.
---      `lembrete_2h_enviado` é a única coluna de lembrete nova.
+--      mandar o lembrete D-1 DUAS VEZES (uma pela flag antiga, outra pela nova) sem motivo.
+--    - `lembrete_2h_enviado` CHEGOU A EXISTIR aqui numa versão anterior desta migration (junto
+--      com um cron hourly, /api/cron/lembretes-agendamento) e foi REMOVIDA: o plano Vercel Hobby
+--      só permite crons 1x/dia, então um lembrete de "2h antes" de verdade não é viável. Em vez
+--      disso, {local} e {link_gerenciar} (que esse lembrete levaria) entraram direto no template
+--      "agendamento_lembrete" do lembrete D-1 que já existe (ver src/lib/whatsapp/eventos.ts) —
+--      nenhuma coluna nova precisa ficar nesta migration por causa disso.
 
 alter table public.agendamento_paginas
   add column if not exists responsavel_id uuid references public.profiles (id) on delete set null,
@@ -30,14 +34,10 @@ alter table public.agendamento_paginas
 alter table public.agendamentos
   add column if not exists email text,
   add column if not exists remarcado_de uuid references public.agendamentos (id) on delete set null,
-  add column if not exists cancelado_por text check (cancelado_por in ('admin', 'cliente')),
-  add column if not exists lembrete_2h_enviado boolean not null default false;
+  add column if not exists cancelado_por text check (cancelado_por in ('admin', 'cliente'));
 
 create index if not exists idx_agendamentos_data on public.agendamentos (data_agendada);
 create index if not exists idx_agendamentos_status on public.agendamentos (status);
-create index if not exists idx_agendamentos_lembrete_2h
-  on public.agendamentos (data_agendada, status)
-  where lembrete_2h_enviado = false;
 
 -- Sem grant novo: 20260918400000_agendamentos_grants_admin.sql já concede update/select na
 -- tabela inteira (sem lista de colunas) pra authenticated/service_role — cobre as colunas novas

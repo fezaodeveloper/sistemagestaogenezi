@@ -14,7 +14,6 @@ export const WHATSAPP_TEMPLATE_IDS = [
   "falta_aula",
   "recontato_lead",
   "agendamento_lembrete",
-  "agendamento_lembrete_2h",
   "agendamento_cancelado",
   "agendamento_falta",
   "cobranca_gerada",
@@ -103,18 +102,21 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
     id: "agendamento_lembrete",
     nome: "Lembrete de agendamento",
     gatilho: "Um dia antes do agendamento (cron lembrete-agendamentos).",
-    padrao: "Olá, {nome}! 👋 Passando para lembrar do seu agendamento na {dia_semana}, dia {data} às {horario}. Até lá!",
-    placeholders: [P_NOME, P_DATA, P_HORARIO, { chave: "dia_semana", descricao: "Dia da semana", exemplo: "quinta-feira" }],
-  },
-  // TAREFA agendamentos 2.4 (PARTE 5) — segundo lembrete, ~2h antes (cron lembretes-agendamento).
-  // Usa o MESMO toggle "wz_lembrete_agendamento" do lembrete D-1 acima (sem toggle próprio):
-  // é a mesma categoria de aviso pro admin desligar, só muda o texto/timing.
-  agendamento_lembrete_2h: {
-    id: "agendamento_lembrete_2h",
-    nome: "Lembrete de agendamento (2h antes)",
-    gatilho: "Cerca de 2 horas antes do agendamento (cron lembretes-agendamento).",
-    padrao: "Olá, {nome}! ⏰ Seu agendamento é hoje em breve, às {horario}. Te esperamos! 🎓",
-    placeholders: [P_NOME, P_HORARIO],
+    // TAREFA agendamentos 2.4 (fix): um lembrete de "2h antes" exigiria um cron de hora em hora,
+    // incompatível com o plano Vercel Hobby (crons 1x/dia) — eliminado (ver commit "fix: remover
+    // cron hourly..."). {local} e {link_gerenciar} entraram aqui, no ÚNICO lembrete que resta,
+    // pra aproveitar a mesma informação que o lembrete de 2h teria, dentro do envio diário já
+    // existente.
+    padrao:
+      "Olá, {nome}! 👋 Lembrete: seu agendamento é amanhã, {dia_semana} dia {data}, às {horario}. 📍 {local}\n\nPara remarcar ou cancelar: {link_gerenciar}",
+    placeholders: [
+      P_NOME,
+      P_DATA,
+      P_HORARIO,
+      { chave: "dia_semana", descricao: "Dia da semana", exemplo: "quinta-feira" },
+      { chave: "local", descricao: "Local de atendimento (ou 'A confirmar')", exemplo: "Sede Gênezi — Rua X, 123" },
+      { chave: "link_gerenciar", descricao: "Link pra cancelar/remarcar sem login", exemplo: "https://sistemagestaogenezi.vercel.app/agendar/visita-escola/meu-agendamento/..." },
+    ],
   },
   agendamento_cancelado: {
     id: "agendamento_cancelado",
