@@ -8,7 +8,17 @@ import { notificarSmsLeadConfirmacao } from "@/lib/integrax/notificacoes";
 import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 import type { DashboardNotificacao } from "@/lib/admin/dashboard";
 import type { createClient } from "@/lib/supabase/server";
-import { KANBAN_COLUNAS_PADRAO, type KanbanColuna, type KanbanColunaConfig, type Lead, type LeadFormValues, type Temperatura } from "./schema";
+import {
+  KANBAN_COLUNAS_ENCERRADAS,
+  KANBAN_COLUNAS_PADRAO,
+  type KanbanColuna,
+  type KanbanColunaConfig,
+  type Lead,
+  type LeadFormValues,
+  type LeadHistoricoEntrada,
+  type LeadHistoricoTipo,
+  type Temperatura,
+} from "./schema";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
@@ -38,7 +48,30 @@ export async function verificarLeadsSemContato(admin: SupabaseAdminClient): Prom
   }));
 }
 
-export type LeadComCurso = Lead & { nomeCurso: string | null };
+export type LeadComCurso = Lead & {
+  nomeCurso: string | null;
+  // CRM 2.1 (TAREFA) — nomes resolvidos por embed, pra não expor só os ids nos cards/drawer.
+  nomeCampanha: string | null;
+  nomeResponsavel: string | null;
+};
+
+const LEADS_SELECT_COM_RELACOES =
+  "*, cursos(nome), campanhas_marketing(nome), profiles!leads_responsavel_id_fkey(full_name)";
+
+type LeadRow = Lead & {
+  cursos: { nome: string } | null;
+  campanhas_marketing: { nome: string } | null;
+  profiles: { full_name: string | null } | null;
+};
+
+function mapearLeadComRelacoes(linha: LeadRow): LeadComCurso {
+  return {
+    ...linha,
+    nomeCurso: linha.cursos?.nome ?? null,
+    nomeCampanha: linha.campanhas_marketing?.nome ?? null,
+    nomeResponsavel: linha.profiles?.full_name ?? null,
+  };
+}
 
 export async function getLeads(
   supabase: SupabaseServerClient,
@@ -47,7 +80,7 @@ export async function getLeads(
 ): Promise<{ itens: LeadComCurso[]; total: number }> {
   let query = supabase
     .from("leads")
-    .select("*, cursos(nome)", { count: "exact" })
+    .select(LEADS_SELECT_COM_RELACOES, { count: "exact" })
     .order("created_at", { ascending: false });
 
   if (filtros?.temperatura) query = query.eq("temperatura", filtros.temperatura);
@@ -60,10 +93,7 @@ export async function getLeads(
 
   const { data, count } = await query;
 
-  const itens = ((data ?? []) as unknown as Array<Lead & { cursos: { nome: string } | null }>).map((l) => ({
-    ...l,
-    nomeCurso: l.cursos?.nome ?? null,
-  }));
+  const itens = ((data ?? []) as unknown as LeadRow[]).map(mapearLeadComRelacoes);
 
   return { itens, total: count ?? 0 };
 }
@@ -99,13 +129,10 @@ export async function getCampanhasOrigem(supabase: SupabaseServerClient): Promis
 export async function getLeadsKanban(supabase: SupabaseServerClient): Promise<LeadComCurso[]> {
   const { data } = await supabase
     .from("leads")
-    .select("*, cursos(nome)")
+    .select(LEADS_SELECT_COM_RELACOES)
     .order("created_at", { ascending: false });
 
-  return ((data ?? []) as unknown as Array<Lead & { cursos: { nome: string } | null }>).map((l) => ({
-    ...l,
-    nomeCurso: l.cursos?.nome ?? null,
-  }));
+  return ((data ?? []) as unknown as LeadRow[]).map(mapearLeadComRelacoes);
 }
 
 // "Histórico de follow-ups" (drawer do Kanban) não tem tabela própria —
@@ -128,10 +155,209 @@ export async function getLead(
   supabase: SupabaseServerClient,
   id: string,
 ): Promise<LeadComCurso | null> {
-  const { data } = await supabase.from("leads").select("*, cursos(nome)").eq("id", id).single();
-  const lead = data as unknown as (Lead & { cursos: { nome: string } | null }) | null;
+  const { data } = await supabase.from("leads").select(LEADS_SELECT_COM_RELACOES).eq("id", id).single();
+  const lead = data as unknown as LeadRow | null;
   if (!lead) return null;
-  return { ...lead, nomeCurso: lead.cursos?.nome ?? null };
+  return mapearLeadComRelacoes(lead);
+}
+
+// TAREFA: combobox de campanha no formulário/drawer.
+export async function getCampanhasMarketingAtivas(
+  supabase: SupabaseServerClient,
+): Promise<{ id: string; nome: string }[]> {
+  const { data } = await supabase
+    .from("campanhas_marketing")
+    .select("id, nome")
+    .eq("status", "ativa")
+    .order("nome", { ascending: true });
+  return (data ?? []) as { id: string; nome: string }[];
+}
+
+// TAREFA: combobox de responsável — só admins (não há um papel "comercial" separado hoje; todo
+// usuário com acesso ao painel é role='admin', ver CLAUDE.md).
+export async function getResponsaveisAdmin(supabase: SupabaseServerClient): Promise<{ id: string; nome: string }[]> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("role", "admin")
+    .order("full_name", { ascending: true });
+  return ((data ?? []) as { id: string; full_name: string | null }[]).map((p) => ({
+    id: p.id,
+    nome: p.full_name ?? "Admin",
+  }));
+}
+
+// TAREFA: debounce no formulário — avisa se já existe um lead com esse telefone/WhatsApp, pra
+// evitar duplicidade manual (o dedup de verdade, por telefone+curso, já existe no índice único
+// parcial — isto aqui é só um aviso cedo, sem filtrar por curso).
+export async function buscarLeadPorTelefoneOuWhatsapp(
+  supabase: SupabaseServerClient,
+  telefoneNormalizado: string,
+  excluirId?: string,
+): Promise<{ id: string; nome: string } | null> {
+  let query = supabase
+    .from("leads")
+    .select("id, nome, telefone, whatsapp")
+    .or(`telefone.eq.${telefoneNormalizado},whatsapp.eq.${telefoneNormalizado}`)
+    .limit(5);
+  if (excluirId) query = query.neq("id", excluirId);
+
+  const { data } = await query;
+  const encontrado = (data ?? []).find(
+    (l) => normalizarTelefone(l.telefone) === normalizarTelefone(telefoneNormalizado),
+  );
+  return encontrado ? { id: encontrado.id, nome: encontrado.nome } : null;
+}
+
+// ===== Histórico de atividades (tabela lead_historico, TAREFA CRM 2.1) =====
+
+export async function getLeadHistorico(supabase: SupabaseServerClient, leadId: string): Promise<LeadHistoricoEntrada[]> {
+  const { data } = await supabase
+    .from("lead_historico")
+    .select("id, tipo, descricao, coluna_anterior, coluna_nova, created_at, profiles(full_name)")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
+
+  type Row = {
+    id: string;
+    tipo: LeadHistoricoTipo;
+    descricao: string;
+    coluna_anterior: string | null;
+    coluna_nova: string | null;
+    created_at: string;
+    profiles: { full_name: string | null } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[]).map((row) => ({
+    id: row.id,
+    tipo: row.tipo,
+    descricao: row.descricao,
+    colunaAnterior: row.coluna_anterior,
+    colunaNova: row.coluna_nova,
+    usuarioNome: row.profiles?.full_name ?? null,
+    createdAt: row.created_at,
+  }));
+}
+
+// Best-effort — nunca lança: registrar a atividade é um complemento, nunca pode derrubar a ação
+// principal (mover coluna, salvar anotação etc.) que já aconteceu com sucesso antes desta chamada.
+export async function registrarHistoricoLead(
+  supabase: SupabaseServerClient,
+  leadId: string,
+  tipo: LeadHistoricoTipo,
+  descricao: string,
+  extra?: { colunaAnterior?: string; colunaNova?: string; usuarioId?: string },
+): Promise<void> {
+  try {
+    await supabase.from("lead_historico").insert({
+      lead_id: leadId,
+      tipo,
+      descricao,
+      coluna_anterior: extra?.colunaAnterior ?? null,
+      coluna_nova: extra?.colunaNova ?? null,
+      usuario_id: extra?.usuarioId ?? null,
+    });
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+}
+
+// ===== "Retornos pendentes" (TAREFA PARTE 4) =====
+//
+// Implementado em JS, não como uma única query SQL com subqueries/intervalos (supabase-js não
+// expressa `now() - interval` nem múltiplos OR com subquery de forma direta) — mesmo padrão já
+// usado no cron de follow-up (src/app/api/cron/followup-leads/route.ts) e em
+// verificarLeadsSemContato acima: busca o universo candidato com filtros simples no banco,
+// decide o motivo de cada alerta em JS.
+export type RetornoPendente = {
+  id: string;
+  nome: string;
+  telefone: string;
+  whatsapp: string | null;
+  colunaNome: string;
+  motivo: string;
+  proximoContato: string | null;
+};
+
+const LIMITE_RETORNOS_PENDENTES = 20;
+const HORAS_NOVO_SEM_ATENDIMENTO = 2;
+const DIAS_SEM_ATIVIDADE_RECENTE = 3;
+// status 'descartado'/'aluno_ativo'/'ex_aluno'/'desistente' = negócio já resolvido pelo lado do
+// `status` (enum automático); KANBAN_COLUNAS_ENCERRADAS ('matriculado'/'perdido') = resolvido
+// pelo lado da coluna do Kanban (manual) — são dois conceitos diferentes (ver AUDITORIA), por
+// isso os dois filtros abaixo, não um só "NOT IN" misturando os dois enums como o SQL da TAREFA
+// pedia (que usava 'matriculado' como se fosse um valor de `status`, mas é um id de
+// kanban_coluna).
+const KANBAN_COLUNAS_ENCERRADAS_SET = new Set(KANBAN_COLUNAS_ENCERRADAS);
+
+export async function getRetornosPendentes(
+  supabase: SupabaseServerClient,
+  colunas: KanbanColunaConfig[],
+): Promise<RetornoPendente[]> {
+  const { data } = await supabase
+    .from("leads")
+    .select("id, nome, telefone, whatsapp, kanban_coluna, proximo_contato, ultimo_followup, created_at")
+    .not("status", "in", "(aluno_ativo,ex_aluno,desistente,descartado)");
+
+  type Row = {
+    id: string;
+    nome: string;
+    telefone: string;
+    whatsapp: string | null;
+    kanban_coluna: string;
+    proximo_contato: string | null;
+    ultimo_followup: string | null;
+    created_at: string;
+  };
+
+  const nomeColuna = new Map(colunas.map((c) => [c.id, c.nome]));
+  const agora = Date.now();
+  const limiteNovo = agora - HORAS_NOVO_SEM_ATENDIMENTO * 60 * 60 * 1000;
+  const limiteSemAtividade = agora - DIAS_SEM_ATIVIDADE_RECENTE * 24 * 60 * 60 * 1000;
+
+  const candidatos: (RetornoPendente & { ordenacao: number })[] = [];
+
+  for (const lead of (data ?? []) as Row[]) {
+    if (KANBAN_COLUNAS_ENCERRADAS_SET.has(lead.kanban_coluna)) continue;
+
+    const proximoContatoMs = lead.proximo_contato ? new Date(lead.proximo_contato).getTime() : null;
+    const ultimoFollowupMs = lead.ultimo_followup ? new Date(lead.ultimo_followup).getTime() : null;
+    const criadoMs = new Date(lead.created_at).getTime();
+
+    let motivo: string | null = null;
+    if (lead.kanban_coluna === "novo" && criadoMs < limiteNovo) {
+      motivo = "Novo sem atendimento";
+    } else if (proximoContatoMs !== null && proximoContatoMs < agora) {
+      const diasVencido = Math.floor((agora - proximoContatoMs) / 86400000);
+      motivo = diasVencido > 0 ? `Retorno vencido há ${diasVencido} dia${diasVencido === 1 ? "" : "s"}` : "Retorno vencido";
+    } else if (proximoContatoMs === null && (ultimoFollowupMs === null || ultimoFollowupMs < limiteSemAtividade)) {
+      motivo = "Sem próxima ação definida";
+    }
+
+    if (!motivo) continue;
+
+    candidatos.push({
+      id: lead.id,
+      nome: lead.nome,
+      telefone: lead.telefone,
+      whatsapp: lead.whatsapp,
+      colunaNome: nomeColuna.get(lead.kanban_coluna) ?? lead.kanban_coluna,
+      motivo,
+      proximoContato: lead.proximo_contato,
+      ordenacao: proximoContatoMs ?? Number.MAX_SAFE_INTEGER,
+    });
+  }
+
+  candidatos.sort((a, b) => a.ordenacao - b.ordenacao);
+  return candidatos.slice(0, LIMITE_RETORNOS_PENDENTES).map((candidato) => ({
+    id: candidato.id,
+    nome: candidato.nome,
+    telefone: candidato.telefone,
+    whatsapp: candidato.whatsapp,
+    colunaNome: candidato.colunaNome,
+    motivo: candidato.motivo,
+    proximoContato: candidato.proximoContato,
+  }));
 }
 
 export async function getNotificacaoLeadsNovos(

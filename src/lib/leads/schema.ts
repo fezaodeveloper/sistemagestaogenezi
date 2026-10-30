@@ -12,6 +12,18 @@ export const LEAD_ORIGEM_LABELS: Record<LeadOrigem, string> = {
   outro: "Outro",
 };
 
+// Cores do badge de origem (TAREFA pedia "Instagram=roxo, Facebook=azul..." — esses dois valores
+// não existem no enum lead_origem, que só tem indicacao/redes_sociais/google/panfleto/campanha/
+// outro, ver AUDITORIA; "redes_sociais" já cobre Instagram/Facebook/etc. de forma genérica).
+export const LEAD_ORIGEM_BADGE_CLASS: Record<LeadOrigem, string> = {
+  indicacao: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  redes_sociais: "bg-violet-500/10 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400",
+  google: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+  panfleto: "bg-orange-500/10 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400",
+  campanha: "bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400",
+  outro: "bg-muted text-muted-foreground",
+};
+
 export const LEAD_STATUSES = [
   "novo",
   "contatado",
@@ -53,6 +65,18 @@ export type Lead = {
   campanha_origem: string | null;
   followup_count: number;
   ultimo_followup: string | null;
+  // CRM 2.1 (TAREFA) — proxima_acao (date, acima) continua existindo e editável no drawer;
+  // proximo_contato (timestamptz) é o campo novo, com hora, usado pelo card "Retornos
+  // pendentes" e pelo datetime-local do formulário. Os dois convivem por ora — ver resumo.
+  whatsapp: string | null;
+  email: string | null;
+  campanha_id: string | null;
+  responsavel_id: string | null;
+  proximo_contato: string | null;
+  motivo_perda: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -150,8 +174,24 @@ export function campanhaBadgeClass(campanha: string): string {
 
 export const FOLLOWUP_AUTOMATICO_LIMITE = 7;
 
+// TAREFA: mover um lead pra uma coluna "Perdido" exige motivo_perda preenchido. Por NOME
+// (case-insensitive), não por id — admin pode criar uma coluna própria chamada "Perdido" com
+// outro id, e ainda assim deve exigir o motivo; a coluna padrão (id "perdido") também bate aqui
+// porque o nome dela ("❌ Perdido") contém a palavra.
+export function colunaExigeMotivoPerda(nomeColuna: string): boolean {
+  return nomeColuna.toLowerCase().includes("perdido");
+}
+
 export const kanbanColunaUpdateSchema = z.object({
   kanban_coluna: z.string({ error: "Coluna inválida." }).trim().min(1, { error: "Coluna inválida." }).max(100),
+  // Só exigido pela Server Action quando a coluna de destino é "Perdido" (ver
+  // colunaExigeMotivoPerda) — por isso opcional aqui, a obrigatoriedade é condicional.
+  motivo_perda: z
+    .string()
+    .trim()
+    .max(500, { error: "Máximo de 500 caracteres." })
+    .optional()
+    .transform((v) => v || undefined),
 });
 
 export const leadCrmUpdateSchema = z.object({
@@ -173,12 +213,45 @@ export const leadCrmUpdateSchema = z.object({
     .max(200, { error: "Máximo de 200 caracteres." })
     .optional()
     .transform((v) => v || undefined),
+  observacoes: z
+    .string()
+    .trim()
+    .max(2000, { error: "Máximo de 2000 caracteres." })
+    .optional()
+    .transform((v) => v || undefined),
   // Curso de interesse (combobox do drawer) — só vem quando o admin trocou.
   curso_id: z.uuid({ error: "Curso inválido." }).optional(),
   // Data do último contato (YYYY-MM-DD). Ausente = não mexer; "" = limpar.
   ultimo_contato: z
     .union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Data do último contato inválida." })])
     .optional(),
+  // CRM 2.1 (TAREFA) — "sempre enviados" igual temperatura/notas/campanha_origem acima (o drawer
+  // manda o estado local inteiro a cada Salvar, não um patch parcial) — por isso todos
+  // transformam "" em undefined aqui, e a action usa `?? null` sem checar `!== undefined`.
+  // Diferente de curso_id/ultimo_contato (abaixo), que são de fato parciais.
+  whatsapp: z
+    .string()
+    .trim()
+    .max(30, { error: "WhatsApp inválido." })
+    .optional()
+    .transform((v) => v || undefined),
+  email: z
+    .union([z.literal(""), z.email({ error: "E-mail inválido." })])
+    .optional()
+    .transform((v) => v || undefined),
+  campanha_id: z
+    .union([z.literal(""), z.uuid({ error: "Campanha inválida." })])
+    .optional()
+    .transform((v) => v || undefined),
+  responsavel_id: z
+    .union([z.literal(""), z.uuid({ error: "Responsável inválido." })])
+    .optional()
+    .transform((v) => v || undefined),
+  // Datetime-local (YYYY-MM-DDTHH:mm).
+  proximo_contato: z
+    .union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, { error: "Data/hora inválida." })])
+    .optional()
+    .transform((v) => v || undefined),
 });
 export type LeadCrmUpdateValues = z.infer<typeof leadCrmUpdateSchema>;
 
@@ -196,11 +269,15 @@ export const leadFormSchema = z.object({
     .trim()
     .min(1, { error: "Informe o nome." })
     .max(200, { error: "O nome pode ter no máximo 200 caracteres." }),
+  // Rotulado "WhatsApp" na UI (TAREFA) — mesma coluna `telefone` de sempre (NOT NULL, com índice
+  // único parcial de dedup por telefone+curso, ver migration original). createLead/updateLead
+  // gravam esse mesmo valor também em leads.whatsapp (coluna nova, nullable, só pra consulta
+  // direta sem precisar ler `telefone` com nome enganoso) — não duas colunas independentes.
   telefone: z
-    .string({ error: "Informe o telefone." })
+    .string({ error: "Informe o WhatsApp." })
     .trim()
-    .min(1, { error: "Informe o telefone." })
-    .max(30, { error: "Telefone inválido." }),
+    .min(1, { error: "Informe o WhatsApp." })
+    .max(30, { error: "WhatsApp inválido." }),
   curso_id: z.uuid({ error: "Selecione o curso de interesse." }),
   origem: z.enum(LEAD_ORIGENS, { error: "Selecione como ficou sabendo." }),
   observacoes: z
@@ -209,6 +286,14 @@ export const leadFormSchema = z.object({
     .max(2000, { error: "As observações podem ter no máximo 2000 caracteres." })
     .optional()
     .transform((v) => v || undefined),
+  // CRM 2.1 (TAREFA) — todos opcionais: o formulário PÚBLICO (/captacao) reaproveita este mesmo
+  // schema (leadPublicoFormSchema = leadFormSchema) e nunca envia esses campos.
+  email: z.union([z.literal(""), z.email({ error: "E-mail inválido." })]).optional(),
+  campanha_id: z.union([z.literal(""), z.uuid({ error: "Campanha inválida." })]).optional(),
+  responsavel_id: z.union([z.literal(""), z.uuid({ error: "Responsável inválido." })]).optional(),
+  proximo_contato: z
+    .union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, { error: "Data/hora inválida." })])
+    .optional(),
 });
 export type LeadFormValues = z.infer<typeof leadFormSchema>;
 
@@ -249,6 +334,73 @@ export function formatarDataHoraCompletaLead(iso: string): string {
 export function dataLeadParaInput(iso: string | null): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: FUSO_LEADS });
+}
+
+// "YYYY-MM-DDTHH:mm" pra <input type="datetime-local"> (TAREFA: campo proximo_contato).
+export function dataHoraLeadParaInput(iso: string | null): string {
+  if (!iso) return "";
+  const data = new Date(iso);
+  const diaLocal = data.toLocaleDateString("en-CA", { timeZone: FUSO_LEADS });
+  const horaLocal = data.toLocaleTimeString("en-GB", { timeZone: FUSO_LEADS, hour: "2-digit", minute: "2-digit" });
+  return `${diaLocal}T${horaLocal}`;
+}
+
+// Inverso: valor de <input type="datetime-local"> (sem timezone) interpretado como horário de
+// Brasília, de volta pra ISO/UTC — mesma ideia de "meio-dia de Brasília" já usada em
+// atualizarLeadCrm pra ultimo_contato, mas preservando a hora exata em vez de fixar meio-dia.
+export function dataHoraInputParaIso(valor: string): string {
+  return new Date(`${valor}:00-03:00`).toISOString();
+}
+
+// "Há X dia(s) no funil" (TAREFA: cabeçalho do drawer) — desde created_at, sempre >= 0.
+export function diasNoFunil(createdAtIso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(createdAtIso).getTime()) / 86400000));
+}
+
+// ===== Histórico de atividades (tabela lead_historico, TAREFA CRM 2.1) =====
+
+export const LEAD_HISTORICO_TIPOS = [
+  "criacao",
+  "status_alterado",
+  "coluna_alterada",
+  "anotacao",
+  "agendamento",
+  "whatsapp",
+  "matricula",
+] as const;
+export type LeadHistoricoTipo = (typeof LEAD_HISTORICO_TIPOS)[number];
+
+export const LEAD_HISTORICO_ICONES: Record<LeadHistoricoTipo, string> = {
+  criacao: "🆕",
+  status_alterado: "🔄",
+  coluna_alterada: "🔄",
+  anotacao: "✏️",
+  agendamento: "📅",
+  whatsapp: "💬",
+  matricula: "🎓",
+};
+
+export type LeadHistoricoEntrada = {
+  id: string;
+  tipo: LeadHistoricoTipo;
+  descricao: string;
+  colunaAnterior: string | null;
+  colunaNova: string | null;
+  usuarioNome: string | null;
+  createdAt: string;
+};
+
+// "há 5 minutos" / "há 3 dias" etc. — granularidade suficiente pra uma timeline de atividades,
+// sem precisar de uma lib de i18n relativa só pra isso.
+export function formatarTempoRelativoLead(iso: string): string {
+  const segundos = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (segundos < 60) return "agora mesmo";
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `há ${minutos} minuto${minutos === 1 ? "" : "s"}`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `há ${horas} hora${horas === 1 ? "" : "s"}`;
+  const dias = Math.floor(horas / 24);
+  return `há ${dias} dia${dias === 1 ? "" : "s"}`;
 }
 
 // "Histórico de follow-ups" não tem tabela própria (a migration só adicionou

@@ -7,10 +7,14 @@ import { calcularOffset } from "@/lib/paginacao";
 import { CAMPANHA_BUCKET } from "@/lib/storage/campanhas";
 import {
   campanhaFormSchema,
+  checklistItemSchema,
+  serializarComoFazerChecklist,
   type CampanhaLink,
   type CampanhaMarketing,
   type CampanhaStatus,
+  type ChecklistItem,
 } from "@/lib/campanhas/schema";
+import { z } from "zod";
 
 export async function getCampanhas(options?: {
   query?: string;
@@ -263,6 +267,32 @@ export async function excluirCampanha(id: string): Promise<CampanhaActionResult>
 
   if (error) {
     return { error: "Não foi possível excluir a campanha. Tente novamente." };
+  }
+
+  revalidatePath("/admin/comercial/campanhas");
+  return { success: true };
+}
+
+// TAREFA PARTE 5 — autosave do checklist "Como fazer" na visão de detalhes (marcar/desmarcar,
+// editar texto, adicionar/remover item): grava só a coluna como_fazer, sem reenviar o resto da
+// campanha (diferente de atualizarCampanha, que regrava todos os campos do formulário inteiro).
+export async function atualizarChecklistCampanha(id: string, itens: ChecklistItem[]): Promise<CampanhaActionResult> {
+  await requireRole("admin");
+
+  const parsed = z.array(checklistItemSchema).max(100).safeParse(itens);
+  if (!parsed.success) {
+    return { error: "Checklist inválido." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campanhas_marketing")
+    .update({ como_fazer: serializarComoFazerChecklist(parsed.data) })
+    .eq("id", id)
+    .select("id");
+
+  if (error || !data?.length) {
+    return { error: erroDeUpdate("Não foi possível salvar o checklist.", `atualizarChecklistCampanha ${id}`, error) };
   }
 
   revalidatePath("/admin/comercial/campanhas");

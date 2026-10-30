@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import {
+  colunaExigeMotivoPerda,
+  dataHoraInputParaIso,
   KANBAN_COLUNAS_PROTEGIDAS,
   kanbanColunaCorSchema,
   kanbanColunaNomeSchema,
@@ -13,9 +15,18 @@ import {
   leadFormSchema,
   leadStatusUpdateSchema,
   registrarFollowupSchema,
+  type LeadHistoricoEntrada,
   type LeadOrigem,
 } from "@/lib/leads/schema";
-import { adicionarEntradaNotas, formatarEntradaFollowup } from "@/lib/leads/leads";
+import {
+  adicionarEntradaNotas,
+  buscarLeadPorTelefoneOuWhatsapp,
+  formatarEntradaFollowup,
+  getKanbanColunas,
+  getLeadHistorico,
+  registrarHistoricoLead,
+} from "@/lib/leads/leads";
+import { normalizarTelefone } from "@/lib/mensagens/texto";
 import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LeadFormState } from "@/components/admin/lead-form";
@@ -29,6 +40,10 @@ function parseLeadForm(formData: FormData) {
     curso_id: formData.get("curso_id"),
     origem: formData.get("origem"),
     observacoes: formData.get("observacoes") || undefined,
+    email: formData.get("email") || undefined,
+    campanha_id: formData.get("campanha_id") || undefined,
+    responsavel_id: formData.get("responsavel_id") || undefined,
+    proximo_contato: formData.get("proximo_contato") || undefined,
   });
 }
 
@@ -42,11 +57,15 @@ function echoValues(formData: FormData) {
     curso_id: String(formData.get("curso_id") ?? ""),
     origem: (String(formData.get("origem") ?? "") || undefined) as LeadOrigem | undefined,
     observacoes: String(formData.get("observacoes") ?? ""),
+    email: String(formData.get("email") ?? ""),
+    campanha_id: String(formData.get("campanha_id") ?? ""),
+    responsavel_id: String(formData.get("responsavel_id") ?? ""),
+    proximo_contato: String(formData.get("proximo_contato") ?? ""),
   };
 }
 
 export async function createLead(_prevState: LeadFormState, formData: FormData): Promise<LeadFormState> {
-  await requireRole("admin");
+  const user = await requireRole("admin");
 
   const parsed = parseLeadForm(formData);
   if (!parsed.success) {
@@ -59,9 +78,17 @@ export async function createLead(_prevState: LeadFormState, formData: FormData):
     .insert({
       nome: parsed.data.nome,
       telefone: parsed.data.telefone,
+      // whatsapp = mesmo valor de telefone (TAREFA: campo "WhatsApp" do form é a mesma coluna
+      // telefone, só com o nome novo copiado pra consulta direta — ver comentário em
+      // leadFormSchema).
+      whatsapp: parsed.data.telefone,
       curso_id: parsed.data.curso_id,
       origem: parsed.data.origem,
       observacoes: parsed.data.observacoes ?? null,
+      email: parsed.data.email || null,
+      campanha_id: parsed.data.campanha_id || null,
+      responsavel_id: parsed.data.responsavel_id || null,
+      proximo_contato: parsed.data.proximo_contato ? dataHoraInputParaIso(parsed.data.proximo_contato) : null,
     })
     .select("id")
     .single();
@@ -69,6 +96,10 @@ export async function createLead(_prevState: LeadFormState, formData: FormData):
   if (error || !lead) {
     return { error: "Não foi possível cadastrar o lead. Tente novamente.", values: echoValues(formData) };
   }
+
+  await registrarHistoricoLead(supabase, lead.id, "criacao", "Lead criado via painel admin", {
+    usuarioId: user.id,
+  });
 
   dispararWebhook("lead_criado", {
     lead_id: lead.id,
@@ -117,9 +148,14 @@ export async function updateLead(
     .update({
       nome: parsed.data.nome,
       telefone: parsed.data.telefone,
+      whatsapp: parsed.data.telefone,
       curso_id: parsed.data.curso_id,
       origem: parsed.data.origem,
       observacoes: parsed.data.observacoes ?? null,
+      email: parsed.data.email || null,
+      campanha_id: parsed.data.campanha_id || null,
+      responsavel_id: parsed.data.responsavel_id || null,
+      proximo_contato: parsed.data.proximo_contato ? dataHoraInputParaIso(parsed.data.proximo_contato) : null,
     })
     .eq("id", id);
 
@@ -212,26 +248,114 @@ export async function enviarRecontatoLeads(leadIds: string[]): Promise<{ error?:
 
 // ===== CRM Kanban (roadmap, item 3) =====
 
-export async function moverLeadKanban(leadId: string, coluna: string): Promise<{ error?: string }> {
-  await requireRole("admin");
+// TAREFA: mover pra uma coluna "Perdido" exige motivo_perda. A checagem "a coluna de destino é
+// Perdido?" é refeita aqui no servidor (não só confiada no client) — busca o nome real da coluna
+// porque o id pode ser qualquer uuid de uma coluna criada pelo admin, não necessariamente
+// "perdido" literal.
+export async function moverLeadKanban(
+  leadId: string,
+  coluna: string,
+  motivoPerda?: string,
+): Promise<{ error?: string; motivoObrigatorio?: boolean }> {
+  const user = await requireRole("admin");
 
-  const parsed = kanbanColunaUpdateSchema.safeParse({ kanban_coluna: coluna });
+  const parsed = kanbanColunaUpdateSchema.safeParse({ kanban_coluna: coluna, motivo_perda: motivoPerda });
   if (!parsed.success) {
     return { error: "Coluna inválida." };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("leads")
-    .update({ kanban_coluna: parsed.data.kanban_coluna })
-    .eq("id", leadId);
+
+  const [{ data: leadAtual }, colunas] = await Promise.all([
+    supabase.from("leads").select("kanban_coluna, motivo_perda").eq("id", leadId).maybeSingle(),
+    getKanbanColunas(supabase),
+  ]);
+
+  const colunaDestino = colunas.find((c) => c.id === parsed.data.kanban_coluna);
+  const colunaOrigem = colunas.find((c) => c.id === leadAtual?.kanban_coluna);
+
+  if (colunaDestino && colunaExigeMotivoPerda(colunaDestino.nome) && !parsed.data.motivo_perda && !leadAtual?.motivo_perda) {
+    return { error: "Informe o motivo da perda antes de mover para esta coluna.", motivoObrigatorio: true };
+  }
+
+  const atualizacao: Record<string, string | null> = { kanban_coluna: parsed.data.kanban_coluna };
+  if (parsed.data.motivo_perda) atualizacao.motivo_perda = parsed.data.motivo_perda;
+
+  const { error } = await supabase.from("leads").update(atualizacao).eq("id", leadId);
 
   if (error) {
     return { error: error.code === "23503" ? "Coluna inválida." : "Não foi possível mover o lead. Tente novamente." };
   }
 
+  if (!leadAtual || leadAtual.kanban_coluna !== parsed.data.kanban_coluna) {
+    await registrarHistoricoLead(
+      supabase,
+      leadId,
+      "coluna_alterada",
+      `Movido de ${colunaOrigem?.nome ?? "—"} para ${colunaDestino?.nome ?? parsed.data.kanban_coluna}`,
+      { colunaAnterior: colunaOrigem?.nome, colunaNova: colunaDestino?.nome, usuarioId: user.id },
+    );
+  }
+
   revalidatePath("/admin/leads");
   return {};
+}
+
+// Botão dedicado "🎓 Matricular" do drawer — diferente de mover pra "matriculado" via
+// drag-and-drop/select (que loga tipo='coluna_alterada'), este loga tipo='matricula' com uma
+// descrição própria (TAREFA).
+export async function matricularLead(leadId: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("leads").update({ kanban_coluna: "matriculado" }).eq("id", leadId);
+
+  if (error) {
+    return { error: "Não foi possível mover o lead. Tente novamente." };
+  }
+
+  await registrarHistoricoLead(supabase, leadId, "matricula", "Encaminhado para matrícula", {
+    usuarioId: user.id,
+  });
+
+  revalidatePath("/admin/leads");
+  return {};
+}
+
+// TAREFA: anotação rápida do drawer ("✏️ Anotar") — diferente de registrarFollowup (que grava no
+// campo notas, ver histórico de follow-ups já existente): esta grava uma entrada em
+// lead_historico, tipo='anotacao'.
+export async function registrarAnotacaoLead(leadId: string, texto: string): Promise<{ error?: string }> {
+  const user = await requireRole("admin");
+
+  const textoLimpo = texto.trim();
+  if (!textoLimpo) {
+    return { error: "Escreva uma anotação." };
+  }
+  if (textoLimpo.length > 1000) {
+    return { error: "A anotação pode ter no máximo 1000 caracteres." };
+  }
+
+  const supabase = await createClient();
+  await registrarHistoricoLead(supabase, leadId, "anotacao", textoLimpo, { usuarioId: user.id });
+
+  revalidatePath("/admin/leads");
+  return {};
+}
+
+// TAREFA: debounce no formulário de criar/editar lead — avisa se já existe um lead com esse
+// telefone/WhatsApp antes de salvar.
+export async function buscarLeadDuplicado(
+  telefone: string,
+  excluirId?: string,
+): Promise<{ id: string; nome: string } | null> {
+  await requireRole("admin");
+
+  const normalizado = normalizarTelefone(telefone);
+  if (!normalizado) return null;
+
+  const supabase = await createClient();
+  return buscarLeadPorTelefoneOuWhatsapp(supabase, normalizado, excluirId);
 }
 
 export async function atualizarLeadCrm(
@@ -243,6 +367,12 @@ export async function atualizarLeadCrm(
     campanha_origem: string;
     curso_id?: string;
     ultimo_contato?: string;
+    whatsapp?: string;
+    email?: string;
+    campanha_id?: string;
+    responsavel_id?: string;
+    proximo_contato?: string;
+    observacoes?: string;
   },
 ): Promise<{ error?: string }> {
   await requireRole("admin");
@@ -257,6 +387,13 @@ export async function atualizarLeadCrm(
     proxima_acao: parsed.data.proxima_acao ?? null,
     notas: parsed.data.notas ?? null,
     campanha_origem: parsed.data.campanha_origem ?? null,
+    // CRM 2.1 (TAREFA) — mesmo tratamento "sempre enviado" dos campos acima, ver schema.
+    observacoes: parsed.data.observacoes ?? null,
+    whatsapp: parsed.data.whatsapp ?? null,
+    email: parsed.data.email ?? null,
+    campanha_id: parsed.data.campanha_id ?? null,
+    responsavel_id: parsed.data.responsavel_id ?? null,
+    proximo_contato: parsed.data.proximo_contato ? dataHoraInputParaIso(parsed.data.proximo_contato) : null,
   };
   // Só toca nesses dois quando o admin mexeu — evita sobrescrever o horário
   // exato do último follow-up (ultimo_followup é timestamptz; o campo do
@@ -424,4 +561,16 @@ export async function excluirKanbanColuna(id: string): Promise<{ error?: string 
 
   revalidatePath("/admin/leads");
   return {};
+}
+
+// ===== Histórico de atividades (drawer, TAREFA CRM 2.1) =====
+//
+// Buscado sob demanda (ao abrir o drawer), não junto com a listagem/Kanban inteiros — evitar
+// uma query de histórico por lead carregado na tela (mesmo raciocínio de getUrlCurriculoCandidato
+// e outras leituras "sob demanda" já usadas no projeto).
+export async function buscarHistoricoLead(leadId: string): Promise<LeadHistoricoEntrada[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  return getLeadHistorico(supabase, leadId);
 }

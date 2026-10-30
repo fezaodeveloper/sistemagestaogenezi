@@ -3,10 +3,19 @@ import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
-import { getCampanhasOrigem, getKanbanColunas, getLeads, getLeadsKanban } from "@/lib/leads/leads";
+import {
+  getCampanhasMarketingAtivas,
+  getCampanhasOrigem,
+  getKanbanColunas,
+  getLeads,
+  getLeadsKanban,
+  getResponsaveisAdmin,
+  getRetornosPendentes,
+} from "@/lib/leads/leads";
 import { TEMPERATURAS, type Temperatura } from "@/lib/leads/schema";
 import { TabelaLeads } from "@/components/admin/tabela-leads";
 import { LeadsKanbanView } from "@/components/admin/leads-kanban-view";
+import { RetornosPendentesSection } from "@/components/admin/retornos-pendentes-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,19 +41,25 @@ export default async function LeadsPage({
   const supabase = await createClient();
   // Colunas vêm do banco (configuráveis) — o filtro de coluna só vale se o id
   // existir, senão a URL com id antigo/inválido zeraria a listagem.
-  const [colunas, campanhas] = await Promise.all([getKanbanColunas(supabase), getCampanhasOrigem(supabase)]);
+  const [colunas, campanhasOrigem, campanhasMarketing, responsaveis] = await Promise.all([
+    getKanbanColunas(supabase),
+    getCampanhasOrigem(supabase),
+    getCampanhasMarketingAtivas(supabase),
+    getResponsaveisAdmin(supabase),
+  ]);
 
   const temperaturaFiltro = TEMPERATURAS.includes(temperatura as Temperatura) ? (temperatura as Temperatura) : undefined;
   const colunaFiltro = colunas.some((c) => c.id === coluna) ? coluna : undefined;
-  const campanhaFiltro = campanha && campanhas.includes(campanha) ? campanha : undefined;
+  const campanhaFiltro = campanha && campanhasOrigem.includes(campanha) ? campanha : undefined;
 
-  const [{ itens, total: totalRegistros }, leadsKanban] = await Promise.all([
+  const [{ itens, total: totalRegistros }, leadsKanban, retornosPendentes] = await Promise.all([
     getLeads(
       supabase,
       { offset, limite },
       { temperatura: temperaturaFiltro, kanbanColuna: colunaFiltro, campanhaOrigem: campanhaFiltro },
     ),
     getLeadsKanban(supabase),
+    getRetornosPendentes(supabase, colunas),
   ]);
   const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
   const temFiltro = !!temperaturaFiltro || !!colunaFiltro || !!campanhaFiltro;
@@ -93,15 +108,22 @@ export default async function LeadsPage({
               coluna={colunaFiltro ?? ""}
               campanha={campanhaFiltro ?? ""}
               colunas={colunas}
-              campanhas={campanhas}
+              campanhas={campanhasOrigem}
             />
           )}
         </TabsContent>
 
         <TabsContent value="kanban">
+          <RetornosPendentesSection leads={retornosPendentes} />
           {/* Sem estado vazio aqui: o quadro precisa aparecer mesmo sem leads
               pra dar pra criar/renomear colunas antes do primeiro cadastro. */}
-          <LeadsKanbanView leads={leadsKanban} colunas={colunas} campanhas={campanhas} />
+          <LeadsKanbanView
+            leads={leadsKanban}
+            colunas={colunas}
+            campanhas={campanhasOrigem}
+            campanhasMarketing={campanhasMarketing}
+            responsaveis={responsaveis}
+          />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,28 +1,33 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, ExternalLink, Eye, FileDown, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import {
   alternarStatusCampanha,
   atualizarCampanha,
+  atualizarChecklistCampanha,
   criarCampanha,
   duplicarCampanha,
   excluirCampanha,
 } from "@/app/admin/comercial/campanhas/actions";
 import { getLogoEscolaPdf } from "@/app/admin/pdf-actions";
 import { CampanhaMarketingPdf } from "@/components/admin/campanha-marketing-pdf";
+import { ComoFazerChecklist } from "@/components/admin/como-fazer-checklist";
 import { createClient } from "@/lib/supabase/client";
 import { CAMPANHA_BUCKET, CAMPANHA_FOTO_MAXIMO_BYTES, CAMPANHA_FOTO_TIPOS_ACEITOS } from "@/lib/storage/campanhas";
 import {
   CAMPANHA_STATUSES,
   CAMPANHA_STATUS_BADGE_CLASS,
   CAMPANHA_STATUS_LABELS,
+  parseComoFazerChecklist,
+  serializarComoFazerChecklist,
   type CampanhaLink,
   type CampanhaMarketing,
   type CampanhaStatus,
+  type ChecklistItem,
 } from "@/lib/campanhas/schema";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +105,9 @@ function CampanhaDialog({
   const [links, setLinks] = useState<CampanhaLink[]>(campanha?.links ?? []);
   const [novoLinkLabel, setNovoLinkLabel] = useState("");
   const [novoLinkUrl, setNovoLinkUrl] = useState("");
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(() =>
+    parseComoFazerChecklist(campanha?.como_fazer ?? null),
+  );
   const [tags, setTags] = useState<string[]>(campanha?.tags ?? []);
   const [novaTag, setNovaTag] = useState("");
   const [fotoUrl, setFotoUrl] = useState<string | null>(campanha?.foto_url ?? null);
@@ -116,6 +124,7 @@ function CampanhaDialog({
       setLinks(campanha?.links ?? []);
       setNovoLinkLabel("");
       setNovoLinkUrl("");
+      setChecklist(parseComoFazerChecklist(campanha?.como_fazer ?? null));
       setTags(campanha?.tags ?? []);
       setNovaTag("");
       setFotoUrl(campanha?.foto_url ?? null);
@@ -189,6 +198,7 @@ function CampanhaDialog({
     formData.set("status", status);
     formData.set("links", JSON.stringify(links));
     formData.set("tags", JSON.stringify(tags));
+    formData.set("como_fazer", serializarComoFazerChecklist(checklist));
     if (fotoUrl) formData.set("foto_url", fotoUrl);
     if (fotoPath) formData.set("foto_path", fotoPath);
 
@@ -224,14 +234,8 @@ function CampanhaDialog({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="como_fazer">Como fazer (passo a passo)</Label>
-            <Textarea
-              id="como_fazer"
-              name="como_fazer"
-              rows={4}
-              defaultValue={campanha?.como_fazer ?? ""}
-              placeholder="Opcional"
-            />
+            <Label>Como fazer (passo a passo)</Label>
+            <ComoFazerChecklist itens={checklist} onChange={setChecklist} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -549,6 +553,26 @@ function CampanhaDetalhesDialog({
   const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
   const periodo = periodoCampanha(campanha);
 
+  // TAREFA PARTE 5 — checklist com autosave (debounce 1s): diferente do CampanhaDialog (onde o
+  // checklist só é salvo junto do resto do formulário), aqui cada marcar/desmarcar/editar salva
+  // sozinho, sem precisar abrir o diálogo de edição.
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(() => parseComoFazerChecklist(campanha.como_fazer));
+  const debounceChecklistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // queueMicrotask evita setState síncrono direto no corpo do efeito
+    // (react-hooks/set-state-in-effect), mesmo padrão já usado no drawer de leads.
+    queueMicrotask(() => setChecklist(parseComoFazerChecklist(campanha.como_fazer)));
+  }, [campanha.como_fazer]);
+
+  function handleChecklistChange(itens: ChecklistItem[]) {
+    setChecklist(itens);
+    if (debounceChecklistRef.current) clearTimeout(debounceChecklistRef.current);
+    debounceChecklistRef.current = setTimeout(() => {
+      atualizarChecklistCampanha(campanha.id, itens);
+    }, 1000);
+  }
+
   async function handleExportarPdf() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes de
     // qualquer await — navegadores bloqueiam window.open() chamado depois de
@@ -631,8 +655,8 @@ function CampanhaDetalhesDialog({
           </div>
 
           <div>
-            <p className="text-muted-foreground text-xs">Como fazer (passo a passo)</p>
-            <p className="whitespace-pre-wrap">{campanha.como_fazer || "—"}</p>
+            <p className="text-muted-foreground mb-1 text-xs">Como fazer (passo a passo)</p>
+            <ComoFazerChecklist itens={checklist} onChange={handleChecklistChange} />
           </div>
 
           <div>

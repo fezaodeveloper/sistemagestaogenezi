@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getLead } from "@/lib/leads/leads";
+import { getCampanhasMarketingAtivas, getLead, getResponsaveisAdmin } from "@/lib/leads/leads";
+import { dataHoraLeadParaInput } from "@/lib/leads/schema";
 import { LeadForm } from "@/components/admin/lead-form";
 import { updateLead } from "@/app/admin/leads/actions";
 import { LeadStatusCard } from "@/components/admin/lead-status-card";
@@ -27,7 +28,7 @@ export default async function EditarLeadPage({ params }: { params: Promise<{ id:
   const { id } = await params;
 
   const supabase = await createClient();
-  const [lead, { data: cursos }, { data: mensagens }] = await Promise.all([
+  const [lead, { data: cursos }, { data: mensagens }, campanhas, responsaveis] = await Promise.all([
     getLead(supabase, id),
     supabase.from("cursos").select("id, nome").eq("status", "ativo").order("nome"),
     supabase
@@ -35,6 +36,8 @@ export default async function EditarLeadPage({ params }: { params: Promise<{ id:
       .select("id, tipo, status, erro_detalhe, created_at")
       .eq("lead_id", id)
       .order("created_at", { ascending: false }) as unknown as Promise<{ data: MensagemDoLead[] | null }>,
+    getCampanhasMarketingAtivas(supabase),
+    getResponsaveisAdmin(supabase),
   ]);
 
   if (!lead) {
@@ -53,6 +56,9 @@ export default async function EditarLeadPage({ params }: { params: Promise<{ id:
       <LeadForm
         action={updateLead.bind(null, lead.id)}
         cursos={cursos ?? []}
+        campanhas={campanhas}
+        responsaveis={responsaveis}
+        leadIdAtual={lead.id}
         submitLabel="Salvar alterações"
         defaultValues={{
           nome: lead.nome,
@@ -60,6 +66,10 @@ export default async function EditarLeadPage({ params }: { params: Promise<{ id:
           curso_id: lead.curso_id,
           origem: lead.origem,
           observacoes: lead.observacoes ?? undefined,
+          email: lead.email ?? undefined,
+          campanha_id: lead.campanha_id ?? undefined,
+          responsavel_id: lead.responsavel_id ?? undefined,
+          proximo_contato: dataHoraLeadParaInput(lead.proximo_contato) || undefined,
         }}
       />
 

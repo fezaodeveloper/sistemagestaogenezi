@@ -14,8 +14,11 @@ import {
   renomearKanbanColuna,
 } from "@/app/admin/leads/actions";
 import {
+  colunaExigeMotivoPerda,
   KANBAN_COLUNAS_ENCERRADAS,
   KANBAN_COLUNAS_PROTEGIDAS,
+  LEAD_ORIGEM_BADGE_CLASS,
+  LEAD_ORIGEM_LABELS,
   TEMPERATURAS,
   TEMPERATURA_BADGE_CLASS,
   TEMPERATURA_LABELS,
@@ -33,6 +36,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -66,9 +70,17 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Função própria (não Date.now() inline) — mesmo motivo de hojeISO() acima: chamada impura
+// isolada numa função nomeada, não direto no corpo do componente (react-hooks/purity).
+function agoraMs(): number {
+  return Date.now();
+}
+
 function LeadCard({
   lead,
   colunas,
+  campanhasMarketing,
+  responsaveis,
   arrastando,
   onMover,
   onMudou,
@@ -77,6 +89,8 @@ function LeadCard({
 }: {
   lead: LeadComCurso;
   colunas: KanbanColunaConfig[];
+  campanhasMarketing: { id: string; nome: string }[];
+  responsaveis: { id: string; nome: string }[];
   arrastando: boolean;
   onMover: (colunaId: string) => void;
   onMudou: () => void;
@@ -85,9 +99,15 @@ function LeadCard({
 }) {
   const [drawerAberto, setDrawerAberto] = useState(false);
   const proximaAcaoFormatada = formatarDataCurta(lead.proxima_acao);
+  const naoEncerrada = !KANBAN_COLUNAS_ENCERRADAS.includes(lead.kanban_coluna);
+  // TAREFA PARTE 6: borda âmbar considera os dois campos — proxima_acao (date, legado) OU
+  // proximo_contato (timestamptz, novo) vencidos.
   const vencida =
-    !!lead.proxima_acao && lead.proxima_acao < hojeISO() && !KANBAN_COLUNAS_ENCERRADAS.includes(lead.kanban_coluna);
-  const whatsappDigitos = lead.telefone.replace(/\D/g, "");
+    naoEncerrada &&
+    ((!!lead.proxima_acao && lead.proxima_acao < hojeISO()) ||
+      (!!lead.proximo_contato && new Date(lead.proximo_contato).getTime() < agoraMs()));
+  const whatsappExibido = lead.whatsapp || lead.telefone;
+  const whatsappDigitos = whatsappExibido.replace(/\D/g, "");
   const followups = contarFollowups(lead.notas);
   const colunaItems = Object.fromEntries(colunas.map((c) => [c.id, c.nome]));
 
@@ -110,12 +130,13 @@ function LeadCard({
                 onClick={(event) => event.stopPropagation()}
                 className="text-muted-foreground hover:text-foreground w-fit text-xs hover:underline"
               >
-                📱 {lead.telefone}
+                📱 {whatsappExibido}
               </a>
-              <CopiarWhatsappButton telefone={lead.telefone} />
+              <CopiarWhatsappButton telefone={whatsappExibido} />
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
+              <Badge className={LEAD_ORIGEM_BADGE_CLASS[lead.origem]}>{LEAD_ORIGEM_LABELS[lead.origem]}</Badge>
               {lead.temperatura && (
                 <Badge className={TEMPERATURA_BADGE_CLASS[lead.temperatura]}>
                   {TEMPERATURA_LABELS[lead.temperatura]}
@@ -174,6 +195,8 @@ function LeadCard({
       <LeadDetalhesDrawer
         lead={lead}
         colunas={colunas}
+        campanhasMarketing={campanhasMarketing}
+        responsaveis={responsaveis}
         open={drawerAberto}
         onOpenChange={setDrawerAberto}
         onMudou={onMudou}
@@ -186,10 +209,14 @@ export function LeadsKanbanView({
   leads,
   colunas,
   campanhas,
+  campanhasMarketing,
+  responsaveis,
 }: {
   leads: LeadComCurso[];
   colunas: KanbanColunaConfig[];
   campanhas: string[];
+  campanhasMarketing: { id: string; nome: string }[];
+  responsaveis: { id: string; nome: string }[];
 }) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
@@ -197,7 +224,15 @@ export function LeadsKanbanView({
   const [colunaSobre, setColunaSobre] = useState<string | null>(null);
   const [filtroTemperatura, setFiltroTemperatura] = useState(FILTRO_TODOS);
   const [filtroCampanha, setFiltroCampanha] = useState(FILTRO_TODOS);
+  const [filtroOrigem, setFiltroOrigem] = useState(FILTRO_TODOS);
+  const [filtroResponsavel, setFiltroResponsavel] = useState(FILTRO_TODOS);
+  const [filtroCurso, setFiltroCurso] = useState(FILTRO_TODOS);
   const [isPending, startTransition] = useTransition();
+
+  // TAREFA: mover pra uma coluna "Perdido" exige motivo — intercepta o movimento (drag-and-drop
+  // ou select) antes de chamar a Server Action, pede o motivo num dialog, só então move.
+  const [pendenteMotivo, setPendenteMotivo] = useState<{ lead: LeadComCurso; colunaId: string } | null>(null);
+  const [motivoPerdaTexto, setMotivoPerdaTexto] = useState("");
 
   // Edição inline do nome (clique duplo no título ou "Renomear" no menu).
   const [edicao, setEdicao] = useState<{ id: string; nome: string } | null>(null);
@@ -231,14 +266,32 @@ export function LeadsKanbanView({
     [campanhas],
   );
 
+  const origemItems: Record<string, string> = { [FILTRO_TODOS]: "Todas as origens", ...LEAD_ORIGEM_LABELS };
+
+  const responsavelItems: Record<string, string> = useMemo(
+    () => ({ [FILTRO_TODOS]: "Todos os responsáveis", ...Object.fromEntries(responsaveis.map((r) => [r.id, r.nome])) }),
+    [responsaveis],
+  );
+
+  // Cursos distintos entre os leads carregados (mesmo padrão de `campanhas`, acima — client-side,
+  // sem nova query, TAREFA PARTE 6).
+  const cursoItems: Record<string, string> = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const lead of leads) if (lead.nomeCurso) nomes.add(lead.nomeCurso);
+    return { [FILTRO_TODOS]: "Todos os cursos", ...Object.fromEntries([...nomes].sort().map((n) => [n, n])) };
+  }, [leads]);
+
   const leadsFiltrados = useMemo(
     () =>
       leadsVisiveis.filter(
         (lead) =>
           (filtroTemperatura === FILTRO_TODOS || lead.temperatura === filtroTemperatura) &&
-          (filtroCampanha === FILTRO_TODOS || lead.campanha_origem === filtroCampanha),
+          (filtroCampanha === FILTRO_TODOS || lead.campanha_origem === filtroCampanha) &&
+          (filtroOrigem === FILTRO_TODOS || lead.origem === filtroOrigem) &&
+          (filtroResponsavel === FILTRO_TODOS || lead.responsavel_id === filtroResponsavel) &&
+          (filtroCurso === FILTRO_TODOS || lead.nomeCurso === filtroCurso),
       ),
-    [leadsVisiveis, filtroTemperatura, filtroCampanha],
+    [leadsVisiveis, filtroTemperatura, filtroCampanha, filtroOrigem, filtroResponsavel, filtroCurso],
   );
 
   const porColuna = useMemo(() => {
@@ -253,14 +306,33 @@ export function LeadsKanbanView({
 
   // Arrastar (ou usar o select do card) grava kanban_coluna no banco via
   // moverLeadKanban. Se o banco recusar, mostra o erro e o card volta.
-  function mover(lead: LeadComCurso, colunaId: string) {
+  function mover(lead: LeadComCurso, colunaId: string, motivoPerda?: string) {
     if (lead.kanban_coluna === colunaId) return;
+
+    // TAREFA: coluna "Perdido" exige motivo — intercepta antes de mover de verdade, a menos que
+    // o motivo já tenha sido informado (confirmarMotivoPerda, abaixo) ou o lead já tenha um salvo.
+    if (!motivoPerda && !lead.motivo_perda) {
+      const colunaDestino = colunasVisiveis.find((c) => c.id === colunaId);
+      if (colunaDestino && colunaExigeMotivoPerda(colunaDestino.nome)) {
+        setMotivoPerdaTexto("");
+        setPendenteMotivo({ lead, colunaId });
+        return;
+      }
+    }
+
     setErro(null);
     startTransition(async () => {
       aplicarMovimento({ leadId: lead.id, colunaId });
-      const resultado = await moverLeadKanban(lead.id, colunaId);
+      const resultado = await moverLeadKanban(lead.id, colunaId, motivoPerda);
       if (resultado.error) setErro(resultado.error);
     });
+  }
+
+  function confirmarMotivoPerda() {
+    if (!pendenteMotivo || !motivoPerdaTexto.trim()) return;
+    const { lead, colunaId } = pendenteMotivo;
+    setPendenteMotivo(null);
+    mover(lead, colunaId, motivoPerdaTexto.trim());
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>, colunaId: string) {
@@ -370,6 +442,57 @@ export function LeadsKanbanView({
               {Object.keys(campanhaItems).map((chave) => (
                 <SelectItem key={chave} value={chave}>
                   {campanhaItems[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {/* TAREFA PARTE 6: filtros de origem/responsável/curso, client-side (useState), sem nova
+            query ao banco — mesmo padrão dos dois filtros acima. */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-muted-foreground text-xs">Origem</span>
+          <Select items={origemItems} value={filtroOrigem} onValueChange={(valor) => valor && setFiltroOrigem(valor)}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(origemItems).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {origemItems[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-muted-foreground text-xs">Responsável</span>
+          <Select
+            items={responsavelItems}
+            value={filtroResponsavel}
+            onValueChange={(valor) => valor && setFiltroResponsavel(valor)}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(responsavelItems).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {responsavelItems[chave]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-muted-foreground text-xs">Curso</span>
+          <Select items={cursoItems} value={filtroCurso} onValueChange={(valor) => valor && setFiltroCurso(valor)}>
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(cursoItems).map((chave) => (
+                <SelectItem key={chave} value={chave}>
+                  {cursoItems[chave]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -487,6 +610,8 @@ export function LeadsKanbanView({
                       key={lead.id}
                       lead={lead}
                       colunas={colunasVisiveis}
+                      campanhasMarketing={campanhasMarketing}
+                      responsaveis={responsaveis}
                       arrastando={arrastandoId === lead.id}
                       onMover={(colunaId) => mover(lead, colunaId)}
                       onMudou={handleMudou}
@@ -578,6 +703,38 @@ export function LeadsKanbanView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={pendenteMotivo !== null} onOpenChange={(aberto) => !aberto && setPendenteMotivo(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Motivo da perda</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-muted-foreground text-sm">
+              Antes de mover &quot;{pendenteMotivo?.lead.nome}&quot; pra uma coluna de perda, informe o motivo.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="motivo-perda">Motivo</Label>
+              <Textarea
+                id="motivo-perda"
+                autoFocus
+                rows={3}
+                value={motivoPerdaTexto}
+                onChange={(event) => setMotivoPerdaTexto(event.target.value)}
+                placeholder="Ex.: Não tinha disponibilidade de horário"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPendenteMotivo(null)} disabled={isPending}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmarMotivoPerda} disabled={!motivoPerdaTexto.trim() || isPending}>
+              {isPending ? "Movendo..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -49,6 +49,36 @@ export const campanhaFormSchema = z.object({
 
 export type CampanhaFormValues = z.infer<typeof campanhaFormSchema>;
 
+// ===== Checklist do "Como fazer" (TAREFA PARTE 5) =====
+//
+// como_fazer continua sendo a mesma coluna TEXT de sempre — agora guarda um JSON
+// ([{"texto":"...","feito":false}, ...]) em vez de texto livre. Parse defensivo
+// (parseComoFazerChecklist): valor antigo/texto simples que não é JSON válido entra como um
+// único item não marcado, nunca quebra a tela nem perde o dado (retrocompatibilidade, TAREFA).
+export const checklistItemSchema = z.object({
+  texto: z.string().trim().max(500),
+  feito: z.boolean(),
+});
+export type ChecklistItem = z.infer<typeof checklistItemSchema>;
+
+export function parseComoFazerChecklist(valor: string | null): ChecklistItem[] {
+  if (!valor || !valor.trim()) return [];
+
+  try {
+    const json = JSON.parse(valor);
+    const resultado = z.array(checklistItemSchema).safeParse(json);
+    if (resultado.success) return resultado.data;
+  } catch {
+    // Não é JSON — cai no fallback de texto simples abaixo.
+  }
+
+  return [{ texto: valor, feito: false }];
+}
+
+export function serializarComoFazerChecklist(itens: ChecklistItem[]): string {
+  return JSON.stringify(itens);
+}
+
 export type CampanhaMarketing = {
   id: string;
   nome: string;
