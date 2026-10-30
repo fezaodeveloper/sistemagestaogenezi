@@ -2,22 +2,37 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, MessageCircle, User, XCircle } from "lucide-react";
+import { CheckCircle2, FileText, MessageCircle, User, XCircle } from "lucide-react";
 import {
   getUrlCurriculoCandidato,
   marcarCandidaturaContatada,
+  marcarCandidaturaContratada,
   marcarCandidaturaVisualizada,
   rejeitarCandidatura,
+  rejeitarTodosPendentesDaVaga,
 } from "@/app/empresa/(protegido)/candidatos/actions";
 import {
   CANDIDATURA_STATUS_BADGE_CLASS,
   CANDIDATURA_STATUS_LABELS,
   type CandidaturaEmpresa,
 } from "@/lib/conecta/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+
+const STATUS_FINAIS = new Set<CandidaturaEmpresa["status"]>(["rejeitado", "contratado"]);
 
 function formatDateBR(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR");
@@ -71,6 +86,14 @@ function CandidaturaDetalhesDialog({ candidatura }: { candidatura: CandidaturaEm
   function handleContato() {
     startTransition(async () => {
       await marcarCandidaturaContatada(candidatura.id);
+      router.refresh();
+    });
+  }
+
+  function handleContratado() {
+    startTransition(async () => {
+      await marcarCandidaturaContratada(candidatura.id);
+      setOpen(false);
       router.refresh();
     });
   }
@@ -143,17 +166,26 @@ function CandidaturaDetalhesDialog({ candidatura }: { candidatura: CandidaturaEm
         </div>
 
         <DialogFooter>
-          {candidatura.status !== "rejeitado" && (
+          {!STATUS_FINAIS.has(candidatura.status) && (
             <>
               <Button type="button" variant="outline" disabled={isPending} onClick={handleRejeitar}>
                 <XCircle className="size-4" />
                 Rejeitar
               </Button>
               {candidatura.status !== "contato" && (
-                <Button type="button" disabled={isPending} onClick={handleContato}>
+                <Button type="button" variant="outline" disabled={isPending} onClick={handleContato}>
                   Marcar como contatado
                 </Button>
               )}
+              <Button
+                type="button"
+                className="bg-green-600 hover:bg-green-700"
+                disabled={isPending}
+                onClick={handleContratado}
+              >
+                <CheckCircle2 className="size-4" />
+                Marcar como contratado
+              </Button>
             </>
           )}
         </DialogFooter>
@@ -185,6 +217,62 @@ function CandidaturaCard({ candidatura }: { candidatura: CandidaturaEmpresa }) {
   );
 }
 
+function RejeitarTodosPendentesButton({ vagaId, temPendentes }: { vagaId: string; temPendentes: boolean }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  if (!temPendentes) return null;
+
+  function handleRejeitarTodos() {
+    startTransition(async () => {
+      const resultado = await rejeitarTodosPendentesDaVaga(vagaId);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger render={<Button type="button" variant="outline" size="sm" />}>
+        <XCircle className="size-4" />
+        Rejeitar todos os pendentes
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Rejeitar todos os pendentes desta vaga</AlertDialogTitle>
+          <AlertDialogDescription>
+            Todas as candidaturas ainda pendentes nesta vaga serão marcadas como rejeitadas. Candidaturas já
+            visualizadas, contatadas ou contratadas não são afetadas. Essa ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleRejeitarTodos}>
+            {isPending ? "Rejeitando..." : "Rejeitar todos"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function CandidaturasView({ candidaturas }: { candidaturas: CandidaturaEmpresa[] }) {
   if (candidaturas.length === 0) {
     return (
@@ -196,10 +284,33 @@ export function CandidaturasView({ candidaturas }: { candidaturas: CandidaturaEm
     );
   }
 
+  // Agrupado por vaga (TAREFA: "Rejeitar todos os pendentes DESTA VAGA" é uma ação por vaga, não
+  // global) — mantém a ordem em que cada vaga apareceu primeiro na lista (já ordenada por
+  // created_at desc em getCandidaturasEmpresa).
+  const porVaga = new Map<string, { titulo: string; itens: CandidaturaEmpresa[] }>();
+  for (const candidatura of candidaturas) {
+    const grupo = porVaga.get(candidatura.vagaId) ?? { titulo: candidatura.vagaTitulo, itens: [] };
+    grupo.itens.push(candidatura);
+    porVaga.set(candidatura.vagaId, grupo);
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {candidaturas.map((candidatura) => (
-        <CandidaturaCard key={candidatura.id} candidatura={candidatura} />
+    <div className="flex flex-col gap-8">
+      {[...porVaga.entries()].map(([vagaId, grupo]) => (
+        <div key={vagaId} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+            <h3 className="font-semibold">{grupo.titulo}</h3>
+            <RejeitarTodosPendentesButton
+              vagaId={vagaId}
+              temPendentes={grupo.itens.some((c) => c.status === "pendente")}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {grupo.itens.map((candidatura) => (
+              <CandidaturaCard key={candidatura.id} candidatura={candidatura} />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );

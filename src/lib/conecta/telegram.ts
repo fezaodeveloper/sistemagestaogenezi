@@ -75,6 +75,104 @@ export async function notificarNovoCandidatoTelegram(perfil: {
   }
 }
 
+// As 4 funções abaixo (TAREFA: notificações Telegram do ciclo de vida da candidatura)
+// reaproveitam o mesmo toggle "notificarNovoCandidato" de configuracoes — não existe (nem foi
+// pedida) uma coluna de toggle separada por tipo de evento, então todo evento do ciclo de vida
+// de um candidato (nova candidatura, contratação, rejeição, aluno ficou visível) fica atrás do
+// mesmo liga/desliga já existente no admin.
+
+export async function notificarCandidaturaRealizada(dados: {
+  vagaTitulo: string;
+  nomeAluno: string;
+  nomeEmpresa: string;
+}): Promise<void> {
+  try {
+    const config = await lerConfigTelegramConecta();
+    if (!config.chatId || !config.notificarNovoCandidato) return;
+
+    const mensagem = [
+      "📋 <b>Nova candidatura!</b>",
+      `👤 ${escapeHtml(dados.nomeAluno)}`,
+      `💼 Vaga: ${escapeHtml(dados.vagaTitulo)}`,
+      `🏢 Empresa: ${escapeHtml(dados.nomeEmpresa)}`,
+    ].join("\n");
+
+    await enviarMensagemTelegram(mensagem, config.chatId);
+  } catch {
+    // Best-effort — ver comentário em notificarNovoCandidatoTelegram.
+  }
+}
+
+export async function notificarCandidatoContratado(dados: {
+  vagaTitulo: string;
+  nomeAluno: string;
+  nomeEmpresa: string;
+}): Promise<void> {
+  try {
+    const config = await lerConfigTelegramConecta();
+    if (!config.chatId || !config.notificarNovoCandidato) return;
+
+    const mensagem = [
+      "🎉 <b>Contratação!</b>",
+      `👤 ${escapeHtml(dados.nomeAluno)} foi contratado!`,
+      `💼 Vaga: ${escapeHtml(dados.vagaTitulo)}`,
+      `🏢 Empresa: ${escapeHtml(dados.nomeEmpresa)}`,
+    ].join("\n");
+
+    await enviarMensagemTelegram(mensagem, config.chatId);
+  } catch {
+    // Best-effort — ver comentário em notificarNovoCandidatoTelegram.
+  }
+}
+
+export async function notificarCandidatoRejeitado(dados: {
+  vagaTitulo: string;
+  nomeAluno: string;
+  nomeEmpresa: string;
+}): Promise<void> {
+  try {
+    const config = await lerConfigTelegramConecta();
+    if (!config.chatId || !config.notificarNovoCandidato) return;
+
+    const mensagem = [
+      "❌ <b>Rejeição</b>",
+      `👤 ${escapeHtml(dados.nomeAluno)}`,
+      `💼 Vaga: ${escapeHtml(dados.vagaTitulo)}`,
+      `🏢 Empresa: ${escapeHtml(dados.nomeEmpresa)}`,
+    ].join("\n");
+
+    await enviarMensagemTelegram(mensagem, config.chatId);
+  } catch {
+    // Best-effort — ver comentário em notificarNovoCandidatoTelegram.
+  }
+}
+
+// Substitui a chamada genérica notificarNovoCandidatoTelegram (acima) no ponto em que o aluno
+// ativa a visibilidade — mesmo evento, mensagem mais específica: antes de existir essa função,
+// toggleVisibilidadePerfil chamava notificarNovoCandidatoTelegram com tipo:"aluno" hardcoded ali,
+// o que soava como "candidato novo" mesmo pra um aluno só reativando a visibilidade depois de
+// meses. Não é uma notificação ADICIONAL: é a mesma, com texto mais preciso.
+export async function notificarAlunoAtivouVisibilidade(dados: {
+  nomeAluno: string;
+  cidade: string | null;
+  estado: string | null;
+}): Promise<void> {
+  try {
+    const config = await lerConfigTelegramConecta();
+    if (!config.chatId || !config.notificarNovoCandidato) return;
+
+    const mensagem = [
+      "👁️ <b>Aluno visível!</b>",
+      `👤 ${escapeHtml(dados.nomeAluno)}`,
+      `📍 ${escapeHtml(dados.cidade ?? "—")}/${escapeHtml(dados.estado ?? "—")}`,
+    ].join("\n");
+
+    await enviarMensagemTelegram(mensagem, config.chatId);
+  } catch {
+    // Best-effort — ver comentário em notificarNovoCandidatoTelegram.
+  }
+}
+
 export async function notificarNovaEmpresaTelegram(empresa: {
   nome: string;
   cidade: string | null;

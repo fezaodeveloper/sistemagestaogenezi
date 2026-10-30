@@ -12,6 +12,7 @@ import {
   uploadCurriculoConecta,
 } from "@/app/aluno/conecta/actions";
 import { createClient } from "@/lib/supabase/client";
+import { MinhasCandidaturasConecta } from "@/components/aluno/minhas-candidaturas-conecta";
 import {
   CURRICULO_CONECTA_BUCKET,
   CURRICULO_CONECTA_MAX_BYTES,
@@ -23,6 +24,7 @@ import {
   MODALIDADE_PREFERIDA_LABELS,
   MODALIDADES_PREFERIDAS,
   PLANO_CONECTA_INFO,
+  type CandidaturaAluno,
   type PerfilConecta,
 } from "@/lib/conecta/schema";
 import {
@@ -427,11 +429,13 @@ export function ConectaPerfilForm({
   cursosConcluidos,
   idade,
   textoTermoMenor,
+  candidaturas,
 }: {
   perfilInicial: PerfilConecta | null;
   cursosConcluidos: string[];
   idade: number | null;
   textoTermoMenor: string;
+  candidaturas: CandidaturaAluno[];
 }) {
   const [whatsapp, setWhatsapp] = useState(perfilInicial?.whatsapp ?? "");
   const [resumo, setResumo] = useState(perfilInicial?.resumo ?? "");
@@ -456,6 +460,8 @@ export function ConectaPerfilForm({
   return (
     <div className="flex flex-col gap-4 pt-4">
       <VisibilidadeToggle perfil={perfilInicial} idade={idade} textoTermoMenor={textoTermoMenor} />
+
+      <MinhasCandidaturasConecta candidaturas={candidaturas} />
 
       {perfilInicial?.tipo === "externo" && <MinhaAssinaturaConecta perfil={perfilInicial} />}
 

@@ -44,3 +44,26 @@ export async function enviarWhatsappEmpresaAprovada(whatsapp: string, nomeEmpres
     // Best-effort — ver comentário acima.
   }
 }
+
+// WhatsApp pro CANDIDATO (aluno ou externo) quando a empresa rejeita a candidatura — TAREFA:
+// avisa o candidato e já convida a continuar visível pra outras vagas, em vez de deixar o
+// rejeitado descobrir só entrando no portal de novo.
+export async function enviarWhatsappRejeicaoConecta(
+  whatsapp: string,
+  nome: string,
+  vagaTitulo: string,
+  nomeEmpresa: string,
+): Promise<void> {
+  try {
+    const mensagem = [
+      `Olá ${nome}!`,
+      `Obrigado por se candidatar à vaga "${vagaTitulo}" na empresa ${nomeEmpresa}.`,
+      "Desta vez não seguiremos com sua candidatura, mas fique visível para outras oportunidades!",
+      `Acesse: ${urlPortal()}/aluno/conecta`,
+    ].join("\n");
+
+    await enviarWhatsApp(whatsapp, mensagem);
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+}

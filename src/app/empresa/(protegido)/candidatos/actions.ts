@@ -5,6 +5,8 @@ import { requireEmpresa } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEmpresaPorProfileId } from "@/lib/conecta/empresas";
+import { notificarCandidatoContratado, notificarCandidatoRejeitado } from "@/lib/conecta/telegram";
+import { enviarWhatsappRejeicaoConecta } from "@/lib/conecta/whatsapp";
 import type { CandidaturaEmpresa, CandidatoConecta } from "@/lib/conecta/schema";
 
 type PerfilConectaRow = {
@@ -230,6 +232,65 @@ export async function getCandidaturasEmpresa(): Promise<CandidaturaEmpresa[]> {
   }));
 }
 
+// Dados de contato/identificação pra notificar contratação/rejeição (TAREFA: Telegram +
+// WhatsApp). Client admin de propósito: mesmo motivo do embed em getCandidaturasEmpresa (acima)
+// — a empresa não tem RLS de leitura em perfis_conecta/profiles de candidatos sem visivel=true.
+async function buscarDadosNotificacaoCandidatura(id: string): Promise<{
+  vagaTitulo: string;
+  nomeEmpresa: string;
+  nomeAluno: string;
+  whatsapp: string | null;
+} | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("candidaturas_conecta")
+    .select(
+      "vagas_conecta(titulo, empresas_conecta(nome_empresa)), perfis_conecta(nome, whatsapp, profiles!perfis_conecta_aluno_id_fkey(full_name))",
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  type Row = {
+    vagas_conecta: { titulo: string; empresas_conecta: { nome_empresa: string } | null } | null;
+    perfis_conecta: {
+      nome: string | null;
+      whatsapp: string | null;
+      profiles: { full_name: string | null } | null;
+    } | null;
+  };
+  const row = data as unknown as Row;
+
+  return {
+    vagaTitulo: row.vagas_conecta?.titulo ?? "—",
+    nomeEmpresa: row.vagas_conecta?.empresas_conecta?.nome_empresa ?? "—",
+    nomeAluno: row.perfis_conecta?.profiles?.full_name ?? row.perfis_conecta?.nome ?? "Candidato",
+    whatsapp: row.perfis_conecta?.whatsapp ?? null,
+  };
+}
+
+// Best-effort — nunca lança (mesma política de notificação do resto do Conecta): a mudança de
+// status já foi salva com sucesso antes desta chamada, uma falha aqui não pode desfazer isso.
+async function notificarMudancaStatusCandidatura(id: string, status: "contratado" | "rejeitado"): Promise<void> {
+  try {
+    const dados = await buscarDadosNotificacaoCandidatura(id);
+    if (!dados) return;
+
+    if (status === "contratado") {
+      await notificarCandidatoContratado(dados);
+      return;
+    }
+
+    await notificarCandidatoRejeitado(dados);
+    if (dados.whatsapp) {
+      await enviarWhatsappRejeicaoConecta(dados.whatsapp, dados.nomeAluno, dados.vagaTitulo, dados.nomeEmpresa);
+    }
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+}
+
 // Confirma que a candidatura pertence a uma vaga da empresa logada antes de qualquer update —
 // a policy RLS "Empresa atualiza status das proprias candidaturas" já escopa isso no banco,
 // esta checagem aqui só decide a mensagem de erro certa (candidatura de outra empresa vs. erro
@@ -248,6 +309,11 @@ async function atualizarStatusCandidatura(
   }
 
   revalidatePath("/empresa/candidatos");
+
+  if (status === "contratado" || status === "rejeitado") {
+    await notificarMudancaStatusCandidatura(id, status);
+  }
+
   return {};
 }
 
@@ -277,6 +343,45 @@ export async function marcarCandidaturaContatada(id: string): Promise<{ error?: 
   return atualizarStatusCandidatura(id, "contato");
 }
 
+export async function marcarCandidaturaContratada(id: string): Promise<{ error?: string }> {
+  return atualizarStatusCandidatura(id, "contratado");
+}
+
 export async function rejeitarCandidatura(id: string): Promise<{ error?: string }> {
   return atualizarStatusCandidatura(id, "rejeitado");
+}
+
+// TAREFA: "Rejeitar todos os pendentes desta vaga" — um único UPDATE em massa (não chama
+// atualizarStatusCandidatura em loop, que faria 1 UPDATE por linha) e notifica cada candidato
+// individualmente depois, já que cada um tem WhatsApp/nome diferentes.
+export async function rejeitarTodosPendentesDaVaga(vagaId: string): Promise<{ error?: string }> {
+  await requireEmpresa();
+
+  const supabase = await createClient();
+  const { data: pendentes, error: erroSelect } = await supabase
+    .from("candidaturas_conecta")
+    .select("id")
+    .eq("vaga_id", vagaId)
+    .eq("status", "pendente");
+
+  if (erroSelect) {
+    return { error: "Não foi possível buscar as candidaturas pendentes. Tente novamente." };
+  }
+
+  const ids = (pendentes ?? []).map((c) => c.id as string);
+  if (ids.length === 0) return {};
+
+  const { error } = await supabase.from("candidaturas_conecta").update({ status: "rejeitado" }).in("id", ids);
+
+  if (error) {
+    return { error: "Não foi possível rejeitar as candidaturas. Tente novamente." };
+  }
+
+  revalidatePath("/empresa/candidatos");
+
+  for (const id of ids) {
+    await notificarMudancaStatusCandidatura(id, "rejeitado");
+  }
+
+  return {};
 }

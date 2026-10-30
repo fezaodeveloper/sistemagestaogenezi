@@ -10,12 +10,38 @@ import type {
   AlunoVisivelConecta,
   AlunosVisiveisFiltro,
   AlunosVisiveisResultado,
+  CandidaturaStatus,
   CandidatosExternosFiltro,
   CandidatosExternosResultado,
   PerfilConecta,
 } from "@/lib/conecta/schema";
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
 const LIMITE_PADRAO = 20;
+
+// Quebra por status (TAREFA: badge colorido por status no admin) — reaproveitado pelas duas
+// listagens abaixo (alunos e externos), que só diferem no filtro de tipo.
+async function buscarCandidaturasPorStatusDosPerfis(
+  supabase: SupabaseServerClient,
+  perfilIds: string[],
+): Promise<Map<string, Partial<Record<CandidaturaStatus, number>>>> {
+  const porPerfil = new Map<string, Partial<Record<CandidaturaStatus, number>>>();
+  if (perfilIds.length === 0) return porPerfil;
+
+  const { data } = await supabase.from("candidaturas_conecta").select("perfil_id, status").in("perfil_id", perfilIds);
+  for (const row of data ?? []) {
+    const status = row.status as CandidaturaStatus;
+    const breakdown = porPerfil.get(row.perfil_id as string) ?? {};
+    breakdown[status] = (breakdown[status] ?? 0) + 1;
+    porPerfil.set(row.perfil_id as string, breakdown);
+  }
+  return porPerfil;
+}
+
+function totalDoBreakdown(breakdown: Partial<Record<CandidaturaStatus, number>>): number {
+  return Object.values(breakdown).reduce((soma, valor) => soma + (valor ?? 0), 0);
+}
 
 export async function listarCandidatosExternos(
   filtro: CandidatosExternosFiltro = {},
@@ -40,23 +66,16 @@ export async function listarCandidatosExternos(
 
   const candidatos = (data as PerfilConecta[] | null) ?? [];
 
-  // Contagem de candidaturas por perfil (TAREFA: coluna "Candidaturas") — uma query extra só
-  // com os ids desta página, não a listagem inteira.
+  // Quebra por status das candidaturas por perfil (TAREFA: coluna "Candidaturas" + badge por
+  // status) — uma query extra só com os ids desta página, não a listagem inteira.
   const perfilIds = candidatos.map((c) => c.id);
-  const candidaturasPorPerfil = new Map<string, number>();
-  if (perfilIds.length > 0) {
-    const { data: candidaturasData } = await supabase
-      .from("candidaturas_conecta")
-      .select("perfil_id")
-      .in("perfil_id", perfilIds);
-    for (const row of candidaturasData ?? []) {
-      const atual = candidaturasPorPerfil.get(row.perfil_id as string) ?? 0;
-      candidaturasPorPerfil.set(row.perfil_id as string, atual + 1);
-    }
-  }
+  const candidaturasPorPerfil = await buscarCandidaturasPorStatusDosPerfis(supabase, perfilIds);
 
   return {
-    candidatos: candidatos.map((c) => ({ ...c, totalCandidaturas: candidaturasPorPerfil.get(c.id) ?? 0 })),
+    candidatos: candidatos.map((c) => {
+      const breakdown = candidaturasPorPerfil.get(c.id) ?? {};
+      return { ...c, totalCandidaturas: totalDoBreakdown(breakdown), candidaturasPorStatus: breakdown };
+    }),
     total: count ?? 0,
   };
 }
@@ -111,19 +130,10 @@ export async function listarAlunosVisiveisConecta(
   const perfis = (data as unknown as PerfilAlunoRow[] | null) ?? [];
   const alunoIds = perfis.map((p) => p.aluno_id).filter((id): id is string => Boolean(id));
 
-  // Contagem de candidaturas por perfil (TAREFA: coluna "Candidaturas").
+  // Quebra por status das candidaturas por perfil (TAREFA: coluna "Candidaturas" + badge por
+  // status).
   const perfilIds = perfis.map((p) => p.id);
-  const candidaturasPorPerfil = new Map<string, number>();
-  if (perfilIds.length > 0) {
-    const { data: candidaturasData } = await supabase
-      .from("candidaturas_conecta")
-      .select("perfil_id")
-      .in("perfil_id", perfilIds);
-    for (const row of candidaturasData ?? []) {
-      const atual = candidaturasPorPerfil.get(row.perfil_id as string) ?? 0;
-      candidaturasPorPerfil.set(row.perfil_id as string, atual + 1);
-    }
-  }
+  const candidaturasPorPerfil = await buscarCandidaturasPorStatusDosPerfis(supabase, perfilIds);
 
   const cursosPorAluno = new Map<string, Set<string>>();
   if (alunoIds.length > 0) {
@@ -155,7 +165,8 @@ export async function listarAlunosVisiveisConecta(
     cursosConcluidos: perfil.aluno_id
       ? [...(cursosPorAluno.get(perfil.aluno_id) ?? [])].sort((a, b) => a.localeCompare(b))
       : [],
-    totalCandidaturas: candidaturasPorPerfil.get(perfil.id) ?? 0,
+    totalCandidaturas: totalDoBreakdown(candidaturasPorPerfil.get(perfil.id) ?? {}),
+    candidaturasPorStatus: candidaturasPorPerfil.get(perfil.id) ?? {},
   }));
 
   const termo = filtro.query?.trim().toLowerCase();
@@ -277,6 +288,26 @@ export async function excluirCandidatoExterno(id: string): Promise<{ error?: str
       // Best-effort — o perfil já foi excluído com sucesso acima; a conta Auth órfã pode ser
       // limpa manualmente depois, não bloqueia a exclusão.
     }
+  }
+
+  revalidatePath("/admin/conecta/candidatos");
+  return {};
+}
+
+// "Excluir candidato" pra um ALUNO (diferente de excluirCandidatoExterno acima): a conta do
+// aluno continua existindo normalmente no resto da plataforma (matrículas, aulas, etc.) — aqui
+// só remove as candidaturas dele no Gênezi Conecta, nunca o perfil/visibilidade nem a conta.
+// Client admin de propósito: authenticated só tem grant de select/insert/update(status) em
+// candidaturas_conecta (ver migration de criação) — delete é só pra service_role, mesmo padrão
+// de excluirCandidatoExterno.
+export async function excluirCandidaturasAluno(perfilId: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("candidaturas_conecta").delete().eq("perfil_id", perfilId);
+
+  if (error) {
+    return { error: "Não foi possível excluir as candidaturas deste aluno. Tente novamente." };
   }
 
   revalidatePath("/admin/conecta/candidatos");

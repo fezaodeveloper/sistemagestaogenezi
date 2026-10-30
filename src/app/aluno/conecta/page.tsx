@@ -7,6 +7,7 @@ import {
   getCursosConcluidosAluno,
   getIdadeAlunoConecta,
   getMeuPerfilConecta,
+  getMinhasCandidaturasAluno,
   getMinhasCandidaturasVagaIds,
 } from "@/app/aluno/conecta/actions";
 import { getCidadesAprovadas } from "@/lib/conecta/publico";
@@ -25,16 +26,25 @@ export default async function AlunoConectaPage() {
     notFound();
   }
 
-  const [perfil, cursosConcluidos, vagasResultado, cidadesAprovadas, idade, termoMenor, candidaturasVagaIds] =
-    await Promise.all([
-      getMeuPerfilConecta(),
-      getCursosConcluidosAluno(user.id),
-      buscarVagasConecta(),
-      getCidadesAprovadas(),
-      getIdadeAlunoConecta(user.id),
-      getTermoLegalPublico("conecta_menor_termo"),
-      getMinhasCandidaturasVagaIds(),
-    ]);
+  const [
+    perfil,
+    cursosConcluidos,
+    vagasResultado,
+    cidadesAprovadas,
+    idade,
+    termoMenor,
+    candidaturasVagaIds,
+    minhasCandidaturas,
+  ] = await Promise.all([
+    getMeuPerfilConecta(),
+    getCursosConcluidosAluno(user.id),
+    buscarVagasConecta(),
+    getCidadesAprovadas(),
+    getIdadeAlunoConecta(user.id),
+    getTermoLegalPublico("conecta_menor_termo"),
+    getMinhasCandidaturasVagaIds(),
+    getMinhasCandidaturasAluno(),
+  ]);
 
   const textoTermoMenor = termoMenor?.conteudo?.trim()
     ? textoPlanoDoTermo(termoMenor.conteudo)
@@ -56,6 +66,7 @@ export default async function AlunoConectaPage() {
         idade={idade}
         textoTermoMenor={textoTermoMenor}
         candidaturasVagaIdsIniciais={candidaturasVagaIds}
+        minhasCandidaturas={minhasCandidaturas}
       />
     </div>
   );

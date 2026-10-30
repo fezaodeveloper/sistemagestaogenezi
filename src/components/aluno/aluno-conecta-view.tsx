@@ -2,7 +2,7 @@
 
 import { ConectaPerfilForm } from "@/components/aluno/conecta-perfil-form";
 import { ConectaVagasView } from "@/components/aluno/conecta-vagas-view";
-import type { CidadeConecta, PerfilConecta, VagasConectaResultado } from "@/lib/conecta/schema";
+import type { CandidaturaAluno, CidadeConecta, PerfilConecta, VagasConectaResultado } from "@/lib/conecta/schema";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function AlunoConectaView({
@@ -13,6 +13,7 @@ export function AlunoConectaView({
   idade,
   textoTermoMenor,
   candidaturasVagaIdsIniciais,
+  minhasCandidaturas,
 }: {
   perfilInicial: PerfilConecta | null;
   cursosConcluidos: string[];
@@ -21,6 +22,7 @@ export function AlunoConectaView({
   idade: number | null;
   textoTermoMenor: string;
   candidaturasVagaIdsIniciais: string[];
+  minhasCandidaturas: CandidaturaAluno[];
 }) {
   return (
     <Tabs defaultValue="vagas">
@@ -41,6 +43,7 @@ export function AlunoConectaView({
           cursosConcluidos={cursosConcluidos}
           idade={idade}
           textoTermoMenor={textoTermoMenor}
+          candidaturas={minhasCandidaturas}
         />
       </TabsContent>
     </Tabs>

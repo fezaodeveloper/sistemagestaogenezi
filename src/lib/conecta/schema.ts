@@ -217,6 +217,9 @@ export type PerfilConecta = {
   // Só populado pela listagem do admin (listarCandidatosExternos) — TAREFA: coluna
   // "Candidaturas" em /admin/conecta/candidatos.
   totalCandidaturas?: number;
+  // Quebra por status das candidaturas acima — TAREFA: badge colorido por status no admin. Só as
+  // chaves com pelo menos 1 candidatura aparecem aqui.
+  candidaturasPorStatus?: Partial<Record<CandidaturaStatus, number>>;
 };
 
 export type CandidatosExternosFiltro = {
@@ -442,6 +445,7 @@ export type AlunoVisivelConecta = {
   menorComTermo: boolean;
   cursosConcluidos: string[];
   totalCandidaturas: number;
+  candidaturasPorStatus: Partial<Record<CandidaturaStatus, number>>;
 };
 
 export type AlunosVisiveisFiltro = { query?: string; page?: number; limit?: number };
@@ -530,19 +534,26 @@ export type VagaFormValues = z.infer<typeof vagaFormSchema>;
 
 // ===== Candidatura interna (TAREFA: remover "Candidatar via WhatsApp" direto) =====
 
-export const CANDIDATURA_STATUSES = ["pendente", "visualizado", "contato", "rejeitado"] as const;
+// 'contratado' (TAREFA: status de contratação) exige a migration
+// 20261029300000_candidatura_status_contratado.sql aplicada (recria o CHECK constraint da
+// coluna) — NÃO APLICADA ainda.
+export const CANDIDATURA_STATUSES = ["pendente", "visualizado", "contato", "rejeitado", "contratado"] as const;
 export type CandidaturaStatus = (typeof CANDIDATURA_STATUSES)[number];
 export const CANDIDATURA_STATUS_LABELS: Record<CandidaturaStatus, string> = {
   pendente: "Pendente",
   visualizado: "Visualizado",
   contato: "Em contato",
   rejeitado: "Rejeitado",
+  contratado: "Contratado",
 };
+// Cores pedidas na TAREFA: pendente=cinza, visualizado=azul, contato=amarelo,
+// contratado=verde, rejeitado=vermelho.
 export const CANDIDATURA_STATUS_BADGE_CLASS: Record<CandidaturaStatus, string> = {
-  pendente: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  pendente: "bg-muted text-muted-foreground",
   visualizado: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
-  contato: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
-  rejeitado: "bg-muted text-muted-foreground",
+  contato: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  rejeitado: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+  contratado: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
 };
 
 // Candidatura do ponto de vista da EMPRESA — WhatsApp do candidato só é exposto aqui depois que
@@ -559,4 +570,17 @@ export type CandidaturaEmpresa = {
   candidatoResumo: string | null;
   candidatoCurriculoPath: string | null;
   candidatoCursosConcluidos: string[];
+};
+
+// Candidatura do ponto de vista do PRÓPRIO CANDIDATO (/aluno/conecta, seção "Minhas
+// candidaturas") — sem WhatsApp/currículo/resumo, que não fazem sentido pro candidato ver sobre
+// a própria candidatura; a cópia de status pro candidato é mais suave (ver
+// MinhasCandidaturasConecta) do que CANDIDATURA_STATUS_LABELS, que é voltada à empresa/admin.
+export type CandidaturaAluno = {
+  id: string;
+  status: CandidaturaStatus;
+  vagaTitulo: string;
+  nomeEmpresa: string;
+  createdAt: string;
+  updatedAt: string;
 };

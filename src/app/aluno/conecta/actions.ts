@@ -7,9 +7,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateAge } from "@/lib/alunos/schema";
 import { cancelarAssinaturaConecta } from "@/lib/asaas/client";
 import { getVagasPublicasConecta } from "@/lib/conecta/publico";
-import { notificarNovoCandidatoTelegram } from "@/lib/conecta/telegram";
+import { notificarAlunoAtivouVisibilidade, notificarCandidaturaRealizada } from "@/lib/conecta/telegram";
 import {
   perfilConectaFormSchema,
+  type CandidaturaAluno,
+  type CandidaturaStatus,
   type PerfilConecta,
   type VagasConectaFiltro,
   type VagasConectaResultado,
@@ -197,9 +199,8 @@ export async function toggleVisibilidadePerfil(
   // ATIVAR, nunca ao desativar — mesmo recorte do WhatsApp obrigatório/proteção de idade acima.
   if (visivel) {
     const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
-    await notificarNovoCandidatoTelegram({
-      nome: profile?.full_name ?? "Aluno",
-      tipo: "aluno",
+    await notificarAlunoAtivouVisibilidade({
+      nomeAluno: profile?.full_name ?? "Aluno",
       cidade,
       estado,
     });
@@ -353,6 +354,50 @@ export async function getMinhasCandidaturasVagaIds(): Promise<string[]> {
   return (data ?? []).map((row) => row.vaga_id as string);
 }
 
+// TAREFA: seção "Minhas candidaturas" em /aluno/conecta — client autenticado normal (não precisa
+// de admin/service_role): a policy "Candidato ve proprias candidaturas" já libera exatamente
+// isso, e o embed candidaturas_conecta -> vagas_conecta -> empresas_conecta nunca teve o
+// problema de FK que perfis_conecta -> alunos tinha (ver fix do PGRST200).
+export async function getMinhasCandidaturasAluno(): Promise<CandidaturaAluno[]> {
+  const user = await requireRole("aluno");
+
+  const supabase = await createClient();
+  const { data: perfil } = await supabase
+    .from("perfis_conecta")
+    .select("id")
+    .eq("aluno_id", user.id)
+    .maybeSingle();
+
+  if (!perfil) return [];
+
+  const { data, error } = await supabase
+    .from("candidaturas_conecta")
+    .select("id, status, created_at, updated_at, vagas_conecta(titulo, empresas_conecta(nome_empresa))")
+    .eq("perfil_id", perfil.id)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("[getMinhasCandidaturasAluno] erro ao buscar candidaturas_conecta:", error);
+  }
+
+  type Row = {
+    id: string;
+    status: CandidaturaStatus;
+    created_at: string;
+    updated_at: string;
+    vagas_conecta: { titulo: string; empresas_conecta: { nome_empresa: string } | null } | null;
+  };
+
+  return ((data as unknown as Row[]) ?? []).map((row) => ({
+    id: row.id,
+    status: row.status,
+    vagaTitulo: row.vagas_conecta?.titulo ?? "—",
+    nomeEmpresa: row.vagas_conecta?.empresas_conecta?.nome_empresa ?? "—",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
 // Candidatura interna (TAREFA: remover "Candidatar via WhatsApp" direto) — cria o perfil em
 // perfis_conecta se o candidato ainda não tiver um (primeira ação no Conecta pode ser direto
 // "Me candidatar" numa vaga, sem ter passado pela aba "Meu perfil profissional" antes).
@@ -369,12 +414,16 @@ export async function candidatarAluno(vagaId: string): Promise<{ error?: string 
 
   let perfilId = perfilExistente?.id as string | undefined;
 
+  // Buscado uma vez só, reaproveitado tanto pro backfill de nome (se o perfil ainda não existir)
+  // quanto pra notificação de candidatura mais abaixo.
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+  const nomeAluno = profile?.full_name ?? "Candidato";
+
   if (!perfilId) {
     // tipo NUNCA entra no payload — ver comentário em salvarPerfilConecta (acima, neste
     // arquivo). Sem linha existente, o default 'aluno' da coluna resolve certo aqui.
     // nome: mesmo backfill defensivo de salvarPerfilConecta — aqui a linha pode estar sendo
     // criada pela primeira vez direto na vaga, sem o candidato ter passado pelo form de perfil.
-    const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
     const { data: perfilCriado, error: erroPerfil } = await supabase
       .from("perfis_conecta")
       .insert({ aluno_id: user.id, nome: profile?.full_name ?? null })
@@ -397,30 +446,39 @@ export async function candidatarAluno(vagaId: string): Promise<{ error?: string 
     return { error: "Não foi possível registrar sua candidatura. Tente novamente." };
   }
 
-  // Notificação da EMPRESA (não é Telegram — empresas não têm chat próprio configurado, só a
-  // ESCOLA tem telegram_conecta_chat_id; o canal já existente pra "avisar a empresa" é
-  // notificacoes_empresa + badge em /empresa/notificacoes, usado por enviarNotificacaoEmpresa).
+  // Notificações (best-effort): notificacoes_empresa (não é Telegram — empresas não têm chat
+  // próprio configurado, só a ESCOLA tem telegram_conecta_chat_id; o canal já existente pra
+  // "avisar a empresa" é notificacoes_empresa + badge em /empresa/notificacoes) + Telegram da
+  // escola (TAREFA: notificarCandidaturaRealizada). Só numa candidatura NOVA (error null) — uma
+  // reconfirmação de candidatura já existente (23505) não deve notificar de novo.
   // Client admin de propósito: a policy "Admins gerenciam notificacoes" só libera INSERT pra
   // admin via RLS — candidato não tem policy própria pra inserir aí, nem deveria ganhar uma só
   // pra isso (escreveria linhas marcadas como "vindas do admin" sem ter sido o admin quem
   // criou). Best-effort — a candidatura já foi registrada com sucesso acima.
-  try {
-    const { data: vaga } = await supabase
-      .from("vagas_conecta")
-      .select("titulo, empresa_id")
-      .eq("id", vagaId)
-      .maybeSingle();
+  if (!error) {
+    try {
+      const { data: vaga } = await supabase
+        .from("vagas_conecta")
+        .select("titulo, empresa_id, empresas_conecta(nome_empresa)")
+        .eq("id", vagaId)
+        .maybeSingle();
 
-    if (vaga) {
-      const admin = createAdminClient();
-      await admin.from("notificacoes_empresa").insert({
-        empresa_id: vaga.empresa_id,
-        titulo: "Novo candidato",
-        mensagem: `Um candidato se inscreveu na vaga "${vaga.titulo}".`,
-      });
+      if (vaga) {
+        const admin = createAdminClient();
+        await admin.from("notificacoes_empresa").insert({
+          empresa_id: vaga.empresa_id,
+          titulo: "Novo candidato",
+          mensagem: `Um candidato se inscreveu na vaga "${vaga.titulo}".`,
+        });
+
+        const nomeEmpresa =
+          (vaga as unknown as { empresas_conecta: { nome_empresa: string } | null }).empresas_conecta
+            ?.nome_empresa ?? "—";
+        await notificarCandidaturaRealizada({ vagaTitulo: vaga.titulo, nomeAluno, nomeEmpresa });
+      }
+    } catch {
+      // Best-effort — ver comentário acima.
     }
-  } catch {
-    // Best-effort — ver comentário acima.
   }
 
   revalidatePath("/aluno/conecta");

@@ -5,14 +5,18 @@ import { useRouter } from "next/navigation";
 import { Mail, Search, Trash2, UserRound, XCircle } from "lucide-react";
 import {
   cancelarAssinaturaCandidato,
+  excluirCandidaturasAluno,
   excluirCandidatoExterno,
   reenviarAcessoCandidato,
 } from "@/app/admin/conecta/candidatos/actions";
 import {
+  CANDIDATURA_STATUS_BADGE_CLASS,
+  CANDIDATURA_STATUS_LABELS,
   DISPONIBILIDADE_LABELS,
   PLANO_CONECTA_INFO,
   type AlunosVisiveisResultado,
   type CandidatosExternosResultado,
+  type CandidaturaStatus,
   type PerfilConecta,
 } from "@/lib/conecta/schema";
 import {
@@ -71,7 +75,88 @@ function CancelarAssinaturaButton({ candidato, onCancelado }: { candidato: Perfi
   );
 }
 
+function CandidaturasPorStatusBadges({
+  candidaturasPorStatus,
+}: {
+  candidaturasPorStatus: Partial<Record<CandidaturaStatus, number>>;
+}) {
+  const entradas = Object.entries(candidaturasPorStatus).filter(([, total]) => (total ?? 0) > 0) as [
+    CandidaturaStatus,
+    number,
+  ][];
+  if (entradas.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {entradas.map(([status, total]) => (
+        <Badge key={status} className={`${CANDIDATURA_STATUS_BADGE_CLASS[status]} text-[11px]`}>
+          {total} {CANDIDATURA_STATUS_LABELS[status]}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function ExcluirCandidaturasAlunoButton({ id, nome, onExcluido }: { id: string; nome: string; onExcluido: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleExcluir() {
+    startTransition(async () => {
+      const resultado = await excluirCandidaturasAluno(id);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      setOpen(false);
+      onExcluido();
+    });
+  }
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) setError(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm" className="text-destructive">
+            <Trash2 className="size-4" />
+            Excluir candidaturas
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir candidaturas de {nome}</AlertDialogTitle>
+          <AlertDialogDescription>
+            Remove todas as candidaturas de {nome} no Gênezi Conecta. A conta e o perfil do aluno não são
+            afetados — ele continua podendo se candidatar a novas vagas depois. Essa ação não pode ser
+            desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+            {isPending ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function AlunoCard({
+  id,
   nome,
   whatsapp,
   cidade,
@@ -80,7 +165,10 @@ function AlunoCard({
   menorComTermo,
   cursosConcluidos,
   totalCandidaturas,
+  candidaturasPorStatus,
+  onAtualizado,
 }: {
+  id: string;
   nome: string;
   whatsapp: string | null;
   cidade: string | null;
@@ -89,6 +177,8 @@ function AlunoCard({
   menorComTermo: boolean;
   cursosConcluidos: string[];
   totalCandidaturas: number;
+  candidaturasPorStatus: Partial<Record<CandidaturaStatus, number>>;
+  onAtualizado: () => void;
 }) {
   return (
     <Card>
@@ -117,6 +207,7 @@ function AlunoCard({
           <span>{DISPONIBILIDADE_LABELS[disponibilidade]}</span>
           <span>{totalCandidaturas} candidatura{totalCandidaturas === 1 ? "" : "s"}</span>
         </div>
+        <CandidaturasPorStatusBadges candidaturasPorStatus={candidaturasPorStatus} />
         {cursosConcluidos.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {cursosConcluidos.map((curso) => (
@@ -124,6 +215,11 @@ function AlunoCard({
                 {curso}
               </Badge>
             ))}
+          </div>
+        )}
+        {totalCandidaturas > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <ExcluirCandidaturasAlunoButton id={id} nome={nome} onExcluido={onAtualizado} />
           </div>
         )}
       </CardContent>
@@ -256,6 +352,7 @@ function CandidatoExternoCard({ candidato, onAtualizado }: { candidato: PerfilCo
             {candidato.totalCandidaturas ?? 0} candidatura{(candidato.totalCandidaturas ?? 0) === 1 ? "" : "s"}
           </span>
         </div>
+        <CandidaturasPorStatusBadges candidaturasPorStatus={candidato.candidaturasPorStatus ?? {}} />
         <div className="flex flex-wrap gap-2">
           {candidato.esta_ativo && (
             <>
@@ -358,7 +455,7 @@ export function ConectaCandidatosView({
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {resultadoAlunos.alunos.map((aluno) => (
-              <AlunoCard key={aluno.id} {...aluno} />
+              <AlunoCard key={aluno.id} {...aluno} onAtualizado={() => startTransition(() => router.refresh())} />
             ))}
           </div>
         )}
