@@ -462,6 +462,10 @@ export function MatriculasTable({
   limite,
   q,
   buscaTruncada,
+  cursos,
+  turmas,
+  cursoIdFiltro,
+  turmaIdFiltro,
 }: {
   matriculas: MatriculaListItem[];
   paginaAtual: number;
@@ -473,12 +477,43 @@ export function MatriculasTable({
   q: string;
   // true quando a busca casou com alunos/cursos demais e o servidor limitou.
   buscaTruncada: boolean;
+  // Filtros de curso/turma (TAREFA) — assim como `q`, filtrados no servidor (page.tsx) sobre
+  // todas as matrículas, não só a página carregada (diferente do filtro de status abaixo, que é
+  // só client-side sobre a página atual).
+  cursos: { id: string; nome: string }[];
+  turmas: { id: string; nome: string }[];
+  cursoIdFiltro: string;
+  turmaIdFiltro: string;
 }) {
   const router = useRouter();
-  const { busca, alterarBusca } = useBuscaUrl("/admin/matriculas", q, {
+  const paramsFiltros = {
     ...(limite !== LIMITE_PADRAO ? { limit: String(limite) } : {}),
-  });
+    ...(cursoIdFiltro ? { curso_id: cursoIdFiltro } : {}),
+    ...(turmaIdFiltro ? { turma_id: turmaIdFiltro } : {}),
+  };
+  const { busca, alterarBusca } = useBuscaUrl("/admin/matriculas", q, paramsFiltros);
   const [statusFiltro, setStatusFiltro] = useState<string>(STATUS_FILTRO_TODOS);
+
+  // Troca de curso/turma: sempre volta pra página 1 (mesmo critério de useBuscaUrl). Selecionar
+  // um curso reseta a turma pra "Todas" (COMPORTAMENTO em cascata, TAREFA); selecionar uma turma
+  // não limpa o curso (turma já implica o curso). "Todos os cursos" limpa os dois.
+  function irParaFiltro(novoCursoId: string, novaTurmaId: string) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (limite !== LIMITE_PADRAO) params.set("limit", String(limite));
+    if (novoCursoId) params.set("curso_id", novoCursoId);
+    if (novaTurmaId) params.set("turma_id", novaTurmaId);
+    const query = params.toString();
+    router.push(query ? `/admin/matriculas?${query}` : "/admin/matriculas");
+  }
+
+  function handleCursoChange(valor: string) {
+    irParaFiltro(valor, "");
+  }
+
+  function handleTurmaChange(valor: string) {
+    irParaFiltro(cursoIdFiltro, valor);
+  }
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [mensagemLote, setMensagemLote] = useState<string | null>(null);
@@ -575,6 +610,42 @@ export function MatriculasTable({
               {Object.keys(STATUS_FILTRO_ITEMS).map((status) => (
                 <SelectItem key={status} value={status}>
                   {STATUS_FILTRO_ITEMS[status]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={{ "": "Todos os cursos", ...Object.fromEntries(cursos.map((c) => [c.id, c.nome])) }}
+            value={cursoIdFiltro}
+            onValueChange={(value) => handleCursoChange(value ?? "")}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos os cursos</SelectItem>
+              {cursos.map((curso) => (
+                <SelectItem key={curso.id} value={curso.id}>
+                  {curso.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={{ "": "Todas as turmas", ...Object.fromEntries(turmas.map((t) => [t.id, t.nome])) }}
+            value={turmaIdFiltro}
+            onValueChange={(value) => handleTurmaChange(value ?? "")}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todas as turmas</SelectItem>
+              {turmas.map((turma) => (
+                <SelectItem key={turma.id} value={turma.id}>
+                  {turma.nome}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -698,7 +769,7 @@ export function MatriculasTable({
         totalRegistros={totalRegistros}
         limite={limite}
         baseUrl="/admin/matriculas"
-        searchParams={q ? { q } : {}}
+        searchParams={{ ...(q ? { q } : {}), ...(cursoIdFiltro ? { curso_id: cursoIdFiltro } : {}), ...(turmaIdFiltro ? { turma_id: turmaIdFiltro } : {}) }}
       />
       {buscaTruncada && (
         <p className="text-muted-foreground text-sm">

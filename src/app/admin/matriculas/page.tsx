@@ -14,17 +14,30 @@ const ID_INEXISTENTE = "00000000-0000-0000-0000-000000000000";
 export default async function MatriculasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; limit?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; limit?: string; q?: string; curso_id?: string; turma_id?: string }>;
 }) {
   await requireRole("admin");
-  const { page, limit, q: qRaw } = await searchParams;
+  const { page, limit, q: qRaw, curso_id: cursoId, turma_id: turmaId } = await searchParams;
   const q = parseBusca(qRaw);
+  const UUID_REGEX = /^[0-9a-f-]{36}$/i;
+  const cursoIdFiltro = cursoId && UUID_REGEX.test(cursoId) ? cursoId : "";
+  const turmaIdFiltro = turmaId && UUID_REGEX.test(turmaId) ? turmaId : "";
 
   const paginaAtual = parsePagina(page);
   const limite = parseLimite(limit);
   const offset = calcularOffset(paginaAtual, limite);
 
   const supabase = await createClient();
+
+  // Opções dos dois selects (PARTE 1). Turma em cascata: com curso selecionado, mostra TODAS as
+  // turmas desse curso (qualquer status — uma matrícula pode estar numa turma já encerrada);
+  // sem curso, só as turmas ativas (mesmo critério do resto do admin, ex. dashboard comercial).
+  const [{ data: cursosOpcoes }, { data: turmasOpcoes }] = await Promise.all([
+    supabase.from("cursos").select("id, nome").eq("status", "ativo").order("nome"),
+    cursoIdFiltro
+      ? supabase.from("turmas").select("id, nome").eq("curso_id", cursoIdFiltro).order("nome")
+      : supabase.from("turmas").select("id, nome").eq("status", "ativa").order("nome"),
+  ]);
 
   let query = supabase
     .from("matriculas")
@@ -33,6 +46,18 @@ export default async function MatriculasPage({
       { count: "exact" },
     )
     .order("created_at", { ascending: false });
+
+  // matriculas não tem curso_id próprio (só turma_id) — o curso só existe via turmas.curso_id,
+  // por isso o filtro por curso precisa achar as turmas desse curso primeiro (mesmo padrão já
+  // usado abaixo pra busca por nome de curso). turma_id, quando presente, já é mais específico
+  // que curso_id e dispensa essa segunda consulta.
+  if (turmaIdFiltro) {
+    query = query.eq("turma_id", turmaIdFiltro);
+  } else if (cursoIdFiltro) {
+    const { data: turmasDoCurso } = await supabase.from("turmas").select("id").eq("curso_id", cursoIdFiltro);
+    const idsTurmasDoCurso = (turmasDoCurso ?? []).map((turma) => turma.id as string);
+    query = idsTurmasDoCurso.length > 0 ? query.in("turma_id", idsTurmasDoCurso) : query.eq("id", ID_INEXISTENTE);
+  }
 
   // Busca por aluno OU curso, sobre todas as matrículas (não só a página).
   // Nome do aluno mora em profiles (alunos.id = profiles.id) e o curso está
@@ -87,7 +112,7 @@ export default async function MatriculasPage({
             Não foi possível carregar as matrículas. Tente recarregar a página.
           </CardContent>
         </Card>
-      ) : !matriculas || (totalRegistros === 0 && !q) ? (
+      ) : !matriculas || (totalRegistros === 0 && !q && !cursoIdFiltro && !turmaIdFiltro) ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <p className="text-muted-foreground text-sm">Nenhuma matrícula cadastrada ainda.</p>
@@ -111,6 +136,10 @@ export default async function MatriculasPage({
             limite={limite}
             q={q}
             buscaTruncada={buscaTruncada}
+            cursos={cursosOpcoes ?? []}
+            turmas={turmasOpcoes ?? []}
+            cursoIdFiltro={cursoIdFiltro}
+            turmaIdFiltro={turmaIdFiltro}
           />
         </Card>
       )}
