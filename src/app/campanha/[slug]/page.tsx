@@ -11,8 +11,18 @@ import { PixelsScripts } from "@/components/pixels/pixels-scripts";
 // /captacao e /agendar/[slug]).
 export const dynamic = "force-dynamic";
 
-export default async function CampanhaPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CampanhaPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ utm_source?: string; utm_medium?: string; utm_campaign?: string }>;
+}) {
   const { slug } = await params;
+  // UTM (TAREFA CRM 2.2, PARTE 3) — lido aqui (Server Component) e passado como prop pro form
+  // client incluir no FormData do envio, não um hook client-side de searchParams.
+  const { utm_source, utm_medium, utm_campaign } = await searchParams;
+  const utm = { source: utm_source ?? null, medium: utm_medium ?? null, campaign: utm_campaign ?? null };
 
   // client admin (service_role), não o client autenticado normal — ver
   // comentário em getCampanhaPaginaPublica (src/lib/campanha-paginas/campanha-paginas.ts)
@@ -44,14 +54,14 @@ export default async function CampanhaPage({ params }: { params: Promise<{ slug:
             encerradas!" no topo e bloqueia o formulário (o cabeçalho, com título e
             cards, continua visível). */}
         {encerrada ? (
-          <CampanhaPublicaView pagina={pagina} encerrada />
+          <CampanhaPublicaView pagina={pagina} encerrada utm={utm} />
         ) : vagasEsgotadas ? (
           <div className="flex flex-col items-center gap-2 py-20 text-center">
             <p className="text-xl font-semibold">Vagas esgotadas</p>
             <p className="text-sm opacity-70">Todas as vagas dessa campanha já foram preenchidas.</p>
           </div>
         ) : (
-          <CampanhaPublicaView pagina={pagina} />
+          <CampanhaPublicaView pagina={pagina} utm={utm} />
         )}
       </div>
     </main>

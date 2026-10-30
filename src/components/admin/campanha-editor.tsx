@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, RotateCcw, Trash2, Upload, X } from "lucide-react";
 import { atualizarCampanhaPagina, criarCampanhaPagina } from "@/app/admin/comercial/paginas-campanha/actions";
 import { createClient } from "@/lib/supabase/client";
+import { UtmLinkGenerator } from "@/components/admin/utm-link-generator";
 import {
   CAMPANHA_PAGINA_BUCKET,
   CAMPANHA_PAGINA_IMAGEM_MAXIMO_BYTES,
@@ -689,6 +690,10 @@ export function CampanhaEditor({
           {error}
         </p>
       )}
+
+      {/* TAREFA CRM 2.2 (PARTE 3) — só faz sentido com a página já criada (precisa do slug de
+          verdade pra montar a URL pública). */}
+      {editando && slug && <UtmLinkGenerator slug={slug} />}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <form id="campanha-editor-form" action={handleSubmit} className="flex flex-col gap-4">

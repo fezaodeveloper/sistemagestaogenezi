@@ -12,6 +12,8 @@ import {
   validarSlotPermitido,
 } from "@/lib/agendamentos/agendamentos";
 import { agendamentoPublicoSchema } from "@/lib/agendamentos/schema";
+import { encontrarLeadPorWhatsappOuEmail, getKanbanColunas, registrarHistoricoLead } from "@/lib/leads/leads";
+import { encontrarColunaVisitaAgendado } from "@/lib/leads/schema";
 
 // slotIndisponivel: o horário escolhido não está mais disponível (lotou ou
 // saiu das regras da página) — o client volta pro passo 1 e marca o horário
@@ -95,6 +97,54 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
 
   if (error || !agendamento) {
     return { error: "Não foi possível confirmar o agendamento. Tente novamente." };
+  }
+
+  // Integração com leads (TAREFA CRM 2.2) — best-effort, nunca bloqueia a confirmação do
+  // agendamento (que já aconteceu com sucesso acima). Não existe coluna "Visita/Agendado" no
+  // seed atual do Kanban (confirmado na PERGUNTA DE FATO 3: só novo/contato/negociacao/
+  // matriculado/perdido) — encontrarColunaVisitaAgendado busca por NOME (não id) e devolve null
+  // se nenhuma coluna existir com esse nome, caindo nos fallbacks abaixo.
+  try {
+    const existente = await encontrarLeadPorWhatsappOuEmail(admin, parsed.data.whatsapp, parsed.data.email);
+    const colunas = await getKanbanColunas(admin);
+    const colunaVisita = encontrarColunaVisitaAgendado(colunas);
+
+    if (existente) {
+      // Só move se achou a coluna de visita — sem ela, mantém a coluna atual do lead (REGRA da
+      // tarefa).
+      if (colunaVisita && existente.kanban_coluna !== colunaVisita.id) {
+        await admin.from("leads").update({ kanban_coluna: colunaVisita.id }).eq("id", existente.id);
+      }
+      await admin.from("agendamentos").update({ lead_id: existente.id }).eq("id", agendamento.id);
+      await registrarHistoricoLead(
+        admin,
+        existente.id,
+        "agendamento",
+        `Agendamento criado: ${parsed.data.data_agendada} às ${parsed.data.horario}`,
+      );
+    } else {
+      const colunaNovo = colunaVisita?.id ?? colunas.find((c) => c.id === "novo")?.id ?? colunas[0]?.id ?? "novo";
+      const { data: novoLead } = await admin
+        .from("leads")
+        .insert({
+          nome: parsed.data.nome,
+          telefone: parsed.data.whatsapp,
+          whatsapp: parsed.data.whatsapp,
+          email: parsed.data.email?.trim() || null,
+          curso_id: null,
+          origem: "agendamento",
+          kanban_coluna: colunaNovo,
+        })
+        .select("id")
+        .single();
+
+      if (novoLead) {
+        await admin.from("agendamentos").update({ lead_id: novoLead.id }).eq("id", agendamento.id);
+        await registrarHistoricoLead(admin, novoLead.id, "criacao", "Lead criado via agendamento público");
+      }
+    }
+  } catch {
+    // Best-effort — ver comentário acima.
   }
 
   // Stub — confirmação automática de agendamento por WhatsApp ainda não tem template próprio

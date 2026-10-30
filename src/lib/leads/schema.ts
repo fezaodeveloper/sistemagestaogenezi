@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-export const LEAD_ORIGENS = ["indicacao", "redes_sociais", "google", "panfleto", "campanha", "outro"] as const;
+// 'agendamento' (TAREFA CRM 2.2) exige a migration 20261030300000_integracoes_comercial.sql
+// aplicada (ALTER TYPE ... ADD VALUE) — mesmo padrão já usado pra adicionar 'campanha'.
+export const LEAD_ORIGENS = [
+  "indicacao",
+  "redes_sociais",
+  "google",
+  "panfleto",
+  "campanha",
+  "agendamento",
+  "outro",
+] as const;
 export type LeadOrigem = (typeof LEAD_ORIGENS)[number];
 
 export const LEAD_ORIGEM_LABELS: Record<LeadOrigem, string> = {
@@ -9,18 +19,21 @@ export const LEAD_ORIGEM_LABELS: Record<LeadOrigem, string> = {
   google: "Google",
   panfleto: "Panfleto",
   campanha: "Página de campanha",
+  agendamento: "Agendamento público",
   outro: "Outro",
 };
 
 // Cores do badge de origem (TAREFA pedia "Instagram=roxo, Facebook=azul..." — esses dois valores
 // não existem no enum lead_origem, que só tem indicacao/redes_sociais/google/panfleto/campanha/
-// outro, ver AUDITORIA; "redes_sociais" já cobre Instagram/Facebook/etc. de forma genérica).
+// agendamento/outro, ver AUDITORIA; "redes_sociais" já cobre Instagram/Facebook/etc. de forma
+// genérica).
 export const LEAD_ORIGEM_BADGE_CLASS: Record<LeadOrigem, string> = {
   indicacao: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
   redes_sociais: "bg-violet-500/10 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400",
   google: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
   panfleto: "bg-orange-500/10 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400",
   campanha: "bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400",
+  agendamento: "bg-teal-500/10 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400",
   outro: "bg-muted text-muted-foreground",
 };
 
@@ -54,7 +67,9 @@ export type Lead = {
   id: string;
   nome: string;
   telefone: string;
-  curso_id: string;
+  // TAREFA CRM 2.2 — virou nullable (migration 20261030300000): leads vindos de página de
+  // campanha sem curso vinculado precisam existir mesmo sem curso_id.
+  curso_id: string | null;
   origem: LeadOrigem;
   status: LeadStatus;
   observacoes: string | null;
@@ -130,6 +145,13 @@ export const kanbanColunaNomeSchema = z
   .max(40, { error: "Máximo de 40 caracteres." });
 
 export const kanbanColunaCorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." });
+
+// TAREFA CRM 2.2 (agendamento público) — busca por NOME (não existe uma coluna "Visita/Agendado"
+// no seed atual, ver AUDITORIA: só novo/contato/negociacao/matriculado/perdido). Sem essa coluna,
+// cai em "novo" pra lead novo, ou mantém a coluna atual pra lead já existente (null = "não mover").
+export function encontrarColunaVisitaAgendado(colunas: KanbanColunaConfig[]): KanbanColunaConfig | null {
+  return colunas.find((c) => /visita|agendad/i.test(c.nome)) ?? null;
+}
 
 // Cabeçalho da coluna: fundo com a cor a ~10% de opacidade + texto na cor.
 export function kanbanColunaEstilo(cor: string): { backgroundColor: string; color: string } {

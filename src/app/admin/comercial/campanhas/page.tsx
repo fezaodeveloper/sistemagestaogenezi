@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { calcularTotalPaginas, parsePagina } from "@/lib/paginacao";
 import { CAMPANHA_STATUSES, type CampanhaStatus } from "@/lib/campanhas/schema";
-import { getCampanhas } from "@/app/admin/comercial/campanhas/actions";
+import { getCampanhasComIndicadores } from "@/app/admin/comercial/campanhas/actions";
 import { CampanhasMarketingView } from "@/components/admin/campanhas-marketing-view";
 
 const LIMITE_CAMPANHAS = 12;
@@ -24,7 +24,7 @@ export default async function CampanhasMarketingPage({
   const status = parseStatus(statusRaw);
   const paginaAtual = parsePagina(page);
 
-  const { campanhas, total } = await getCampanhas({
+  const { campanhas, total } = await getCampanhasComIndicadores({
     query,
     status,
     page: paginaAtual,

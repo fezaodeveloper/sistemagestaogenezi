@@ -2,7 +2,11 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
-import { criarOuAtualizarLeadPublico } from "@/lib/leads/leads";
+import {
+  encontrarLeadPorWhatsappOuEmail,
+  getKanbanColunas,
+  registrarHistoricoLead,
+} from "@/lib/leads/leads";
 import { MUNICIPIOS_POR_UF } from "@/lib/ibge/municipios";
 import { normalizarBusca } from "@/lib/busca";
 import { notificarEmailLeadCampanha } from "@/lib/email/eventos";
@@ -100,6 +104,76 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     [RESPOSTA_CHAVE_DECLARACAO]: aceiteDeclaracao,
   };
 
+  // UTM (TAREFA CRM 2.2, PARTE 3) — vêm como hidden fields do form (lidos de searchParams em
+  // page.tsx), não como parâmetro próprio da Server Action: formData é a única via de dados do
+  // client pra aqui, igual a todo o resto do formulário.
+  const utmSource = (formData.get("utm_source") as string | null)?.trim() || null;
+  const utmMedium = (formData.get("utm_medium") as string | null)?.trim() || null;
+  const utmCampaign = (formData.get("utm_campaign") as string | null)?.trim() || null;
+
+  // Resolve/cria o lead ANTES de inserir a resposta, pra já gravar lead_id junto (evita um UPDATE
+  // separado em campanha_respostas). Best-effort: a resposta é o registro principal (REGRA já
+  // documentada abaixo), o lead nunca pode bloquear o envio.
+  //
+  // TAREFA CRM 2.2 — agora cria lead SEMPRE, mesmo sem curso vinculado (leads.curso_id ficou
+  // nullable, migration 20261030300000). campanha_id fica sempre null: campanha_paginas não tem
+  // FK pra campanhas_marketing (confirmado na PERGUNTA DE FATO 4) — são tabelas sem vínculo
+  // nenhum hoje, "a campanha da página" não existe como dado, só o título (campanha_origem).
+  let leadId: string | null = null;
+  try {
+    const existente = await encontrarLeadPorWhatsappOuEmail(admin, parsed.data.whatsapp, parsed.data.email);
+    if (existente) {
+      await admin
+        .from("leads")
+        .update({
+          campanha_origem: pagina.titulo,
+          utm_source: utmSource ?? existente.utm_source,
+          utm_medium: utmMedium ?? existente.utm_medium,
+          utm_campaign: utmCampaign ?? existente.utm_campaign,
+        })
+        .eq("id", existente.id);
+      await registrarHistoricoLead(
+        admin,
+        existente.id,
+        "anotacao",
+        `Preencheu formulário da campanha: ${pagina.titulo}`,
+      );
+      leadId = existente.id;
+    } else {
+      const colunas = await getKanbanColunas(admin);
+      const colunaNovo = colunas.find((c) => c.id === "novo")?.id ?? colunas[0]?.id ?? "novo";
+      const { data: novoLead } = await admin
+        .from("leads")
+        .insert({
+          nome: parsed.data.nome,
+          telefone: parsed.data.whatsapp,
+          whatsapp: parsed.data.whatsapp,
+          email: parsed.data.email ?? null,
+          curso_id: pagina.curso_id ?? null,
+          origem: "campanha",
+          campanha_origem: pagina.titulo,
+          utm_source: utmSource,
+          utm_medium: utmMedium,
+          utm_campaign: utmCampaign,
+          kanban_coluna: colunaNovo,
+        })
+        .select("id")
+        .single();
+
+      if (novoLead) {
+        leadId = novoLead.id;
+        await registrarHistoricoLead(
+          admin,
+          novoLead.id,
+          "criacao",
+          `Lead captado via página de campanha: ${pagina.titulo}`,
+        );
+      }
+    }
+  } catch {
+    // Best-effort — ver comentário acima.
+  }
+
   const { error } = await admin.from("campanha_respostas").insert({
     pagina_id: pagina.id,
     nome: parsed.data.nome,
@@ -109,34 +183,14 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     estado: parsed.data.estado ?? null,
     cidade: parsed.data.cidade ?? null,
     respostas: respostasCompletas,
+    lead_id: leadId,
+    utm_source: utmSource,
+    utm_medium: utmMedium,
+    utm_campaign: utmCampaign,
   });
 
   if (error) {
     return { error: "Não foi possível enviar sua inscrição. Tente novamente." };
-  }
-
-  // Cria lead automaticamente só quando a página tem curso vinculado — ver
-  // comentário na migration sobre campanha_paginas.curso_id (leads.curso_id
-  // é NOT NULL, então sem curso configurado não há como satisfazer a
-  // constraint). A resposta já foi salva com sucesso de qualquer forma.
-  if (pagina.curso_id) {
-    try {
-      // campanha_origem = título da campanha — é o que aparece como badge
-      // colorido no card do Kanban (ver campanhaBadgeClass em leads/schema).
-      await criarOuAtualizarLeadPublico(
-        {
-          nome: parsed.data.nome,
-          telefone: parsed.data.whatsapp,
-          curso_id: pagina.curso_id,
-          origem: "campanha",
-          observacoes: `Via página de campanha: ${pagina.titulo}`,
-        },
-        { campanha_origem: pagina.titulo },
-      );
-    } catch {
-      // Best-effort — a resposta em campanha_respostas já é o registro
-      // principal, o lead é um bônus pro CRM.
-    }
   }
 
   // E-mail de confirmação da inscrição (só sai se o visitante informou e-mail).

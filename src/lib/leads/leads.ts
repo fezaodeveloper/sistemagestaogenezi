@@ -209,6 +209,30 @@ export async function buscarLeadPorTelefoneOuWhatsapp(
   return encontrado ? { id: encontrado.id, nome: encontrado.nome } : null;
 }
 
+// ===== Integrações do Comercial (TAREFA CRM 2.2: campanha e agendamento público) =====
+//
+// Diferente de buscarLeadPorTelefoneOuWhatsapp (acima — usado só pro aviso de duplicado no
+// formulário do admin): esta busca também por e-mail, roda com o client admin (contexto público,
+// sem sessão) e devolve o lead inteiro, não só id/nome — os dois pontos de integração abaixo
+// precisam ler/atualizar kanban_coluna, campanha_id etc.
+export async function encontrarLeadPorWhatsappOuEmail(
+  admin: SupabaseAdminClient,
+  whatsapp: string,
+  email?: string | null,
+): Promise<Lead | null> {
+  const normalizado = normalizarTelefone(whatsapp);
+  const condicoes = [`telefone.eq.${whatsapp}`, `whatsapp.eq.${whatsapp}`];
+  if (email) condicoes.push(`email.eq.${email}`);
+
+  const { data } = await admin.from("leads").select("*").or(condicoes.join(","));
+  const encontrado = (data ?? []).find(
+    (l) =>
+      (!!normalizado && (normalizarTelefone(l.telefone) === normalizado || normalizarTelefone(l.whatsapp ?? "") === normalizado)) ||
+      (!!email && l.email === email),
+  );
+  return (encontrado as Lead | undefined) ?? null;
+}
+
 // ===== Histórico de atividades (tabela lead_historico, TAREFA CRM 2.1) =====
 
 export async function getLeadHistorico(supabase: SupabaseServerClient, leadId: string): Promise<LeadHistoricoEntrada[]> {

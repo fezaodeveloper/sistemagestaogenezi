@@ -63,7 +63,7 @@ export default async function EditarLeadPage({ params }: { params: Promise<{ id:
         defaultValues={{
           nome: lead.nome,
           telefone: lead.telefone,
-          curso_id: lead.curso_id,
+          curso_id: lead.curso_id ?? undefined,
           origem: lead.origem,
           observacoes: lead.observacoes ?? undefined,
           email: lead.email ?? undefined,

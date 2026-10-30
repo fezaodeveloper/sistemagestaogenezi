@@ -79,6 +79,16 @@ export function serializarComoFazerChecklist(itens: ChecklistItem[]): string {
   return JSON.stringify(itens);
 }
 
+// TAREFA CRM 2.2 (PARTE 6) — calculado em getCampanhasComIndicadores (actions.ts) a partir de
+// leads.campanha_id, não armazenado na tabela.
+export type CampanhaIndicadores = {
+  leadsGerados: number;
+  matriculados: number;
+  investimentoTotal: number;
+  custoPorLead: number | null;
+  taxaConversaoPercentual: number | null;
+};
+
 export type CampanhaMarketing = {
   id: string;
   nome: string;

@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   atualizarLeadCrm,
+  buscarAgendamentosLead,
   buscarHistoricoLead,
   matricularLead,
   moverLeadKanban,
@@ -11,12 +12,14 @@ import {
   registrarFollowup,
   type CursoBusca,
 } from "@/app/admin/leads/actions";
+import { AGENDAMENTO_STATUS_BADGE_CLASS, AGENDAMENTO_STATUS_LABELS, type Agendamento } from "@/lib/agendamentos/schema";
 import {
   colunaExigeMotivoPerda,
   dataHoraLeadParaInput,
   dataLeadParaInput,
   diasNoFunil,
   extrairHistoricoFollowups,
+  formatarDataLead,
   formatarDataHoraCompletaLead,
   formatarTempoRelativoLead,
   kanbanColunaEstilo,
@@ -42,7 +45,7 @@ import { CopiarWhatsappButton } from "@/components/admin/copiar-whatsapp-button"
 import { CursoCombobox } from "@/components/admin/curso-combobox";
 
 function cursoDoLead(lead: LeadComCurso): CursoBusca | null {
-  return lead.nomeCurso ? { id: lead.curso_id, nome: lead.nomeCurso } : null;
+  return lead.curso_id && lead.nomeCurso ? { id: lead.curso_id, nome: lead.nomeCurso } : null;
 }
 
 export function LeadDetalhesDrawer({
@@ -89,6 +92,13 @@ export function LeadDetalhesDrawer({
   const [historico, setHistorico] = useState<LeadHistoricoEntrada[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
 
+  // Agendamentos do lead (TAREFA CRM 2.2 PARTE 5) — buscado sob demanda, mesmo motivo do
+  // histórico acima.
+  const [agendamentos, setAgendamentos] = useState<Pick<Agendamento, "id" | "data_agendada" | "horario" | "status">[]>(
+    [],
+  );
+  const [carregandoAgendamentos, setCarregandoAgendamentos] = useState(false);
+
   // "Mover coluna" pra uma coluna "Perdido" exige motivo — intercepta antes de mover de verdade.
   const [colunaPendente, setColunaPendente] = useState<string | null>(null);
   const [motivoPerdaTexto, setMotivoPerdaTexto] = useState("");
@@ -105,6 +115,13 @@ export function LeadDetalhesDrawer({
     buscarHistoricoLead(lead.id)
       .then(setHistorico)
       .finally(() => setCarregandoHistorico(false));
+  }
+
+  function recarregarAgendamentos() {
+    setCarregandoAgendamentos(true);
+    buscarAgendamentosLead(lead.id)
+      .then(setAgendamentos)
+      .finally(() => setCarregandoAgendamentos(false));
   }
 
   // Reidrata os campos quando o drawer reabre pra um lead diferente (ou o
@@ -135,8 +152,9 @@ export function LeadDetalhesDrawer({
       setError(null);
       setSalvo(false);
       recarregarHistorico();
+      recarregarAgendamentos();
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- recarregarHistorico depende só de lead.id, incluído abaixo
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recarregarHistorico/recarregarAgendamentos dependem só de lead.id, incluído abaixo
   }, [open, lead]);
 
   const historicoFollowups = extrairHistoricoFollowups(lead.notas);
@@ -600,6 +618,40 @@ export function LeadDetalhesDrawer({
                 ))}
               </ol>
             )}
+          </div>
+
+          <Separator />
+
+          {/* Agendamentos do lead (TAREFA CRM 2.2 PARTE 5). */}
+          <div className="flex flex-col gap-2">
+            <Label>Agendamentos</Label>
+            {carregandoAgendamentos ? (
+              <p className="text-muted-foreground text-sm">Carregando...</p>
+            ) : agendamentos.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Nenhum agendamento ainda.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {agendamentos.map((agendamento) => (
+                  <li key={agendamento.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span>
+                      {formatarDataLead(agendamento.data_agendada)} às {agendamento.horario}
+                    </span>
+                    <Badge className={AGENDAMENTO_STATUS_BADGE_CLASS[agendamento.status]}>
+                      {AGENDAMENTO_STATUS_LABELS[agendamento.status]}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-fit"
+              nativeButton={false}
+              render={<Link href={`/admin/comercial/agendamentos?lead_id=${lead.id}`} />}
+            >
+              Ver todos →
+            </Button>
           </div>
         </div>
       </SheetContent>

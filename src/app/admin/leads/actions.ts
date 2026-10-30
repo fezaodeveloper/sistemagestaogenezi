@@ -32,6 +32,7 @@ import { dispararEvento } from "@/lib/automacoes/motor";
 import type { LeadFormState } from "@/components/admin/lead-form";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { dispararWebhook } from "@/lib/webhooks/disparar";
+import type { Agendamento } from "@/lib/agendamentos/schema";
 
 function parseLeadForm(formData: FormData) {
   return leadFormSchema.safeParse({
@@ -573,4 +574,22 @@ export async function buscarHistoricoLead(leadId: string): Promise<LeadHistorico
 
   const supabase = await createClient();
   return getLeadHistorico(supabase, leadId);
+}
+
+// ===== Agendamentos do lead (drawer, TAREFA CRM 2.2 PARTE 5) =====
+//
+// Buscado sob demanda, mesmo motivo/padrão de buscarHistoricoLead acima.
+export async function buscarAgendamentosLead(
+  leadId: string,
+): Promise<Pick<Agendamento, "id" | "data_agendada" | "horario" | "status">[]> {
+  await requireRole("admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("agendamentos")
+    .select("id, data_agendada, horario, status")
+    .eq("lead_id", leadId)
+    .order("data_agendada", { ascending: false });
+
+  return (data ?? []) as Pick<Agendamento, "id" | "data_agendada" | "horario" | "status">[];
 }

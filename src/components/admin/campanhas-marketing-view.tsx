@@ -24,11 +24,15 @@ import {
   CAMPANHA_STATUS_LABELS,
   parseComoFazerChecklist,
   serializarComoFazerChecklist,
+  type CampanhaIndicadores,
   type CampanhaLink,
   type CampanhaMarketing,
   type CampanhaStatus,
   type ChecklistItem,
 } from "@/lib/campanhas/schema";
+
+// TAREFA CRM 2.2 (PARTE 6) — indicadores calculados em getCampanhasComIndicadores (actions.ts).
+type CampanhaComIndicadores = CampanhaMarketing & { indicadores: CampanhaIndicadores };
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -719,7 +723,7 @@ function CampanhaDetalhesDialog({
   );
 }
 
-function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaMarketing; onMudou: () => void }) {
+function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaComIndicadores; onMudou: () => void }) {
   const orcamentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
   const periodo = periodoCampanha(campanha);
   const [erro, setErro] = useState<string | null>(null);
@@ -798,6 +802,33 @@ function CampanhaCard({ campanha, onMudou }: { campanha: CampanhaMarketing; onMu
         {orcamentoTotal > 0 && (
           <p className="text-muted-foreground text-sm">Orçamento total: {formatMoeda(orcamentoTotal)}</p>
         )}
+
+        {/* TAREFA CRM 2.2 (PARTE 6) — indicadores calculados a partir de leads.campanha_id. */}
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          <span>👥 {campanha.indicadores.leadsGerados} lead{campanha.indicadores.leadsGerados === 1 ? "" : "s"}</span>
+          <span>🎓 {campanha.indicadores.matriculados} matrícula{campanha.indicadores.matriculados === 1 ? "" : "s"}</span>
+          {campanha.indicadores.taxaConversaoPercentual !== null && (
+            <span>📈 {campanha.indicadores.taxaConversaoPercentual}% conversão</span>
+          )}
+          {campanha.indicadores.custoPorLead !== null && (
+            <span>💰 {formatMoeda(campanha.indicadores.custoPorLead)} por lead</span>
+          )}
+        </div>
+        {meta !== null && meta > 0 && (
+          <div className="flex flex-col gap-1">
+            <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+              <div
+                className="bg-primary h-full rounded-full"
+                style={{ width: `${Math.min(100, Math.round((campanha.indicadores.matriculados / meta) * 100))}%` }}
+              />
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {Math.min(100, Math.round((campanha.indicadores.matriculados / meta) * 100))}% da meta de {meta}{" "}
+              aluno(s)
+            </p>
+          </div>
+        )}
+
         <label className="flex items-center gap-2 pt-1 text-sm">
           <Switch checked={statusVisivel === "ativa"} onCheckedChange={handleToggle} disabled={isPending} />
           {statusVisivel === "ativa" ? "Ativa" : "Ativar campanha"}
@@ -841,7 +872,7 @@ export function CampanhasMarketingView({
   query,
   status,
 }: {
-  campanhas: CampanhaMarketing[];
+  campanhas: CampanhaComIndicadores[];
   totalRegistros: number;
   paginaAtual: number;
   totalPaginas: number;

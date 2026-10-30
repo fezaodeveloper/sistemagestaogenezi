@@ -291,10 +291,14 @@ export function CampanhaPublicaView({
   pagina,
   encerrada = false,
   preview = false,
+  utm,
 }: {
   pagina: CampanhaPagina;
   encerrada?: boolean;
   preview?: boolean;
+  // TAREFA CRM 2.2 (PARTE 3) — lido em page.tsx (searchParams, Server Component) e só
+  // repassado aqui pro FormData do envio; nenhum campo visível/editável pelo visitante.
+  utm?: { source: string | null; medium: string | null; campaign: string | null };
 }) {
   const escuro = pagina.tema === "escuro";
   const tipografia = useMemo(() => resolverTipografia(pagina.tipografia), [pagina.tipografia]);
@@ -467,6 +471,9 @@ export function CampanhaPublicaView({
     formData.set("respostas", JSON.stringify(respostas));
     formData.set("aceite_lgpd", aceiteLgpd ? "on" : "");
     formData.set("aceite_declaracao", aceiteDeclaracao ? "on" : "");
+    if (utm?.source) formData.set("utm_source", utm.source);
+    if (utm?.medium) formData.set("utm_medium", utm.medium);
+    if (utm?.campaign) formData.set("utm_campaign", utm.campaign);
 
     startTransition(async () => {
       const resultado = await enviarRespostaCampanha(pagina.slug, formData);

@@ -9,6 +9,7 @@ import {
   campanhaFormSchema,
   checklistItemSchema,
   serializarComoFazerChecklist,
+  type CampanhaIndicadores,
   type CampanhaLink,
   type CampanhaMarketing,
   type CampanhaStatus,
@@ -47,6 +48,49 @@ export async function getCampanhas(options?: {
     .range(offset, offset + limite - 1);
 
   return { campanhas: (data as CampanhaMarketing[] | null) ?? [], total: count ?? 0 };
+}
+
+// TAREFA CRM 2.2 (PARTE 6) — mesma listagem de getCampanhas, com indicadores calculados a partir
+// de leads.campanha_id (FK adicionada na migration 20261030200000_leads_crm_upgrade.sql).
+// matriculados = status 'aluno_ativo' (setado só pela trigger de sincronização de leads, nunca
+// manualmente — ver 20260902100000_create_leads.sql).
+export async function getCampanhasComIndicadores(options?: {
+  query?: string;
+  status?: CampanhaStatus;
+  page?: number;
+  limit?: number;
+}): Promise<{ campanhas: (CampanhaMarketing & { indicadores: CampanhaIndicadores })[]; total: number }> {
+  const { campanhas, total } = await getCampanhas(options);
+
+  const ids = campanhas.map((c) => c.id);
+  const contagem = new Map<string, { total: number; matriculados: number }>();
+
+  if (ids.length > 0) {
+    const supabase = await createClient();
+    const { data } = await supabase.from("leads").select("campanha_id, status").in("campanha_id", ids);
+    for (const row of (data ?? []) as { campanha_id: string | null; status: string }[]) {
+      if (!row.campanha_id) continue;
+      const atual = contagem.get(row.campanha_id) ?? { total: 0, matriculados: 0 };
+      atual.total += 1;
+      if (row.status === "aluno_ativo") atual.matriculados += 1;
+      contagem.set(row.campanha_id, atual);
+    }
+  }
+
+  const campanhasComIndicadores = campanhas.map((campanha) => {
+    const c = contagem.get(campanha.id) ?? { total: 0, matriculados: 0 };
+    const investimentoTotal = (campanha.orcamento_trafego ?? 0) + (campanha.orcamento_impressao ?? 0);
+    const indicadores: CampanhaIndicadores = {
+      leadsGerados: c.total,
+      matriculados: c.matriculados,
+      investimentoTotal,
+      custoPorLead: c.total > 0 ? investimentoTotal / c.total : null,
+      taxaConversaoPercentual: c.total > 0 ? Math.round((c.matriculados / c.total) * 100) : null,
+    };
+    return { ...campanha, indicadores };
+  });
+
+  return { campanhas: campanhasComIndicadores, total };
 }
 
 export type CampanhaActionResult = { success: true } | { error: string };
