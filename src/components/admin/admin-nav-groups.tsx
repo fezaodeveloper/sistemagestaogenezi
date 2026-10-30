@@ -54,6 +54,7 @@ const GROUPS: NavGroup[] = [
     { href: "/admin/financeiro/categorias", label: "Categorias", icon: Tags },
   ]},
   { id: "comercial", label: "Comercial", icon: Target, items: [
+    { href: "/admin/comercial/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/leads", label: "Leads / CRM", icon: UserPlus },
     { href: "/admin/comercial/campanhas", label: "Campanhas", icon: Megaphone },
     { href: "/admin/comercial/agendamentos", label: "Agendamentos", icon: CalendarCheck },
