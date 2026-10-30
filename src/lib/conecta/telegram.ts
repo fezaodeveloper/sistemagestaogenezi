@@ -173,6 +173,31 @@ export async function notificarAlunoAtivouVisibilidade(dados: {
   }
 }
 
+// TAREFA: empresa deixou de ser gratuita — avisa o admin quando a assinatura anual é confirmada
+// pelo webhook (diferente de notificarNovaEmpresaTelegram, que avisa no CADASTRO, antes de
+// pagar).
+export async function notificarEmpresaPagamentoConfirmado(empresa: {
+  nome: string;
+  cidade: string | null;
+}): Promise<void> {
+  try {
+    const config = await lerConfigTelegramConecta();
+    if (!config.chatId || !config.notificarNovaEmpresa) return;
+
+    const mensagem = [
+      "💰 <b>Empresa pagou a assinatura!</b>",
+      `🏪 Empresa: ${escapeHtml(empresa.nome)}`,
+      `📍 Cidade: ${escapeHtml(empresa.cidade ?? "—")}`,
+      "",
+      `Acesse o painel: ${urlPortal()}/admin/conecta`,
+    ].join("\n");
+
+    await enviarMensagemTelegram(mensagem, config.chatId);
+  } catch {
+    // Best-effort — ver comentário em notificarNovoCandidatoTelegram.
+  }
+}
+
 export async function notificarNovaEmpresaTelegram(empresa: {
   nome: string;
   cidade: string | null;

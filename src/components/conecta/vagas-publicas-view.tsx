@@ -6,7 +6,13 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MapPin, Search } from "lucide-react";
-import { PLANOS_CONECTA_ATIVOS, PLANO_CONECTA_INFO, type CidadeConectaComContagem, type PlanoConecta } from "@/lib/conecta/schema";
+import {
+  PLANOS_CONECTA_ATIVOS,
+  PLANO_CONECTA_INFO,
+  VALOR_ASSINATURA_EMPRESA,
+  type CidadeConectaComContagem,
+  type PlanoConecta,
+} from "@/lib/conecta/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,10 +27,10 @@ function PlanoPublicoCard({ plano }: { plano: PlanoConecta }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-2 py-6 text-center">
-        <span className="text-primary text-sm font-semibold uppercase">{info.label}</span>
+        <span className="text-primary text-sm font-semibold uppercase">Candidato</span>
         <span className="text-2xl font-bold">
           R$ {info.valor.toFixed(2).replace(".", ",")}
-          <span className="text-muted-foreground text-sm font-normal">/mês</span>
+          <span className="text-muted-foreground text-sm font-normal">/ano</span>
         </span>
         <p className="text-muted-foreground text-sm">{info.descricao}</p>
         <Button nativeButton={false} render={<Link href="/conecta/cadastro" />} className="mt-2">
@@ -35,10 +41,30 @@ function PlanoPublicoCard({ plano }: { plano: PlanoConecta }) {
   );
 }
 
+// TAREFA: empresa deixou de ser gratuita, agora paga R$ 29,90/ano — card análogo ao do
+// candidato (PlanoPublicoCard), mas sem Record de planos (só existe uma oferta de empresa).
+function EmpresaPublicoCard() {
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-2 py-6 text-center">
+        <span className="text-primary text-sm font-semibold uppercase">Empresa</span>
+        <span className="text-2xl font-bold">
+          R$ {VALOR_ASSINATURA_EMPRESA.toFixed(2).replace(".", ",")}
+          <span className="text-muted-foreground text-sm font-normal">/ano</span>
+        </span>
+        <p className="text-muted-foreground text-sm">Publique vagas por 1 ano</p>
+        <Button nativeButton={false} render={<Link href="/empresa/cadastro" />} className="mt-2">
+          Cadastrar empresa
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 const COMO_FUNCIONA_ITENS = [
   { emoji: "🎓", titulo: "Alunos Gênezi", texto: "Acesso gratuito. Acesse o portal do aluno e candidate-se com seu perfil." },
-  { emoji: "💼", titulo: "Candidatos externos", texto: "Assine um plano para ficar visível às empresas parceiras." },
-  { emoji: "🏢", titulo: "Empresas", texto: "Fale com a escola pelo WhatsApp e publique vagas gratuitamente." },
+  { emoji: "💼", titulo: "Candidatos externos", texto: "Assine o plano por R$ 9,90/ano para ficar visível às empresas parceiras." },
+  { emoji: "🏢", titulo: "Empresas", texto: "Assine por R$ 29,90/ano para publicar vagas na plataforma." },
 ] as const;
 
 function CidadeCard({ cidade, onClick }: { cidade: CidadeConectaComContagem; onClick: () => void }) {
@@ -107,13 +133,14 @@ export function ConectaVagasPublicasView({
 
         <section id="planos" className="flex flex-col gap-6">
           <div className="text-center">
-            <h2 className="text-2xl font-bold">Acesse as vagas — Escolha seu plano</h2>
+            <h2 className="text-2xl font-bold">Candidatos e empresas</h2>
             <p className="text-muted-foreground text-sm">Para quem não é aluno da Gênezi.</p>
           </div>
-          <div className="mx-auto w-full max-w-sm">
+          <div className="mx-auto grid w-full max-w-xl grid-cols-1 gap-4 sm:grid-cols-2">
             {PLANOS_CONECTA_ATIVOS.map((plano) => (
               <PlanoPublicoCard key={plano} plano={plano} />
             ))}
+            <EmpresaPublicoCard />
           </div>
           <p className="text-muted-foreground text-center text-sm">
             Aluno da Gênezi?{" "}

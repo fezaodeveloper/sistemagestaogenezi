@@ -88,7 +88,7 @@ export function EmpresaCadastroForm() {
             <h2 className="text-sm font-semibold">Dados da empresa</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="cnpj">CNPJ (opcional)</Label>
+                <Label htmlFor="cnpj">CNPJ</Label>
                 <Input
                   id="cnpj"
                   name="cnpj"
@@ -96,6 +96,7 @@ export function EmpresaCadastroForm() {
                   value={cnpj}
                   onChange={(e) => setCnpj(formatCnpj(e.target.value))}
                   onBlur={handleCnpjBlur}
+                  required
                 />
                 {isPendingCnpj && <p className="text-muted-foreground text-xs">Consultando CNPJ...</p>}
                 {cnpjErro && <p className="text-destructive text-xs">{cnpjErro}</p>}

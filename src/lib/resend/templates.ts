@@ -97,6 +97,18 @@ export function templateEmpresaAprovada(nomeEmpresa: string, email: string): Ema
   return { subject: "Seu cadastro foi aprovado! — Gênezi Conecta", html: layoutBase(email, conteudo) };
 }
 
+// TAREFA: empresa deixou de ser gratuita — email de confirmação de PAGAMENTO (webhook), diferente
+// de templateEmpresaAprovada (aprovação do admin, etapa separada que ainda existe).
+export function templatePagamentoConfirmadoEmpresa(nomeEmpresa: string, email: string): EmailTemplate {
+  const conteudo = `
+    <p>Olá, ${nomeEmpresa}!</p>
+    <p>Recebemos a confirmação do pagamento da sua assinatura anual na Gênezi Conecta. ✅</p>
+    <p>Seu acesso será liberado após a aprovação final da nossa equipe, geralmente em até 1 dia útil.</p>
+    ${botaoCta("Acessar o painel →", `${urlPortal()}/empresa/login`)}
+  `;
+  return { subject: "Pagamento confirmado! — Gênezi Conecta", html: layoutBase(email, conteudo) };
+}
+
 export function templateRecuperacaoSenha(nome: string, recoveryLink: string, email: string): EmailTemplate {
   const conteudo = `
     <p>Olá, ${nome}!</p>

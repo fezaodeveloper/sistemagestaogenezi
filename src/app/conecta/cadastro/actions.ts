@@ -136,8 +136,9 @@ export async function cadastrarCandidatoExterno(
       billingType: data.forma_pagamento,
       value: planoInfo.valor,
       nextDueDate: amanhaISO(),
-      cycle: "MONTHLY",
-      description: `Gênezi Conecta — Plano ${planoInfo.label}`,
+      // TAREFA: candidato passou de mensal pra anual (R$ 9,90/ano, era R$ 9,90/mês).
+      cycle: "YEARLY",
+      description: "Gênezi Conecta - Acesso anual",
     });
     asaasSubscriptionId = assinatura.id;
   } catch {

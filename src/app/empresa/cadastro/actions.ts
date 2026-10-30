@@ -1,10 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
-import { empresaCadastroSchema, limparNomeReceita } from "@/lib/conecta/schema";
+import {
+  buscarCobrancasAssinaturaConecta,
+  cancelarAssinaturaConecta,
+  criarAssinaturaConecta,
+  criarClienteAsaasConecta,
+} from "@/lib/asaas/client";
+import { empresaCadastroSchema, limparNomeReceita, VALOR_ASSINATURA_EMPRESA } from "@/lib/conecta/schema";
 import { notificarNovaEmpresaTelegram } from "@/lib/conecta/telegram";
 import { enviarWhatsappCadastroEmpresa } from "@/lib/conecta/whatsapp";
 import { enviarCadastroRecebidoEmpresa } from "@/lib/resend/emails";
@@ -159,6 +164,40 @@ export async function cadastrarEmpresa(
     return { error: "Não foi possível concluir o cadastro. Tente novamente." };
   }
 
+  // TAREFA: empresa deixou de ser gratuita — assinatura anual R$ 29,90 via Asaas, mesmo padrão
+  // (customer + subscription recorrente) já usado por candidatos externos em
+  // cadastrarCandidatoExterno (src/app/conecta/cadastro/actions.ts). Criado ANTES do INSERT em
+  // empresas_conecta pra já salvar os ids na mesma linha, sem precisar de um UPDATE separado.
+  let asaasCustomerId: string;
+  try {
+    const cliente = await criarClienteAsaasConecta({
+      name: data.nome_empresa,
+      email: data.email,
+      cpfCnpj: data.cnpj,
+      phone: data.whatsapp,
+    });
+    asaasCustomerId = cliente.id;
+  } catch {
+    await admin.auth.admin.deleteUser(userId);
+    return { error: "Não foi possível processar o pagamento agora. Tente novamente." };
+  }
+
+  let asaasSubscriptionId: string;
+  try {
+    const assinatura = await criarAssinaturaConecta({
+      customer: asaasCustomerId,
+      billingType: "UNDEFINED",
+      value: VALOR_ASSINATURA_EMPRESA,
+      nextDueDate: amanhaISO(),
+      cycle: "YEARLY",
+      description: "Gênezi Conecta - Assinatura anual (empresa)",
+    });
+    asaasSubscriptionId = assinatura.id;
+  } catch {
+    await admin.auth.admin.deleteUser(userId);
+    return { error: "Não foi possível criar a assinatura agora. Tente novamente." };
+  }
+
   const { data: empresa, error: empresaError } = await admin
     .from("empresas_conecta")
     .insert({
@@ -177,17 +216,24 @@ export async function cadastrarEmpresa(
       cidade: data.cidade ?? null,
       estado: data.estado ?? null,
       status: "pendente",
+      asaas_customer_id: asaasCustomerId,
+      asaas_subscription_id: asaasSubscriptionId,
     })
     .select("id")
     .single();
 
   if (empresaError || !empresa) {
+    try {
+      await cancelarAssinaturaConecta(asaasSubscriptionId);
+    } catch {
+      // Best-effort — a conta já vai ser removida de qualquer forma abaixo.
+    }
     await admin.auth.admin.deleteUser(userId);
     return { error: "Não foi possível salvar os dados da empresa. Tente novamente." };
   }
 
   // Best-effort — o cadastro já foi concluído com sucesso acima, uma falha
-  // aqui (notificação) não deve impedir a empresa de acessar o painel.
+  // aqui (notificação) não deve impedir o fluxo de pagamento a seguir.
   try {
     await dispararEvento(
       "empresa.cadastro",
@@ -204,9 +250,8 @@ export async function cadastrarEmpresa(
     // Best-effort — ver comentário acima.
   }
 
-  // Notificação Telegram do CONECTA (chat dedicado, ver src/lib/conecta/telegram.ts) —
-  // complementar à de dispararEvento acima, que vai pro Telegram GERAL da escola via
-  // notificarEmpresaCadastro (handlers/telegram.ts), com um texto diferente.
+  // Notificação Telegram do CONECTA (chat dedicado, ver src/lib/conecta/telegram.ts) — "alguém
+  // se cadastrou", diferente de notificarEmpresaPagamentoConfirmado (webhook, "empresa pagou").
   await notificarNovaEmpresaTelegram({
     nome: data.nome_empresa,
     cidade: data.cidade ?? null,
@@ -218,18 +263,27 @@ export async function cadastrarEmpresa(
   await enviarCadastroRecebidoEmpresa(data.email, data.nome_empresa);
   await enviarWhatsappCadastroEmpresa(data.whatsapp, data.nome_empresa, data.email);
 
-  // Sign-in via client autenticado normal (não o admin) — é esse client que
-  // grava os cookies de sessão na response, deixando a empresa já logada ao
-  // chegar em /empresa/painel.
-  const supabase = await createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: data.email,
-    password: data.senha,
-  });
-
-  if (signInError) {
-    redirect("/empresa/login");
+  // Sem sign-in aqui (diferente da versão anterior, que logava a empresa direto no painel) —
+  // igual ao candidato externo: o acesso só é liberado de fato quando o pagamento + aprovação do
+  // admin confirmarem (ver empresa/(protegido)/layout.tsx), então a empresa loga por conta
+  // própria em /empresa/login depois, com a senha que ela mesma cadastrou aqui.
+  let paymentId: string | undefined;
+  try {
+    const cobrancas = await buscarCobrancasAssinaturaConecta(asaasSubscriptionId);
+    paymentId = cobrancas[0]?.id;
+  } catch {
+    // Best-effort — sem o id a página de espera só cai no estado sem QR Code/link direto.
   }
 
-  redirect("/empresa/painel?novo=true");
+  redirect(
+    paymentId
+      ? `/empresa/aguardando-pagamento?payment=${encodeURIComponent(paymentId)}`
+      : "/empresa/aguardando-pagamento",
+  );
+}
+
+function amanhaISO(): string {
+  const data = new Date();
+  data.setDate(data.getDate() + 1);
+  return data.toISOString().slice(0, 10);
 }

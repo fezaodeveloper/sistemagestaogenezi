@@ -97,7 +97,7 @@ export function ConectaCadastroExternoForm({ textoTermoMenor }: { textoTermoMeno
               </div>
               <span className="text-2xl font-bold">
                 R$ {PLANO_CONECTA_INFO.basico.valor.toFixed(2).replace(".", ",")}
-                <span className="text-muted-foreground text-sm font-normal">/mês</span>
+                <span className="text-muted-foreground text-sm font-normal">/ano</span>
               </span>
             </div>
             <input type="hidden" name="plano" value="basico" />

@@ -30,6 +30,29 @@ export const EMPRESA_STATUS_BADGE_CLASS: Record<EmpresaStatus, string> = {
   cancelada: "bg-muted text-muted-foreground",
 };
 
+export const EMPRESA_ASSINATURA_STATUSES = ["pendente", "ativa", "inativa", "cancelada"] as const;
+export type EmpresaAssinaturaStatus = (typeof EMPRESA_ASSINATURA_STATUSES)[number];
+
+export const EMPRESA_ASSINATURA_STATUS_LABELS: Record<EmpresaAssinaturaStatus, string> = {
+  pendente: "Pendente",
+  ativa: "Ativa",
+  inativa: "Inativa",
+  cancelada: "Cancelada",
+};
+
+// Cores pedidas na TAREFA: ativa=verde, pendente=amarelo, inativa/cancelada=vermelho.
+export const EMPRESA_ASSINATURA_STATUS_BADGE_CLASS: Record<EmpresaAssinaturaStatus, string> = {
+  pendente: "bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400",
+  ativa: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
+  inativa: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+  cancelada: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+};
+
+// Preço da assinatura anual da empresa (TAREFA: empresa deixa de ser gratuita) — valor único,
+// sem variação de plano como em PLANO_CONECTA_INFO (candidatos), por isso não entrou no mesmo
+// Record por chave: só existe UM plano de empresa hoje.
+export const VALOR_ASSINATURA_EMPRESA = 29.9;
+
 export type EmpresaConecta = {
   id: string;
   profile_id: string;
@@ -51,6 +74,13 @@ export type EmpresaConecta = {
   link_maps: string | null;
   status: EmpresaStatus;
   aprovada_em: string | null;
+  // Assinatura anual via Asaas (TAREFA) — mesmo modelo de perfis_conecta.asaas_subscription_id
+  // (candidatos externos), aqui pra empresas. Requer a migration
+  // 20261030100000_empresa_assinatura.sql (NÃO APLICADA ainda).
+  asaas_customer_id: string | null;
+  asaas_subscription_id: string | null;
+  assinatura_status: EmpresaAssinaturaStatus;
+  assinatura_vencimento: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -281,7 +311,13 @@ export const empresaCadastroSchema = z.object({
     .trim()
     .min(1, { error: "Informe o nome da empresa." })
     .max(200),
-  cnpj: z.string().trim().max(20).optional(),
+  // Obrigatório (TAREFA: empresa deixou de ser gratuita) — exigido pelo Asaas pra criar o
+  // cliente/assinatura, mesmo motivo do cpf obrigatório em candidatoExternoCadastroSchema.
+  cnpj: z
+    .string({ error: "Informe o CNPJ." })
+    .trim()
+    .min(1, { error: "Informe o CNPJ." })
+    .max(20),
   setor: z.enum(SETORES_CONECTA).optional(),
   cidade: z.string().trim().max(100).optional(),
   estado: z.string().trim().max(2).optional(),
@@ -327,11 +363,15 @@ export const PLANO_CONECTA_INFO: Record<
   PlanoConecta,
   { label: string; valor: number; descricao: string; beneficio: string }
 > = {
+  // Ciclo passou de mensal pra anual (TAREFA: R$ 9,90/ano, era R$ 9,90/mês) — o valor numérico
+  // não mudou, só o período de cobrança (cycle: "YEARLY" em criarAssinaturaConecta,
+  // src/app/conecta/cadastro/actions.ts). "/mês" hardcoded na UI (vagas-publicas-view.tsx,
+  // cadastro-externo-form.tsx) trocado por "/ano" separadamente.
   basico: {
     label: "Básico",
     valor: 9.9,
-    descricao: "Você fica visível para empresas",
-    beneficio: "Cancele quando quiser",
+    descricao: "Acesso completo por 1 ano",
+    beneficio: "Fique visível para empresas o ano todo",
   },
   pro: {
     label: "PRO",

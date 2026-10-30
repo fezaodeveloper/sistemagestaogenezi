@@ -12,9 +12,11 @@ import {
   MessageCircle,
   Pause,
   Search,
+  XCircle,
 } from "lucide-react";
 import {
   ativarEmpresa,
+  cancelarAssinaturaEmpresa,
   enviarNotificacaoEmpresa,
   excluirEmpresa,
   getEmpresasConecta,
@@ -22,6 +24,8 @@ import {
   suspenderEmpresa,
 } from "@/app/admin/conecta/actions";
 import {
+  EMPRESA_ASSINATURA_STATUS_BADGE_CLASS,
+  EMPRESA_ASSINATURA_STATUS_LABELS,
   EMPRESA_STATUS_BADGE_CLASS,
   EMPRESA_STATUS_LABELS,
   EMPRESA_STATUSES,
@@ -151,6 +155,48 @@ function SuspenderButton({
       <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={handleClick}>
         <Pause className="size-4" />
         Suspender
+      </Button>
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
+  );
+}
+
+// TAREFA: empresa deixou de ser gratuita — cancelar a assinatura anual, mesmo padrão simples
+// (sem AlertDialog de confirmação) já usado em SuspenderButton acima.
+function CancelarAssinaturaEmpresaButton({
+  empresa,
+  onAtualizado,
+}: {
+  empresa: EmpresaConectaComExtras;
+  onAtualizado: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleClick() {
+    setError(null);
+    startTransition(async () => {
+      const resultado = await cancelarAssinaturaEmpresa(empresa.id);
+      if (resultado.error) {
+        setError(resultado.error);
+        return;
+      }
+      onAtualizado();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="text-destructive"
+        disabled={isPending}
+        onClick={handleClick}
+      >
+        <XCircle className="size-4" />
+        {isPending ? "Cancelando..." : "Cancelar assinatura"}
       </Button>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
@@ -433,6 +479,9 @@ function EmpresaCard({
             <Badge className={EMPRESA_STATUS_BADGE_CLASS[empresa.status]}>
               {EMPRESA_STATUS_LABELS[empresa.status]}
             </Badge>
+            <Badge className={EMPRESA_ASSINATURA_STATUS_BADGE_CLASS[empresa.assinatura_status]}>
+              Assinatura: {EMPRESA_ASSINATURA_STATUS_LABELS[empresa.assinatura_status]}
+            </Badge>
             {expandido ? (
               <ChevronUp className="text-muted-foreground size-4 shrink-0" />
             ) : (
@@ -457,10 +506,16 @@ function EmpresaCard({
             Último acesso: {empresa.ultimoAcesso ? formatDateBR(empresa.ultimoAcesso) : "nunca acessou"}
           </span>
           <span>Cadastrada em {formatDateBR(empresa.created_at)}</span>
+          {empresa.assinatura_vencimento && (
+            <span>Assinatura vence em {formatDateBR(empresa.assinatura_vencimento)}</span>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {empresa.status !== "ativa" && <AtivarButton empresa={empresa} onAtualizado={onAtualizado} />}
           {empresa.status === "ativa" && <SuspenderButton empresa={empresa} onAtualizado={onAtualizado} />}
+          {empresa.assinatura_status === "ativa" && (
+            <CancelarAssinaturaEmpresaButton empresa={empresa} onAtualizado={onAtualizado} />
+          )}
           {whatsappDigitos && (
             <Button
               variant="outline"

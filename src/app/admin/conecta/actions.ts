@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispararEvento } from "@/lib/automacoes/motor";
+import { cancelarAssinaturaConecta } from "@/lib/asaas/client";
 import { enviarWhatsappEmpresaAprovada } from "@/lib/conecta/whatsapp";
 import { enviarEmpresaAprovada } from "@/lib/resend/emails";
 import { getContagemCandidatosDisponiveis, getVagasDaEmpresa } from "@/lib/conecta/empresas";
@@ -243,6 +244,41 @@ export async function excluirEmpresa(id: string): Promise<{ error?: string }> {
 
   if (error) {
     return { error: "Não foi possível excluir a empresa. Tente novamente." };
+  }
+
+  revalidatePath("/admin/conecta");
+  return {};
+}
+
+// TAREFA: empresa deixou de ser gratuita — cancela no Asaas (best-effort, mesmo padrão de
+// cancelarAssinaturaCandidato em admin/conecta/candidatos/actions.ts) e já reflete localmente em
+// vez de esperar o webhook SUBSCRIPTION_DELETED. Client admin de propósito: diferente de
+// ativarEmpresa/suspenderEmpresa (status/aprovada_em, cobertos pelo grant amplo já existente),
+// assinatura_status é uma coluna nova — usar o client autenticado aqui funcionaria igual (mesmo
+// grant amplo), mas o padrão do restante do Conecta pra mutações ligadas ao Asaas é client admin.
+export async function cancelarAssinaturaEmpresa(id: string): Promise<{ error?: string }> {
+  await requireRole("admin");
+
+  const admin = createAdminClient();
+  const { data: empresa } = await admin
+    .from("empresas_conecta")
+    .select("asaas_subscription_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (empresa?.asaas_subscription_id) {
+    try {
+      await cancelarAssinaturaConecta(empresa.asaas_subscription_id);
+    } catch {
+      // Best-effort — segue pra marcar a assinatura como cancelada mesmo se ela já não existir
+      // mais no Asaas.
+    }
+  }
+
+  const { error } = await admin.from("empresas_conecta").update({ assinatura_status: "cancelada" }).eq("id", id);
+
+  if (error) {
+    return { error: "Não foi possível cancelar a assinatura. Tente novamente." };
   }
 
   revalidatePath("/admin/conecta");

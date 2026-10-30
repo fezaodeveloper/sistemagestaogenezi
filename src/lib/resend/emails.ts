@@ -9,6 +9,7 @@ import {
   templateCertificado,
   templateEmpresaAprovada,
   templateLembretePagamento,
+  templatePagamentoConfirmadoEmpresa,
   templatePremioDigital,
   templateRecuperacaoSenha,
 } from "@/lib/resend/templates";
@@ -58,6 +59,16 @@ export async function enviarEmpresaAprovada(para: string, nomeEmpresa: string): 
   if (!(await emailConfigurado())) return false;
   try {
     const { subject, html } = templateEmpresaAprovada(nomeEmpresa, para);
+    return await enviarEmail({ to: para, subject, html });
+  } catch {
+    return false;
+  }
+}
+
+export async function enviarPagamentoConfirmadoEmpresa(para: string, nomeEmpresa: string): Promise<boolean> {
+  if (!(await emailConfigurado())) return false;
+  try {
+    const { subject, html } = templatePagamentoConfirmadoEmpresa(nomeEmpresa, para);
     return await enviarEmail({ to: para, subject, html });
   } catch {
     return false;

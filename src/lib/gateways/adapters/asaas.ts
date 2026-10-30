@@ -357,7 +357,7 @@ export class AsaasAdapter implements GatewayAdapter {
     billingType: "BOLETO" | "PIX" | "CREDIT_CARD" | "UNDEFINED";
     value: number;
     nextDueDate: string;
-    cycle: "MONTHLY";
+    cycle: "MONTHLY" | "YEARLY";
     description: string;
   }): Promise<{ id: string; status: string; invoiceUrl?: string }> {
     return this.request<{ id: string; status: string; invoiceUrl?: string }>("/subscriptions", "POST", dados);

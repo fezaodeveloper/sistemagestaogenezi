@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { requireEmpresa } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -19,6 +20,15 @@ export default async function EmpresaLayout({ children }: { children: ReactNode 
     getEmpresaPorProfileId(supabase, user.id),
     admin.from("configuracoes").select("escola_logo_url").eq("id", true).maybeSingle(),
   ]);
+
+  // TAREFA: empresa deixou de ser gratuita — sem assinatura ativa, nem a aprovação do admin
+  // (empresa.status, checada em cada page.tsx/action à parte) libera o portal. Empresas já
+  // aprovadas no modelo antigo foram migradas pra assinatura_status='ativa' na migration
+  // 20261030100000_empresa_assinatura.sql, então não são afetadas por este redirect.
+  if (empresa && empresa.assinatura_status !== "ativa") {
+    redirect("/empresa/aguardando-pagamento");
+  }
+
   const notificacoesNaoLidas = empresa
     ? await getContagemNotificacoesNaoLidas(supabase, empresa.id)
     : 0;
