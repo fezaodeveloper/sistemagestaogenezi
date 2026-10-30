@@ -4,8 +4,9 @@
 // otimista de status e dialogs de confirmação.
 
 import { useEffect, useMemo, useOptimistic, useState, useTransition, type DragEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, LayoutGrid, List, Send, Trash2 } from "lucide-react";
+import { Ban, LayoutGrid, List, Send, Trash2, User } from "lucide-react";
 import {
   atualizarStatusAgendamento,
   enviarMensagemAgendadosAction,
@@ -127,6 +128,15 @@ function LinhaAgendamento({
           <p className="text-muted-foreground line-clamp-2 text-xs whitespace-normal" title={agendamento.mensagem}>
             💬 {agendamento.mensagem}
           </p>
+        )}
+        {agendamento.lead_id && (
+          <Link
+            href={`/admin/leads/${agendamento.lead_id}/editar`}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs hover:underline"
+          >
+            <User className="size-3" />
+            Ver lead
+          </Link>
         )}
       </TableCell>
       <TableCell className="align-top">
@@ -282,6 +292,16 @@ function CardAgendamento({
             </p>
           )}
 
+          {agendamento.lead_id && (
+            <Link
+              href={`/admin/leads/${agendamento.lead_id}/editar`}
+              className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-xs hover:underline"
+            >
+              <User className="size-3" />
+              Ver lead
+            </Link>
+          )}
+
           {agendamento.status === "faltou" && (
             <AgendamentoReagendarDialog agendamento={agendamento} onReagendado={onReagendado} />
           )}
@@ -316,6 +336,8 @@ export function AgendamentosKanbanView({
   agendamentosCancelados,
   camposExtrasConfigurados,
   resumo,
+  totalHoje,
+  hojeISO,
   dataFiltro,
   totalRegistros,
   paginaAtual,
@@ -326,6 +348,8 @@ export function AgendamentosKanbanView({
   agendamentosCancelados: Agendamento[];
   camposExtrasConfigurados: CampoExtra[];
   resumo: ResumoAgendamentos;
+  totalHoje: number;
+  hojeISO: string;
   dataFiltro: string;
   totalRegistros: number;
   paginaAtual: number;
@@ -486,8 +510,17 @@ export function AgendamentosKanbanView({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Histórico completo da página — ignora filtro de data e paginação. */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Histórico completo da página — ignora filtro de data e paginação (exceto o card
+          "Hoje", que é clicável e aplica o filtro de data de propósito). */}
+      <div className="grid grid-cols-5 gap-3">
+        <button type="button" className="text-left" onClick={() => handleDataChange(hojeISO)}>
+          <Card className={dataFiltro === hojeISO ? "ring-primary ring-2" : ""}>
+            <CardContent className="flex flex-col gap-0.5 p-3">
+              <span className="text-muted-foreground text-xs">Hoje</span>
+              <span className="text-2xl font-semibold">{totalHoje}</span>
+            </CardContent>
+          </Card>
+        </button>
         <Card>
           <CardContent className="flex flex-col gap-0.5 p-3">
             <span className="text-muted-foreground text-xs">Total agendados</span>

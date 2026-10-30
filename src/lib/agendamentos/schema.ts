@@ -23,8 +23,41 @@ export const AGENDAMENTO_STATUS_BADGE_CLASS: Record<AgendamentoStatus, string> =
   confirmado: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
   realizado: "bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400",
   faltou: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
-  cancelado: "bg-muted text-muted-foreground",
+  cancelado: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
 };
+
+// Feriados nacionais fixos (data certa todo ano) + móveis (Carnaval/Sexta-feira Santa/Corpus
+// Christi, calculados à mão pra 2025/2026 — não há biblioteca de feriados no projeto). Botão
+// "Adicionar feriados nacionais 2025/2026" (TAREFA agendamentos 2.4, PARTE 2) só insere isto —
+// não tenta calcular Páscoa dinamicamente nem cobre feriados estaduais/municipais.
+export const FERIADOS_NACIONAIS_2025_2026: string[] = [
+  "2025-01-01",
+  "2025-03-03",
+  "2025-03-04",
+  "2025-04-18",
+  "2025-04-21",
+  "2025-05-01",
+  "2025-06-19",
+  "2025-09-07",
+  "2025-10-12",
+  "2025-11-02",
+  "2025-11-15",
+  "2025-11-20",
+  "2025-12-25",
+  "2026-01-01",
+  "2026-02-16",
+  "2026-02-17",
+  "2026-04-03",
+  "2026-04-21",
+  "2026-05-01",
+  "2026-06-04",
+  "2026-09-07",
+  "2026-10-12",
+  "2026-11-02",
+  "2026-11-15",
+  "2026-11-20",
+  "2026-12-25",
+];
 
 // 0 = domingo, 6 = sábado — mesma convenção do Date.prototype.getDay().
 export const DIA_SEMANA_LABELS: Record<number, string> = {
@@ -83,9 +116,15 @@ export const agendamentoPaginaFormSchema = z
       .int()
       .positive({ error: "Precisa ser maior que zero." }),
     dias_antecedencia_minimo: z.coerce.number({ error: "Informe um número." }).int().nonnegative(),
+    antecedencia_maxima_dias: z.coerce.number({ error: "Informe um número." }).int().positive({ error: "Precisa ser maior que zero." }),
+    intervalo_entre_horarios: z.coerce.number({ error: "Informe um número." }).int().nonnegative(),
     mensagem_confirmacao: z.string().trim().max(1000).optional(),
     horarios_disponiveis: z.array(horarioDisponivelSchema).max(200).default([]),
     campos_extras: z.array(campoExtraSchema).max(20).default([]),
+    local_atendimento: z.string().trim().max(300).optional(),
+    responsavel_id: z.union([z.literal(""), z.uuid()]).optional(),
+    feriados_bloqueados: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(60).default([]),
+    datas_bloqueadas: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(200).default([]),
   })
   .refine((data) => !data.data_fim || !data.data_inicio || data.data_fim >= data.data_inicio, {
     error: "A data de término deve ser igual ou posterior à data de início.",
@@ -108,12 +147,49 @@ export type AgendamentoPagina = {
   duracao_minutos: number;
   horarios_disponiveis: HorarioDisponivel[];
   dias_antecedencia_minimo: number;
+  // Colunas novas (TAREFA agendamentos 2.4) — ausentes antes da migration 20261030500000.
+  antecedencia_maxima_dias: number;
+  intervalo_entre_horarios: number;
+  local_atendimento: string | null;
+  responsavel_id: string | null;
+  feriados_bloqueados: string[];
+  datas_bloqueadas: string[];
   campos_extras: CampoExtra[];
   mensagem_confirmacao: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
 };
+
+export type ResponsavelOpcao = { id: string; full_name: string | null };
+
+// Converte "HH:MM" em minutos desde meia-noite, pra comparar janelas de horário.
+function horarioParaMinutos(horario: string): number {
+  const [h, m] = horario.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Um horário fica bloqueado se cair dentro da janela [início, início + duração + intervalo) de
+// QUALQUER outro horário já ocupado no mesmo dia — ex.: duração 30min + intervalo 15min, 14h
+// ocupado => 14h15 e 14h30 também ficam bloqueados; o próximo horário livre é 14h45. Os horários
+// candidatos continuam sendo só os configurados em horarios_disponiveis (não "qualquer minuto")
+// — isto só decide quais DESSES ficam indisponíveis por estarem muito perto de um já ocupado.
+// Sem "server-only" de propósito (diferente de agendamentos.ts): usada tanto no calendário do
+// client (agendamento-publico-view.tsx) quanto na validação do servidor (actions.ts).
+export function horarioBloqueadoPorIntervalo(
+  horario: string,
+  horariosOcupados: string[],
+  duracaoMinutos: number,
+  intervaloMinutos: number,
+): boolean {
+  if (intervaloMinutos <= 0) return false;
+  const inicioCandidato = horarioParaMinutos(horario);
+  return horariosOcupados.some((ocupado) => {
+    const inicioOcupado = horarioParaMinutos(ocupado);
+    const fimJanela = inicioOcupado + duracaoMinutos + intervaloMinutos;
+    return inicioCandidato !== inicioOcupado && inicioCandidato >= inicioOcupado && inicioCandidato < fimJanela;
+  });
+}
 
 export type Agendamento = {
   id: string;
@@ -129,6 +205,14 @@ export type Agendamento = {
   // Preenchido só quando status === "cancelado" e o admin digitou um motivo (coluna nova; ver
   // 20261015100000_add_motivo_cancelamento_agendamento.sql — ausente antes dela).
   motivo_cancelamento?: string | null;
+  // Colunas novas (TAREFA agendamentos 2.4, migration 20261030500000) — ausentes antes dela.
+  email?: string | null;
+  remarcado_de?: string | null;
+  cancelado_por?: "admin" | "cliente" | null;
+  lembrete_2h_enviado?: boolean;
+  // Já existia na tabela desde o início (ver agendar/[slug]/actions.ts), mas nunca tinha entrado
+  // neste tipo — select("*") sempre trouxe a coluna, só faltava declarar.
+  lead_id?: string | null;
   whatsapp_enviado: boolean;
   lembrete_enviado: boolean;
   created_at: string;

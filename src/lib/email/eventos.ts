@@ -134,9 +134,14 @@ export function notificarEmailAgendamento(dados: {
   dataISO: string;
   horario: string;
   tituloPagina: string;
+  // TAREFA agendamentos 2.4 — link de autoatendimento (cancelar/remarcar); opcional só pra não
+  // quebrar nenhum outro chamador que ainda não tenha sido atualizado.
+  linkGerenciar?: string;
 }): void {
-  // O formulário público de agendamento só pede nome e WhatsApp: o e-mail existe só se
-  // a página tiver um campo extra com e-mail — procura um valor com cara de e-mail.
+  // O formulário público de agendamento tem um campo de e-mail próprio desde sempre (opcional —
+  // ver agendamentoPublicoSchema), que vai dentro de camposExtras (ver criarAgendamentoPublico) —
+  // por isso continua achado por aqui, mesmo que agendamentos.email (coluna dedicada, migration
+  // 20261030500000) também exista agora.
   const email = Object.values(dados.camposExtras ?? {}).find(
     (valor): valor is string => typeof valor === "string" && REGEX_EMAIL.test(valor.trim()),
   );
@@ -149,6 +154,7 @@ export function notificarEmailAgendamento(dados: {
       horario: dados.horario,
       dia_semana: diaSemanaExtenso(dados.dataISO),
       nome_pagina: dados.tituloPagina,
+      link_gerenciar: dados.linkGerenciar ?? "",
     });
   });
 }

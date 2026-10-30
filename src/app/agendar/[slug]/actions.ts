@@ -9,16 +9,17 @@ import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
 import {
   contarVagasOcupadasNoSlot,
   getAgendamentoPaginaPublica,
+  getHorariosOcupadosPorDia,
   validarSlotPermitido,
 } from "@/lib/agendamentos/agendamentos";
-import { agendamentoPublicoSchema } from "@/lib/agendamentos/schema";
+import { agendamentoPublicoSchema, horarioBloqueadoPorIntervalo } from "@/lib/agendamentos/schema";
 import { encontrarLeadPorWhatsappOuEmail, getKanbanColunas, registrarHistoricoLead } from "@/lib/leads/leads";
 import { encontrarColunaVisitaAgendado } from "@/lib/leads/schema";
 
 // slotIndisponivel: o horário escolhido não está mais disponível (lotou ou
 // saiu das regras da página) — o client volta pro passo 1 e marca o horário
 // como lotado, em vez de deixar o visitante preso na confirmação.
-export type CriarAgendamentoResultado = { success: true } | { error: string; slotIndisponivel?: boolean };
+export type CriarAgendamentoResultado = { success: true; agendamentoId: string } | { error: string; slotIndisponivel?: boolean };
 
 // Sem requireRole de propósito — é a única Server Action do módulo
 // genuinamente alcançável por um visitante sem conta (mesmo espírito de
@@ -60,6 +61,16 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     return { error: "Esse horário acabou de lotar. Escolha outra data ou horário.", slotIndisponivel: true };
   }
 
+  // Defesa em profundidade pro intervalo entre horários (TAREFA agendamentos 2.4) — o client já
+  // desabilita esses horários na UI, mas a action é alcançável por POST direto.
+  if ((pagina.intervalo_entre_horarios ?? 0) > 0) {
+    const ocupadosNoDia = await getHorariosOcupadosPorDia(pagina.id, parsed.data.data_agendada, parsed.data.data_agendada);
+    const horariosDoDia = ocupadosNoDia[parsed.data.data_agendada] ?? [];
+    if (horarioBloqueadoPorIntervalo(parsed.data.horario, horariosDoDia, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0)) {
+      return { error: "Esse horário ficou muito próximo de outro já agendado. Escolha outro horário.", slotIndisponivel: true };
+    }
+  }
+
   // E-mail opcional: não é um campo extra configurado pelo admin (pagina.campos_extras), mas
   // precisa cair dentro de campos_extras (jsonb) pra notificarEmailAgendamento achar com o
   // regex de e-mail (src/lib/email/eventos.ts) — sem coluna nova na tabela.
@@ -77,21 +88,23 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     campos_extras: camposExtrasComEmail,
   };
 
-  // A mensagem só entra no insert quando o visitante escreveu algo — e se a
-  // coluna ainda não existir (migration 20260919200000 não aplicada), o
-  // agendamento NÃO pode falhar por causa de um campo opcional: tenta de novo
-  // sem a mensagem.
-  const dadosComMensagem: Record<string, unknown> = { ...dadosBase };
-  if (parsed.data.mensagem) dadosComMensagem.mensagem = parsed.data.mensagem;
+  // "mensagem" (migration 20260919200000) e "email" (migration 20261030500000) são colunas
+  // opcionais mais novas que a tabela original — se alguma ainda não existir no banco, o
+  // agendamento NÃO pode falhar por causa de um campo que é só um "bônus": tenta de novo sem
+  // elas. "email" continua indo pra camposExtrasComEmail (jsonb) mesmo sem a coluna dedicada —
+  // notificarEmailAgendamento acha por lá como já fazia antes desta tarefa.
+  const dadosCompletos: Record<string, unknown> = { ...dadosBase };
+  if (parsed.data.mensagem) dadosCompletos.mensagem = parsed.data.mensagem;
+  if (parsed.data.email?.trim()) dadosCompletos.email = parsed.data.email.trim();
 
   let { data: agendamento, error } = await admin
     .from("agendamentos")
-    .insert(dadosComMensagem)
+    .insert(dadosCompletos)
     .select("id")
     .single();
 
-  if (error && parsed.data.mensagem && (error.code === "42703" || error.code === "PGRST204")) {
-    console.error("[agendar] coluna agendamentos.mensagem ausente — gravando sem a mensagem:", error.code);
+  if (error && (error.code === "42703" || error.code === "PGRST204")) {
+    console.error("[agendar] coluna opcional ausente em agendamentos — gravando sem mensagem/email dedicados:", error.code);
     ({ data: agendamento, error } = await admin.from("agendamentos").insert(dadosBase).select("id").single());
   }
 
@@ -152,7 +165,8 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
   // "agendamento_criado" abaixo já funciona independente desse stub.
   console.log(
     `[agendamentos] Enviaria confirmação por WhatsApp para ${parsed.data.nome} (${parsed.data.whatsapp}): ` +
-      `agendado para ${parsed.data.data_agendada} às ${parsed.data.horario}`,
+      `agendado para ${parsed.data.data_agendada} às ${parsed.data.horario}. Link pra cancelar/remarcar: ` +
+      `/agendar/${pagina.slug}/meu-agendamento/${agendamento.id}`,
   );
 
   dispararFluxosPorGatilho(
@@ -185,13 +199,16 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
   }
 
   // E-mail de confirmação (só sai se o visitante informou e-mail, ou se a página tiver um campo
-  // extra com e-mail).
+  // extra com e-mail). linkGerenciar: TAREFA agendamentos 2.4 — autoatendimento de
+  // cancelamento/remarcação (ver meu-agendamento/[agendamentoId]), incluído no e-mail de
+  // confirmação como pedido.
   notificarEmailAgendamento({
     nome: parsed.data.nome,
     camposExtras: camposExtrasComEmail,
     dataISO: parsed.data.data_agendada,
     horario: parsed.data.horario,
     tituloPagina: pagina.titulo,
+    linkGerenciar: `${process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app"}/agendar/${pagina.slug}/meu-agendamento/${agendamento.id}`,
   });
 
   // Webhook de saída (Apps > Webhooks): depois da resposta, nunca bloqueia.
@@ -207,5 +224,5 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     campos_extras: parsed.data.campos_extras ?? {},
   });
 
-  return { success: true };
+  return { success: true, agendamentoId: agendamento.id as string };
 }

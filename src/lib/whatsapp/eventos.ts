@@ -107,6 +107,34 @@ export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Pro
   })();
 }
 
+// TAREFA agendamentos 2.4 (PARTE 5) — segundo lembrete, ~2h antes. Mesmo toggle do lembrete D-1
+// acima ("wz_lembrete_agendamento") — sem toggle próprio, de propósito: mesma categoria de aviso.
+export function notificarWhatsappAgendamentoLembrete2h(agendamentoId: string): Promise<void> {
+  return (async () => {
+    try {
+      if (!(await whatsappToggleHabilitado("wz_lembrete_agendamento"))) return;
+
+      const { data } = await createAdminClient()
+        .from("agendamentos")
+        .select("nome, whatsapp, data_agendada, horario")
+        .eq("id", agendamentoId)
+        .maybeSingle();
+      const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string } | null;
+      if (!agendamento?.whatsapp) return;
+
+      const mensagem = await renderTemplate("agendamento_lembrete_2h", {
+        nome: primeiroNome(agendamento.nome) || agendamento.nome,
+        data: dataBR(agendamento.data_agendada),
+        horario: agendamento.horario,
+        dia_semana: diaDaSemana(agendamento.data_agendada),
+      });
+      await enviarWhatsApp(agendamento.whatsapp, mensagem);
+    } catch (erro) {
+      console.error("[whatsapp] falha no lembrete de agendamento (2h)", erro);
+    }
+  })();
+}
+
 // ----- Agendamento: cancelado / faltou (src/app/admin/comercial/agendamentos/actions.ts) -----
 // Fire-and-forget de propósito: disparadas por uma Server Action de clique do admin, não podem
 // travar a resposta pelo tempo do delay anti-banimento.

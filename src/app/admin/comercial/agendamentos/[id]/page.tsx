@@ -32,7 +32,8 @@ export default async function AgendamentoPaginaDetalhePage({
   if (!pagina) notFound();
 
   const paginaAtual = parsePagina(paginaParam);
-  const [{ itens, total }, resumo, agendamentosCancelados] = await Promise.all([
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const [{ itens, total }, resumo, agendamentosCancelados, { count: totalHoje }] = await Promise.all([
     getAgendamentosPaginados(supabase, id, {
       data: data || undefined,
       offset: calcularOffset(paginaAtual, LIMITE_PADRAO),
@@ -40,6 +41,12 @@ export default async function AgendamentoPaginaDetalhePage({
     }),
     getResumoAgendamentos(supabase, id),
     getAgendamentosCancelados(supabase, id),
+    supabase
+      .from("agendamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("pagina_id", id)
+      .eq("data_agendada", hojeISO)
+      .eq("status", "confirmado"),
   ]);
 
   return (
@@ -55,6 +62,8 @@ export default async function AgendamentoPaginaDetalhePage({
         agendamentosCancelados={agendamentosCancelados}
         camposExtrasConfigurados={pagina.campos_extras}
         resumo={resumo}
+        totalHoje={totalHoje ?? 0}
+        hojeISO={hojeISO}
         dataFiltro={data ?? ""}
         totalRegistros={total}
         paginaAtual={paginaAtual}

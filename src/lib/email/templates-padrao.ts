@@ -133,8 +133,8 @@ ${botao("Acessar o portal →", "{link_acesso}")}
       <strong>{nome_pagina}</strong><br>
       {dia_semana}, {data} às <strong>{horario}</strong>
     </p>
-    <p>Precisando remarcar, entre em contato com a nossa secretaria. Esperamos você!</p>`),
-    variaveis: ["nome_cliente", "data", "horario", "dia_semana", "nome_pagina", "nome_escola"],
+    <p>Precisa cancelar ou remarcar? <a href="{link_gerenciar}">Clique aqui</a>. Esperamos você!</p>`),
+    variaveis: ["nome_cliente", "data", "horario", "dia_semana", "nome_pagina", "nome_escola", "link_gerenciar"],
     exemplo: {
       nome_cliente: "Maria Silva",
       data: "25/09/2026",
@@ -142,6 +142,7 @@ ${botao("Acessar o portal →", "{link_acesso}")}
       dia_semana: "Sexta-feira",
       nome_pagina: "Visita à escola",
       nome_escola: "GÊNEZI Educação",
+      link_gerenciar: "https://sistemagestaogenezi.vercel.app/agendar/visita-escola/meu-agendamento/00000000-0000-0000-0000-000000000000",
     },
   },
 

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { criarAgendamentoPublico } from "@/app/agendar/[slug]/actions";
-import { AGENDAMENTO_JANELA_DIAS, type AgendamentoPagina } from "@/lib/agendamentos/schema";
+import { AGENDAMENTO_JANELA_DIAS, horarioBloqueadoPorIntervalo, type AgendamentoPagina } from "@/lib/agendamentos/schema";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,32 @@ function diasDoMes(mes: Date): (Date | null)[] {
   return dias;
 }
 
+// Link "adicionar ao Google Calendar" — sem Z nas datas (horário local "flutuante": o Google
+// mostra exatamente a hora digitada, sem converter fuso, que é o comportamento certo aqui já
+// que o agendamento sempre foi pensado em horário de Brasília).
+function construirLinkGoogleCalendar(dados: {
+  titulo: string;
+  dataISO: string;
+  horario: string;
+  duracaoMinutos: number;
+  local: string | null;
+  descricao: string;
+}): string {
+  const inicio = new Date(`${dados.dataISO}T${dados.horario}:00`);
+  const fim = new Date(inicio.getTime() + dados.duracaoMinutos * 60_000);
+  const formatar = (d: Date) =>
+    `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}00`;
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: dados.titulo,
+    dates: `${formatar(inicio)}/${formatar(fim)}`,
+    details: dados.descricao,
+  });
+  if (dados.local) params.set("location", dados.local);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 function nomeDoMes(mes: Date): string {
   const nome = mes.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   return nome.charAt(0).toUpperCase() + nome.slice(1);
@@ -51,22 +77,28 @@ function calcularStatusDia(
     pagina: AgendamentoPagina;
     horariosPorDiaSemana: Map<number, string[]>;
     contagemPorHorario: Record<string, number>;
+    horariosOcupadosPorDia: Record<string, string[]>;
     lotadosLocais: Set<string>;
     dataMinimaISO: string;
     dataLimiteISO: string;
   },
 ): StatusDia {
-  const { pagina, horariosPorDiaSemana, contagemPorHorario, lotadosLocais, dataMinimaISO, dataLimiteISO } = contexto;
+  const { pagina, horariosPorDiaSemana, contagemPorHorario, horariosOcupadosPorDia, lotadosLocais, dataMinimaISO, dataLimiteISO } = contexto;
   const iso = toISO(data);
   const horarios = horariosPorDiaSemana.get(data.getDay());
   if (!horarios || horarios.length === 0) return "indisponivel";
   if (iso < dataMinimaISO || iso > dataLimiteISO) return "indisponivel";
   if (pagina.data_inicio && iso < pagina.data_inicio) return "indisponivel";
   if (pagina.data_fim && iso > pagina.data_fim) return "indisponivel";
+  if ((pagina.datas_bloqueadas ?? []).includes(iso)) return "indisponivel";
+  if ((pagina.feriados_bloqueados ?? []).includes(iso)) return "indisponivel";
 
+  const ocupados = horariosOcupadosPorDia[iso] ?? [];
   const todosLotados = horarios.every((horario) => {
     const chave = `${iso}_${horario}`;
-    return (contagemPorHorario[chave] ?? 0) >= pagina.vagas_por_horario || lotadosLocais.has(chave);
+    const lotadoPorVaga = (contagemPorHorario[chave] ?? 0) >= pagina.vagas_por_horario || lotadosLocais.has(chave);
+    const bloqueadoPorIntervalo = horarioBloqueadoPorIntervalo(horario, ocupados, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0);
+    return lotadoPorVaga || bloqueadoPorIntervalo;
   });
   return todosLotados ? "lotado" : "disponivel";
 }
@@ -74,9 +106,15 @@ function calcularStatusDia(
 export function AgendamentoPublicoView({
   pagina,
   contagemPorHorario,
+  horariosOcupadosPorDia,
+  escolaTelefone,
+  nomeResponsavel,
 }: {
   pagina: AgendamentoPagina;
   contagemPorHorario: Record<string, number>;
+  horariosOcupadosPorDia: Record<string, string[]>;
+  escolaTelefone: string | null;
+  nomeResponsavel: string | null;
 }) {
   const hoje = useMemo(() => new Date(), []);
 
@@ -110,7 +148,7 @@ export function AgendamentoPublicoView({
   // contagem vem do carregamento da página e fica desatualizado).
   const [lotadosLocais, setLotadosLocais] = useState<Set<string>>(() => new Set());
 
-  const contexto = { pagina, horariosPorDiaSemana, contagemPorHorario, lotadosLocais, dataMinimaISO, dataLimiteISO };
+  const contexto = { pagina, horariosPorDiaSemana, contagemPorHorario, horariosOcupadosPorDia, lotadosLocais, dataMinimaISO, dataLimiteISO };
   const statusDia = (data: Date) => calcularStatusDia(data, contexto);
 
   // Primeiro dia com vaga (a partir de hoje): o calendário já abre nesse mês,
@@ -123,6 +161,7 @@ export function AgendamentoPublicoView({
           pagina,
           horariosPorDiaSemana,
           contagemPorHorario,
+          horariosOcupadosPorDia,
           lotadosLocais: new Set(),
           dataMinimaISO,
           dataLimiteISO,
@@ -133,7 +172,7 @@ export function AgendamentoPublicoView({
       cursor.setDate(cursor.getDate() + 1);
     }
     return null;
-  }, [hoje, pagina, horariosPorDiaSemana, contagemPorHorario, dataMinimaISO, dataLimiteISO]);
+  }, [hoje, pagina, horariosPorDiaSemana, contagemPorHorario, horariosOcupadosPorDia, dataMinimaISO, dataLimiteISO]);
 
   const [mesAtual, setMesAtual] = useState(() => {
     const base = primeiroDiaDisponivel ?? hoje;
@@ -152,6 +191,7 @@ export function AgendamentoPublicoView({
   const [error, setError] = useState<string | null>(null);
   const [erroHorario, setErroHorario] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  const [agendamentoId, setAgendamentoId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const corPrimaria = pagina.cor_primaria;
@@ -160,14 +200,14 @@ export function AgendamentoPublicoView({
   const horariosDoDiaSelecionado = useMemo(() => {
     if (!dataSelecionada) return [];
     const diaSemana = new Date(`${dataSelecionada}T00:00:00`).getDay();
+    const ocupados = horariosOcupadosPorDia[dataSelecionada] ?? [];
     return (horariosPorDiaSemana.get(diaSemana) ?? []).map((horario) => {
       const chave = `${dataSelecionada}_${horario}`;
-      return {
-        horario,
-        lotado: (contagemPorHorario[chave] ?? 0) >= pagina.vagas_por_horario || lotadosLocais.has(chave),
-      };
+      const lotadoPorVaga = (contagemPorHorario[chave] ?? 0) >= pagina.vagas_por_horario || lotadosLocais.has(chave);
+      const bloqueadoPorIntervalo = horarioBloqueadoPorIntervalo(horario, ocupados, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0);
+      return { horario, lotado: lotadoPorVaga || bloqueadoPorIntervalo };
     });
-  }, [dataSelecionada, horariosPorDiaSemana, pagina.vagas_por_horario, contagemPorHorario, lotadosLocais]);
+  }, [dataSelecionada, horariosPorDiaSemana, pagina.vagas_por_horario, pagina.duracao_minutos, pagina.intervalo_entre_horarios, contagemPorHorario, horariosOcupadosPorDia, lotadosLocais]);
 
   const mesAnteriorDesabilitado =
     mesAtual.getFullYear() === hoje.getFullYear() && mesAtual.getMonth() === hoje.getMonth();
@@ -220,6 +260,7 @@ export function AgendamentoPublicoView({
       }
       // Agendamento confirmado = lead pros pixels (Apps > Pixels).
       dispararEventoPixels("lead");
+      setAgendamentoId(resultado.agendamentoId);
       setSucesso(true);
     });
   }
@@ -227,6 +268,19 @@ export function AgendamentoPublicoView({
   const resumoData = dataSelecionada ? dataComDiaSemana(dataSelecionada) : "";
 
   if (sucesso) {
+    const linkCalendar =
+      dataSelecionada && horarioSelecionado
+        ? construirLinkGoogleCalendar({
+            titulo: pagina.titulo,
+            dataISO: dataSelecionada,
+            horario: horarioSelecionado,
+            duracaoMinutos: pagina.duracao_minutos,
+            local: pagina.local_atendimento,
+            descricao: pagina.mensagem_confirmacao ?? "",
+          })
+        : null;
+    const whatsappEscola = escolaTelefone?.replace(/\D/g, "");
+
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
@@ -237,11 +291,42 @@ export function AgendamentoPublicoView({
             <p>📅 {resumoData}</p>
             <p>⏰ {horarioSelecionado}</p>
             <p>👤 {nome}</p>
+            {pagina.local_atendimento && <p>📍 {pagina.local_atendimento}</p>}
+            {nomeResponsavel && <p>🧑‍🏫 Responsável: {nomeResponsavel}</p>}
           </div>
 
           <p className="text-muted-foreground text-sm">
             {pagina.mensagem_confirmacao ?? "Em breve entraremos em contato pelo WhatsApp para confirmar."}
           </p>
+
+          <div className="flex w-full flex-col gap-2">
+            {linkCalendar && (
+              <Button type="button" variant="outline" className="w-full" render={<a href={linkCalendar} target="_blank" rel="noreferrer" />} nativeButton={false}>
+                📅 Adicionar ao Google Calendar
+              </Button>
+            )}
+            {whatsappEscola && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                render={<a href={`https://wa.me/55${whatsappEscola}`} target="_blank" rel="noreferrer" />}
+                nativeButton={false}
+              >
+                💬 Falar pelo WhatsApp
+              </Button>
+            )}
+          </div>
+
+          {agendamentoId && (
+            <p className="text-muted-foreground text-xs">
+              Precisa cancelar ou remarcar?{" "}
+              <a href={`/agendar/${pagina.slug}/meu-agendamento/${agendamentoId}`} className="underline">
+                Clique aqui
+              </a>
+              .
+            </p>
+          )}
         </CardContent>
       </Card>
     );

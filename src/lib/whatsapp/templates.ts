@@ -14,6 +14,7 @@ export const WHATSAPP_TEMPLATE_IDS = [
   "falta_aula",
   "recontato_lead",
   "agendamento_lembrete",
+  "agendamento_lembrete_2h",
   "agendamento_cancelado",
   "agendamento_falta",
   "cobranca_gerada",
@@ -104,6 +105,16 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
     gatilho: "Um dia antes do agendamento (cron lembrete-agendamentos).",
     padrao: "Olá, {nome}! 👋 Passando para lembrar do seu agendamento na {dia_semana}, dia {data} às {horario}. Até lá!",
     placeholders: [P_NOME, P_DATA, P_HORARIO, { chave: "dia_semana", descricao: "Dia da semana", exemplo: "quinta-feira" }],
+  },
+  // TAREFA agendamentos 2.4 (PARTE 5) — segundo lembrete, ~2h antes (cron lembretes-agendamento).
+  // Usa o MESMO toggle "wz_lembrete_agendamento" do lembrete D-1 acima (sem toggle próprio):
+  // é a mesma categoria de aviso pro admin desligar, só muda o texto/timing.
+  agendamento_lembrete_2h: {
+    id: "agendamento_lembrete_2h",
+    nome: "Lembrete de agendamento (2h antes)",
+    gatilho: "Cerca de 2 horas antes do agendamento (cron lembretes-agendamento).",
+    padrao: "Olá, {nome}! ⏰ Seu agendamento é hoje em breve, às {horario}. Te esperamos! 🎓",
+    placeholders: [P_NOME, P_HORARIO],
   },
   agendamento_cancelado: {
     id: "agendamento_cancelado",

@@ -9,6 +9,30 @@ type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
 
 export type AgendamentoPaginaComContagem = AgendamentoPagina & { totalAgendamentos: number };
 
+// Autoatendimento público (TAREFA agendamentos 2.4, PARTE 4): o UUID do agendamento funciona
+// como "token" de acesso (sem login) — quem tem o link pode ver/cancelar/remarcar ESTE
+// agendamento, nunca uma lista. Por isso usa sempre o client admin (service_role): não existe
+// policy de select pública em `agendamentos` (ver comentário de segurança na migration
+// original), de propósito.
+export async function getAgendamentoComPaginaPublico(
+  agendamentoId: string,
+  slug: string,
+): Promise<{ agendamento: Agendamento; pagina: AgendamentoPagina } | null> {
+  const admin = createAdminClient();
+  const { data: agendamento } = await admin.from("agendamentos").select("*").eq("id", agendamentoId).maybeSingle();
+  if (!agendamento) return null;
+
+  const { data: pagina } = await admin
+    .from("agendamento_paginas")
+    .select("*")
+    .eq("id", (agendamento as Agendamento).pagina_id)
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!pagina) return null;
+
+  return { agendamento: agendamento as Agendamento, pagina: pagina as AgendamentoPagina };
+}
+
 export async function getAgendamentoPaginasAdmin(
   supabase: SupabaseServerClient,
 ): Promise<AgendamentoPaginaComContagem[]> {
@@ -166,20 +190,60 @@ export async function getContagemPorHorario(
 
 // Valida no servidor (defesa em profundidade — o client já filtra isso na
 // UI, mas nunca confia só nisso) que a data/horário escolhidos batem com
-// horarios_disponiveis, o período da página e a antecedência mínima.
+// horarios_disponiveis, o período da página, a antecedência mínima/máxima e
+// as datas bloqueadas (feriados ou específicas). NÃO checa intervalo entre
+// horários nem vagas — isso depende de QUAIS outros agendamentos já existem
+// no slot, então fica em horarioBloqueadoPorIntervalo/contarVagasOcupadasNoSlot
+// (a primeira já é usada por quem chama esta função antes do insert).
 export function validarSlotPermitido(pagina: AgendamentoPagina, dataISO: string, horario: string): boolean {
   const hoje = new Date().toISOString().slice(0, 10);
   const dataMinima = new Date();
   dataMinima.setDate(dataMinima.getDate() + pagina.dias_antecedencia_minimo);
   const dataMinimaISO = dataMinima.toISOString().slice(0, 10);
 
+  // ?? 30: coluna nova (migration 20261030500000) — se ainda não foi aplicada, select("*") não
+  // traz a chave e cai no mesmo padrão default da coluna no banco.
+  const antecedenciaMaxima = pagina.antecedencia_maxima_dias ?? 30;
+  const dataMaxima = new Date();
+  dataMaxima.setDate(dataMaxima.getDate() + antecedenciaMaxima);
+  const dataMaximaISO = dataMaxima.toISOString().slice(0, 10);
+
   if (dataISO < dataMinimaISO) return false;
+  if (dataISO > dataMaximaISO) return false;
   if (pagina.data_inicio && dataISO < pagina.data_inicio) return false;
   if (pagina.data_fim && dataISO > pagina.data_fim) return false;
   if (dataISO < hoje) return false;
+  if ((pagina.datas_bloqueadas ?? []).includes(dataISO)) return false;
+  if ((pagina.feriados_bloqueados ?? []).includes(dataISO)) return false;
 
   const diaSemana = new Date(`${dataISO}T00:00:00`).getDay();
   return pagina.horarios_disponiveis.some((h) => h.dia_semana === diaSemana && h.horario === horario);
+}
+
+// Horários distintos com agendamento confirmado, por dia, numa janela — base pro
+// bloqueio por intervalo (tanto no calendário público quanto na validação do insert).
+// Mesmo critério de segurança de getContagemPorHorario: só data_agendada/horario, nunca
+// nome/whatsapp, e sempre via client admin.
+export async function getHorariosOcupadosPorDia(
+  paginaId: string,
+  dataInicioISO: string,
+  dataFimISO: string,
+): Promise<Record<string, string[]>> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("agendamentos")
+    .select("data_agendada, horario")
+    .eq("pagina_id", paginaId)
+    .eq("status", "confirmado")
+    .gte("data_agendada", dataInicioISO)
+    .lte("data_agendada", dataFimISO);
+
+  const porDia: Record<string, string[]> = {};
+  for (const linha of (data as { data_agendada: string; horario: string }[] | null) ?? []) {
+    const lista = porDia[linha.data_agendada] ?? (porDia[linha.data_agendada] = []);
+    if (!lista.includes(linha.horario)) lista.push(linha.horario);
+  }
+  return porDia;
 }
 
 // Recontagem no exato momento do insert (corrida entre "carregou a página" e

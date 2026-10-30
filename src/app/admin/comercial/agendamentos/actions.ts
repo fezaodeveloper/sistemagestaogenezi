@@ -11,14 +11,17 @@ import {
   getAgendamentoPaginasAdmin,
   getAgendamentos as getAgendamentosLib,
   getContagemPorHorario,
+  getHorariosOcupadosPorDia,
   validarSlotPermitido,
   type AgendamentoPaginaComContagem,
 } from "@/lib/agendamentos/agendamentos";
 import {
   agendamentoPaginaFormSchema,
   AGENDAMENTO_STATUSES,
+  horarioBloqueadoPorIntervalo,
   type Agendamento,
   type AgendamentoStatus,
+  type ResponsavelOpcao,
 } from "@/lib/agendamentos/schema";
 import { ERRO_LOTE_INVALIDO, sanitizarIdsLote, type ResultadoExclusaoLote } from "@/lib/exclusao-em-lote";
 import { notificarWhatsappAgendamentoCancelado, notificarWhatsappAgendamentoFalta } from "@/lib/whatsapp/eventos";
@@ -46,6 +49,8 @@ export async function getAgendamentoPaginas(): Promise<AgendamentoPaginaComConta
 function parseAgendamentoPaginaForm(formData: FormData) {
   const horariosRaw = formData.get("horarios_disponiveis");
   const camposRaw = formData.get("campos_extras");
+  const feriadosRaw = formData.get("feriados_bloqueados");
+  const datasRaw = formData.get("datas_bloqueadas");
 
   return agendamentoPaginaFormSchema.safeParse({
     titulo: formData.get("titulo"),
@@ -57,10 +62,25 @@ function parseAgendamentoPaginaForm(formData: FormData) {
     vagas_por_horario: formData.get("vagas_por_horario"),
     duracao_minutos: formData.get("duracao_minutos"),
     dias_antecedencia_minimo: formData.get("dias_antecedencia_minimo"),
+    antecedencia_maxima_dias: formData.get("antecedencia_maxima_dias"),
+    intervalo_entre_horarios: formData.get("intervalo_entre_horarios"),
     mensagem_confirmacao: formData.get("mensagem_confirmacao") || undefined,
     horarios_disponiveis: horariosRaw ? JSON.parse(String(horariosRaw)) : [],
     campos_extras: camposRaw ? JSON.parse(String(camposRaw)) : [],
+    local_atendimento: formData.get("local_atendimento") || undefined,
+    responsavel_id: formData.get("responsavel_id") || "",
+    feriados_bloqueados: feriadosRaw ? JSON.parse(String(feriadosRaw)) : [],
+    datas_bloqueadas: datasRaw ? JSON.parse(String(datasRaw)) : [],
   });
+}
+
+// TAREFA agendamentos 2.4 (PARTE 2) — lista de admins pro <select> de "Responsável" na página de
+// agendamento. is_admin() não filtra por nome, então a query vai direto na coluna role.
+export async function getResponsaveisAdmin(): Promise<ResponsavelOpcao[]> {
+  await requireRole("admin");
+  const supabase = await createClient();
+  const { data } = await supabase.from("profiles").select("id, full_name").eq("role", "admin").order("full_name");
+  return (data ?? []) as ResponsavelOpcao[];
 }
 
 export async function criarAgendamentoPagina(formData: FormData): Promise<{ error?: string; id?: string }> {
@@ -72,7 +92,15 @@ export async function criarAgendamentoPagina(formData: FormData): Promise<{ erro
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
+  const camposNovos = {
+    antecedencia_maxima_dias: parsed.data.antecedencia_maxima_dias,
+    intervalo_entre_horarios: parsed.data.intervalo_entre_horarios,
+    local_atendimento: parsed.data.local_atendimento ?? null,
+    responsavel_id: parsed.data.responsavel_id || null,
+    feriados_bloqueados: parsed.data.feriados_bloqueados,
+    datas_bloqueadas: parsed.data.datas_bloqueadas,
+  };
+  let { data, error } = await supabase
     .from("agendamento_paginas")
     .insert({
       titulo: parsed.data.titulo,
@@ -88,9 +116,34 @@ export async function criarAgendamentoPagina(formData: FormData): Promise<{ erro
       horarios_disponiveis: parsed.data.horarios_disponiveis,
       campos_extras: parsed.data.campos_extras,
       created_by: user.id,
+      ...camposNovos,
     })
     .select("id")
     .single();
+
+  // Colunas novas (migration 20261030500000) podem ainda não existir — nunca pode impedir a
+  // criação da página por causa disso (mesmo padrão defensivo já usado em agendar/[slug]/actions.ts).
+  if (error && (error.code === "42703" || error.code === "PGRST204")) {
+    ({ data, error } = await supabase
+      .from("agendamento_paginas")
+      .insert({
+        titulo: parsed.data.titulo,
+        slug: parsed.data.slug,
+        descricao: parsed.data.descricao ?? null,
+        cor_primaria: parsed.data.cor_primaria,
+        data_inicio: parsed.data.data_inicio ?? null,
+        data_fim: parsed.data.data_fim ?? null,
+        vagas_por_horario: parsed.data.vagas_por_horario,
+        duracao_minutos: parsed.data.duracao_minutos,
+        dias_antecedencia_minimo: parsed.data.dias_antecedencia_minimo,
+        mensagem_confirmacao: parsed.data.mensagem_confirmacao ?? null,
+        horarios_disponiveis: parsed.data.horarios_disponiveis,
+        campos_extras: parsed.data.campos_extras,
+        created_by: user.id,
+      })
+      .select("id")
+      .single());
+  }
 
   if (error || !data) {
     const mensagem =
@@ -113,23 +166,37 @@ export async function atualizarAgendamentoPagina(id: string, formData: FormData)
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const camposBase = {
+    titulo: parsed.data.titulo,
+    slug: parsed.data.slug,
+    descricao: parsed.data.descricao ?? null,
+    cor_primaria: parsed.data.cor_primaria,
+    data_inicio: parsed.data.data_inicio ?? null,
+    data_fim: parsed.data.data_fim ?? null,
+    vagas_por_horario: parsed.data.vagas_por_horario,
+    duracao_minutos: parsed.data.duracao_minutos,
+    dias_antecedencia_minimo: parsed.data.dias_antecedencia_minimo,
+    mensagem_confirmacao: parsed.data.mensagem_confirmacao ?? null,
+    horarios_disponiveis: parsed.data.horarios_disponiveis,
+    campos_extras: parsed.data.campos_extras,
+  };
+
+  let { error } = await supabase
     .from("agendamento_paginas")
     .update({
-      titulo: parsed.data.titulo,
-      slug: parsed.data.slug,
-      descricao: parsed.data.descricao ?? null,
-      cor_primaria: parsed.data.cor_primaria,
-      data_inicio: parsed.data.data_inicio ?? null,
-      data_fim: parsed.data.data_fim ?? null,
-      vagas_por_horario: parsed.data.vagas_por_horario,
-      duracao_minutos: parsed.data.duracao_minutos,
-      dias_antecedencia_minimo: parsed.data.dias_antecedencia_minimo,
-      mensagem_confirmacao: parsed.data.mensagem_confirmacao ?? null,
-      horarios_disponiveis: parsed.data.horarios_disponiveis,
-      campos_extras: parsed.data.campos_extras,
+      ...camposBase,
+      antecedencia_maxima_dias: parsed.data.antecedencia_maxima_dias,
+      intervalo_entre_horarios: parsed.data.intervalo_entre_horarios,
+      local_atendimento: parsed.data.local_atendimento ?? null,
+      responsavel_id: parsed.data.responsavel_id || null,
+      feriados_bloqueados: parsed.data.feriados_bloqueados,
+      datas_bloqueadas: parsed.data.datas_bloqueadas,
     })
     .eq("id", id);
+
+  if (error && (error.code === "42703" || error.code === "PGRST204")) {
+    ({ error } = await supabase.from("agendamento_paginas").update(camposBase).eq("id", id));
+  }
 
   if (error) {
     const mensagem = error.code === "23505" ? "Já existe uma página com esse slug." : "Não foi possível salvar as alterações.";
@@ -176,10 +243,22 @@ export async function atualizarStatusAgendamento(id: string, status: string, mot
   const supabase = await createClient();
   const { data: antes } = await supabase.from("agendamentos").select("status").eq("id", id).maybeSingle();
 
-  const atualizacao: { status: string; motivo_cancelamento?: string } = { status };
-  if (status === "cancelado" && motivo) atualizacao.motivo_cancelamento = motivo;
+  const atualizacao: { status: string; motivo_cancelamento?: string; cancelado_por?: string } = { status };
+  if (status === "cancelado") {
+    if (motivo) atualizacao.motivo_cancelamento = motivo;
+    atualizacao.cancelado_por = "admin";
+  }
 
-  const { error } = await supabase.from("agendamentos").update(atualizacao).eq("id", id);
+  let { error } = await supabase.from("agendamentos").update(atualizacao).eq("id", id);
+
+  // cancelado_por (migration 20261030500000) pode ainda não existir — nunca pode impedir o
+  // cancelamento em si (mesmo padrão defensivo de agendar/[slug]/actions.ts pra colunas novas).
+  if (error && atualizacao.cancelado_por && (error.code === "42703" || error.code === "PGRST204")) {
+    ({ error } = await supabase
+      .from("agendamentos")
+      .update({ status: atualizacao.status, motivo_cancelamento: atualizacao.motivo_cancelamento })
+      .eq("id", id));
+  }
 
   if (error) {
     return { error: "Não foi possível atualizar o status." };
@@ -216,27 +295,40 @@ export async function duplicarAgendamentoPagina(id: string): Promise<{ error?: s
     // no fim, que geraria "--" e violaria o formato de slug).
     const slug = `${original.slug.slice(0, SLUG_MAXIMO - sufixo.length).replace(/-+$/, "")}${sufixo}`;
 
-    const { data, error } = await supabase
+    const camposDuplicados = {
+      titulo: `${original.titulo} (cópia)`,
+      slug,
+      descricao: original.descricao,
+      cor_primaria: original.cor_primaria,
+      logo_url: original.logo_url,
+      status: "inativa",
+      data_inicio: original.data_inicio,
+      data_fim: original.data_fim,
+      vagas_por_horario: original.vagas_por_horario,
+      duracao_minutos: original.duracao_minutos,
+      horarios_disponiveis: original.horarios_disponiveis,
+      dias_antecedencia_minimo: original.dias_antecedencia_minimo,
+      campos_extras: original.campos_extras,
+      mensagem_confirmacao: original.mensagem_confirmacao,
+      created_by: user.id,
+    };
+    let { data, error } = await supabase
       .from("agendamento_paginas")
       .insert({
-        titulo: `${original.titulo} (cópia)`,
-        slug,
-        descricao: original.descricao,
-        cor_primaria: original.cor_primaria,
-        logo_url: original.logo_url,
-        status: "inativa",
-        data_inicio: original.data_inicio,
-        data_fim: original.data_fim,
-        vagas_por_horario: original.vagas_por_horario,
-        duracao_minutos: original.duracao_minutos,
-        horarios_disponiveis: original.horarios_disponiveis,
-        dias_antecedencia_minimo: original.dias_antecedencia_minimo,
-        campos_extras: original.campos_extras,
-        mensagem_confirmacao: original.mensagem_confirmacao,
-        created_by: user.id,
+        ...camposDuplicados,
+        antecedencia_maxima_dias: original.antecedencia_maxima_dias,
+        intervalo_entre_horarios: original.intervalo_entre_horarios,
+        local_atendimento: original.local_atendimento,
+        responsavel_id: original.responsavel_id,
+        feriados_bloqueados: original.feriados_bloqueados,
+        datas_bloqueadas: original.datas_bloqueadas,
       })
       .select("id")
       .single();
+
+    if (error && (error.code === "42703" || error.code === "PGRST204")) {
+      ({ data, error } = await supabase.from("agendamento_paginas").insert(camposDuplicados).select("id").single());
+    }
 
     if (error?.code === "23505") continue; // slug já existe — tenta o próximo sufixo
     if (error || !data) {
@@ -320,11 +412,17 @@ export async function getHorariosDisponiveisReagendamento(
     .sort();
   if (candidatos.length === 0) return [];
 
-  const contagem = await getContagemPorHorario(pagina.id, dataISO, dataISO);
-  return candidatos.map((horario) => ({
-    horario,
-    vagasRestantes: Math.max(0, pagina.vagas_por_horario - (contagem[`${dataISO}_${horario}`] ?? 0)),
-  }));
+  const [contagem, ocupadosPorDia] = await Promise.all([
+    getContagemPorHorario(pagina.id, dataISO, dataISO),
+    getHorariosOcupadosPorDia(pagina.id, dataISO, dataISO),
+  ]);
+  const ocupadosNoDia = ocupadosPorDia[dataISO] ?? [];
+  return candidatos
+    .filter((horario) => !horarioBloqueadoPorIntervalo(horario, ocupadosNoDia, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0))
+    .map((horario) => ({
+      horario,
+      vagasRestantes: Math.max(0, pagina.vagas_por_horario - (contagem[`${dataISO}_${horario}`] ?? 0)),
+    }));
 }
 
 const reagendarSchema = z.object({

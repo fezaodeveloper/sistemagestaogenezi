@@ -7,9 +7,11 @@ import { atualizarAgendamentoPagina, criarAgendamentoPagina } from "@/app/admin/
 import {
   CAMPO_EXTRA_TIPOS,
   DIA_SEMANA_LABELS,
+  FERIADOS_NACIONAIS_2025_2026,
   type AgendamentoPagina,
   type CampoExtraTipo,
   type HorarioDisponivel,
+  type ResponsavelOpcao,
 } from "@/lib/agendamentos/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,10 +40,12 @@ type CampoExtraEdicao = { nome: string; tipo: CampoExtraTipo; opcoesTexto: strin
 
 export function AgendamentoPaginaDialog({
   pagina,
+  responsaveis,
   trigger,
   onSalvo,
 }: {
   pagina?: AgendamentoPagina;
+  responsaveis: ResponsavelOpcao[];
   trigger: ReactElement;
   onSalvo?: (id: string) => void;
 }) {
@@ -58,6 +62,10 @@ export function AgendamentoPaginaDialog({
   const [campos, setCampos] = useState<CampoExtraEdicao[]>(
     (pagina?.campos_extras ?? []).map((c) => ({ nome: c.nome, tipo: c.tipo, opcoesTexto: (c.opcoes ?? []).join(", ") })),
   );
+  const [responsavelId, setResponsavelId] = useState(pagina?.responsavel_id ?? "");
+  const [datasBloqueadas, setDatasBloqueadas] = useState<string[]>(pagina?.datas_bloqueadas ?? []);
+  const [feriadosBloqueados, setFeriadosBloqueados] = useState<string[]>(pagina?.feriados_bloqueados ?? []);
+  const [novaDataBloqueada, setNovaDataBloqueada] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -76,8 +84,30 @@ export function AgendamentoPaginaDialog({
           opcoesTexto: (c.opcoes ?? []).join(", "),
         })),
       );
+      setResponsavelId(pagina?.responsavel_id ?? "");
+      setDatasBloqueadas(pagina?.datas_bloqueadas ?? []);
+      setFeriadosBloqueados(pagina?.feriados_bloqueados ?? []);
+      setNovaDataBloqueada("");
       setError(null);
     }
+  }
+
+  function adicionarDataBloqueada() {
+    if (!novaDataBloqueada || datasBloqueadas.includes(novaDataBloqueada)) return;
+    setDatasBloqueadas((prev) => [...prev, novaDataBloqueada].sort());
+    setNovaDataBloqueada("");
+  }
+
+  function removerDataBloqueada(data: string) {
+    setDatasBloqueadas((prev) => prev.filter((d) => d !== data));
+  }
+
+  function removerFeriado(data: string) {
+    setFeriadosBloqueados((prev) => prev.filter((d) => d !== data));
+  }
+
+  function adicionarFeriadosNacionais() {
+    setFeriadosBloqueados((prev) => [...new Set([...prev, ...FERIADOS_NACIONAIS_2025_2026])].sort());
   }
 
   function handleTituloChange(valor: string) {
@@ -116,6 +146,9 @@ export function AgendamentoPaginaDialog({
     setError(null);
     formData.set("cor_primaria", corPrimaria);
     formData.set("horarios_disponiveis", JSON.stringify(horarios));
+    formData.set("responsavel_id", responsavelId);
+    formData.set("datas_bloqueadas", JSON.stringify(datasBloqueadas));
+    formData.set("feriados_bloqueados", JSON.stringify(feriadosBloqueados));
     formData.set(
       "campos_extras",
       JSON.stringify(
@@ -205,50 +238,112 @@ export function AgendamentoPaginaDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="data_inicio">Data início (opcional)</Label>
-              <Input id="data_inicio" name="data_inicio" type="date" defaultValue={pagina?.data_inicio ?? ""} />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="data_fim">Data fim (opcional)</Label>
-              <Input id="data_fim" name="data_fim" type="date" defaultValue={pagina?.data_fim ?? ""} />
+          <div className="flex flex-col gap-3 rounded-md border p-3">
+            <Label className="text-muted-foreground text-xs uppercase">Atendimento</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="local_atendimento">Local de atendimento</Label>
+                <Input
+                  id="local_atendimento"
+                  name="local_atendimento"
+                  defaultValue={pagina?.local_atendimento ?? ""}
+                  placeholder="Ex.: Sede Gênezi — Rua X, 123"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="responsavel_id">Responsável</Label>
+                <Select
+                  items={Object.fromEntries(responsaveis.map((r) => [r.id, r.full_name ?? "—"]))}
+                  value={responsavelId}
+                  onValueChange={(v) => setResponsavelId(v ?? "")}
+                >
+                  <SelectTrigger id="responsavel_id" className="w-full">
+                    <SelectValue placeholder="Nenhum" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {responsaveis.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.full_name ?? "—"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="vagas_por_horario">Vagas por horário</Label>
-              <Input
-                id="vagas_por_horario"
-                name="vagas_por_horario"
-                type="number"
-                min="1"
-                defaultValue={pagina?.vagas_por_horario ?? 1}
-                required
-              />
+          <div className="flex flex-col gap-3 rounded-md border p-3">
+            <Label className="text-muted-foreground text-xs uppercase">Disponibilidade</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="data_inicio">Data início (opcional)</Label>
+                <Input id="data_inicio" name="data_inicio" type="date" defaultValue={pagina?.data_inicio ?? ""} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="data_fim">Data fim (opcional)</Label>
+                <Input id="data_fim" name="data_fim" type="date" defaultValue={pagina?.data_fim ?? ""} />
+              </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="duracao_minutos">Duração (minutos)</Label>
-              <Input
-                id="duracao_minutos"
-                name="duracao_minutos"
-                type="number"
-                min="1"
-                defaultValue={pagina?.duracao_minutos ?? 30}
-                required
-              />
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="vagas_por_horario">Vagas por horário</Label>
+                <Input
+                  id="vagas_por_horario"
+                  name="vagas_por_horario"
+                  type="number"
+                  min="1"
+                  defaultValue={pagina?.vagas_por_horario ?? 1}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="duracao_minutos">Duração (minutos)</Label>
+                <Input
+                  id="duracao_minutos"
+                  name="duracao_minutos"
+                  type="number"
+                  min="1"
+                  defaultValue={pagina?.duracao_minutos ?? 30}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="intervalo_entre_horarios">Intervalo entre horários (min)</Label>
+                <Input
+                  id="intervalo_entre_horarios"
+                  name="intervalo_entre_horarios"
+                  type="number"
+                  min="0"
+                  defaultValue={pagina?.intervalo_entre_horarios ?? 0}
+                  required
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="dias_antecedencia_minimo">Antecedência mín. (dias)</Label>
-              <Input
-                id="dias_antecedencia_minimo"
-                name="dias_antecedencia_minimo"
-                type="number"
-                min="0"
-                defaultValue={pagina?.dias_antecedencia_minimo ?? 1}
-                required
-              />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="dias_antecedencia_minimo">Antecedência mín. (dias)</Label>
+                <Input
+                  id="dias_antecedencia_minimo"
+                  name="dias_antecedencia_minimo"
+                  type="number"
+                  min="0"
+                  defaultValue={pagina?.dias_antecedencia_minimo ?? 1}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="antecedencia_maxima_dias">Antecedência máx. (dias à frente)</Label>
+                <Input
+                  id="antecedencia_maxima_dias"
+                  name="antecedencia_maxima_dias"
+                  type="number"
+                  min="1"
+                  defaultValue={pagina?.antecedencia_maxima_dias ?? 30}
+                  required
+                />
+              </div>
             </div>
           </div>
 
@@ -302,6 +397,40 @@ export function AgendamentoPaginaDialog({
               <Button type="button" variant="outline" size="sm" onClick={adicionarHorario}>
                 <Plus />
                 Adicionar horário
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Datas bloqueadas</Label>
+            {(datasBloqueadas.length > 0 || feriadosBloqueados.length > 0) && (
+              <div className="flex flex-wrap gap-1.5">
+                {datasBloqueadas.map((d) => (
+                  <span key={d} className="bg-muted/50 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs">
+                    {d.split("-").reverse().join("/")}
+                    <button type="button" onClick={() => removerDataBloqueada(d)} aria-label="Remover data bloqueada">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+                {feriadosBloqueados.map((d) => (
+                  <span key={d} className="bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs">
+                    🎉 {d.split("-").reverse().join("/")}
+                    <button type="button" onClick={() => removerFeriado(d)} aria-label="Remover feriado">
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Input type="date" value={novaDataBloqueada} onChange={(event) => setNovaDataBloqueada(event.target.value)} className="w-40" />
+              <Button type="button" variant="outline" size="sm" onClick={adicionarDataBloqueada} disabled={!novaDataBloqueada}>
+                <Plus />
+                Adicionar data
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={adicionarFeriadosNacionais}>
+                🎉 Adicionar feriados nacionais 2025/2026
               </Button>
             </div>
           </div>

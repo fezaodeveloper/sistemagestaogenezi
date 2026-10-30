@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAgendamentoPaginaPublica, getContagemPorHorario } from "@/lib/agendamentos/agendamentos";
+import { getAgendamentoPaginaPublica, getContagemPorHorario, getHorariosOcupadosPorDia } from "@/lib/agendamentos/agendamentos";
 import { AgendamentoPublicoView } from "@/components/agendamentos/agendamento-publico-view";
 import { AgendarTema } from "@/components/agendamentos/agendar-tema";
 import { getPixelsParaPagina } from "@/lib/pixels/injetar";
@@ -27,11 +27,12 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
   const foraDoPeriodo = (pagina.data_inicio && hoje < pagina.data_inicio) || (pagina.data_fim && hoje > pagina.data_fim);
 
   const admin = createAdminClient();
-  const { data: config } = await admin
-    .from("configuracoes")
-    .select("escola_nome, escola_logo_url")
-    .eq("id", true)
-    .maybeSingle();
+  const [{ data: config }, { data: responsavel }] = await Promise.all([
+    admin.from("configuracoes").select("escola_nome, escola_logo_url, escola_telefone").eq("id", true).maybeSingle(),
+    pagina.responsavel_id
+      ? admin.from("profiles").select("full_name").eq("id", pagina.responsavel_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const dataFimJanela = new Date();
   dataFimJanela.setDate(dataFimJanela.getDate() + JANELA_DIAS);
@@ -39,7 +40,12 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
     ? pagina.data_fim
     : dataFimJanela.toISOString().slice(0, 10);
 
-  const contagemPorHorario = foraDoPeriodo ? {} : await getContagemPorHorario(pagina.id, hoje, dataFimJanelaISO);
+  const [contagemPorHorario, horariosOcupadosPorDia] = foraDoPeriodo
+    ? [{}, {}]
+    : await Promise.all([
+        getContagemPorHorario(pagina.id, hoje, dataFimJanelaISO),
+        getHorariosOcupadosPorDia(pagina.id, hoje, dataFimJanelaISO),
+      ]);
 
   // Pixels de rastreamento (Apps > Pixels). O agendamento não tem curso: só recebe os sem restrição.
   const pixels = await getPixelsParaPagina();
@@ -61,6 +67,9 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
           )}
           <h1 className="text-2xl font-semibold">{pagina.titulo}</h1>
           {pagina.descricao && <p className="text-muted-foreground text-sm">{pagina.descricao}</p>}
+          {pagina.local_atendimento && (
+            <p className="text-muted-foreground text-sm">📍 {pagina.local_atendimento}</p>
+          )}
         </div>
 
         {foraDoPeriodo ? (
@@ -68,7 +77,13 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
             Esta página de agendamento não está disponível no momento.
           </p>
         ) : (
-          <AgendamentoPublicoView pagina={pagina} contagemPorHorario={contagemPorHorario} />
+          <AgendamentoPublicoView
+            pagina={pagina}
+            contagemPorHorario={contagemPorHorario}
+            horariosOcupadosPorDia={horariosOcupadosPorDia}
+            escolaTelefone={config?.escola_telefone ?? null}
+            nomeResponsavel={(responsavel?.full_name as string | null) ?? null}
+          />
         )}
       </div>
     </AgendarTema>
