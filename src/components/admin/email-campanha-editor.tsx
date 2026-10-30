@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Mail, Save, Send, Users } from "lucide-react";
+import { CalendarClock, Code, Mail, Save, Send, Users } from "lucide-react";
 import {
   agendarCampanha,
   contarDestinatarios,
@@ -16,20 +16,31 @@ import {
 import {
   CORPO_INICIAL_CAMPANHA,
   EXEMPLO_CAMPANHA,
-  SEGMENTOS_EMAIL,
   SEGMENTO_LABELS,
+  SEGMENTOS_ALUNOS,
+  SEGMENTOS_LEADS,
   VARIAVEIS_CAMPANHA,
   isSegmentoEmail,
   type SegmentoEmail,
 } from "@/lib/email/marketing-tipos";
 import { renderizarTexto } from "@/lib/email/renderizar";
+import {
+  extrairBlocosDoHtml,
+  gerarHtmlDeBlocos,
+  htmlVeioDoEditorVisual,
+  TEMPLATES_EMAIL,
+  type BlocoEmail,
+  type TemplateEmailId,
+} from "@/lib/email/blocos-email";
 import { EditorHtmlSimples } from "@/components/admin/editor-html-simples";
+import { EditorEmailVisual } from "@/components/admin/editor-email-visual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,25 +59,40 @@ export type CampanhaEditavel = {
   corpo_html: string;
   segmento: SegmentoEmail;
   curso_id: string | null;
+  leads_campanha_id: string | null;
   status: "rascunho" | "agendada";
   agendada_para: string | null;
 };
 
 export type CursoOpcao = { id: string; nome: string };
+export type CampanhaMarketingOpcao = { id: string; nome: string };
 
 function formatarDataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
 }
 
-export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEditavel | null; cursos: CursoOpcao[] }) {
+export function EmailCampanhaEditor({
+  campanha,
+  cursos,
+  campanhasMarketing,
+}: {
+  campanha: CampanhaEditavel | null;
+  cursos: CursoOpcao[];
+  campanhasMarketing: CampanhaMarketingOpcao[];
+}) {
   const router = useRouter();
   const [nome, setNome] = useState(campanha?.nome ?? "");
   const [assunto, setAssunto] = useState(campanha?.assunto ?? "");
   const [corpo, setCorpo] = useState(campanha?.corpo_html ?? CORPO_INICIAL_CAMPANHA);
   const [segmento, setSegmento] = useState<SegmentoEmail>(campanha?.segmento ?? "todos");
   const [cursoId, setCursoId] = useState(campanha?.curso_id ?? "");
+  const [leadsCampanhaId, setLeadsCampanhaId] = useState(campanha?.leads_campanha_id ?? "");
 
-  const [total, setTotal] = useState<number | null>(null);
+  const [modoEditor, setModoEditor] = useState<"visual" | "html">(() => (htmlVeioDoEditorVisual(corpo) ? "visual" : "html"));
+  const [blocos, setBlocos] = useState<BlocoEmail[]>(() => extrairBlocosDoHtml(corpo) ?? []);
+  const [avisoSobrescrever, setAvisoSobrescrever] = useState(false);
+
+  const [resumo, setResumo] = useState<{ elegiveis: number; excluidos: number } | null>(null);
   const [contando, setContando] = useState(false);
   const [confirmandoEnvio, setConfirmandoEnvio] = useState(false);
   const [agendando, setAgendando] = useState(false);
@@ -76,32 +102,73 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
   const [erroDialogo, setErroDialogo] = useState<string | null>(null);
   const [ocupado, startTransition] = useTransition();
 
-  // Estimativa de destinatários: recalcula quando o segmento (ou o curso) muda.
+  const exigeCurso = segmento === "curso_especifico" || segmento === "leads_curso";
+
+  // Estimativa de destinatários: recalcula quando segmento/curso/campanha de leads mudam.
   useEffect(() => {
     let cancelado = false;
-    if (segmento === "curso_especifico" && !cursoId) {
-      queueMicrotask(() => !cancelado && setTotal(0));
+    if (exigeCurso && !cursoId) {
+      queueMicrotask(() => !cancelado && setResumo({ elegiveis: 0, excluidos: 0 }));
+      return;
+    }
+    if (segmento === "leads_campanha" && !leadsCampanhaId) {
+      queueMicrotask(() => !cancelado && setResumo({ elegiveis: 0, excluidos: 0 }));
       return;
     }
     queueMicrotask(() => !cancelado && setContando(true));
-    contarDestinatarios(segmento, cursoId).then((r) => {
+    contarDestinatarios(segmento, cursoId, leadsCampanhaId).then((r) => {
       if (cancelado) return;
-      setTotal("total" in r ? r.total : null);
+      setResumo("elegiveis" in r ? { elegiveis: r.elegiveis, excluidos: r.excluidosDescadastro } : null);
       setContando(false);
     });
     return () => {
       cancelado = true;
     };
-  }, [segmento, cursoId]);
+  }, [segmento, cursoId, leadsCampanhaId, exigeCurso]);
 
   const previewHtml = useMemo(() => renderizarTexto(corpo, EXEMPLO_CAMPANHA, VARIAVEIS_CAMPANHA, { escapar: true }), [corpo]);
   const previewAssunto = useMemo(() => renderizarTexto(assunto, EXEMPLO_CAMPANHA, VARIAVEIS_CAMPANHA, { escapar: false }), [assunto]);
 
   const agendada = campanha?.status === "agendada";
   const cursoItems = Object.fromEntries(cursos.map((curso) => [curso.id, curso.nome]));
+  const campanhaItems = Object.fromEntries(campanhasMarketing.map((c) => [c.id, c.nome]));
+  const segmentoItems = Object.fromEntries((SEGMENTOS_ALUNOS as readonly SegmentoEmail[]).concat(SEGMENTOS_LEADS).map((s) => [s, SEGMENTO_LABELS[s]]));
 
   function dados() {
-    return { nome, assunto, corpoHtml: corpo, segmento, cursoId };
+    return { nome, assunto, corpoHtml: corpo, segmento, cursoId, leadsCampanhaId };
+  }
+
+  function aplicarBlocos(novosBlocos: BlocoEmail[]) {
+    setBlocos(novosBlocos);
+    setCorpo(gerarHtmlDeBlocos(novosBlocos));
+  }
+
+  function aplicarTemplate(id: TemplateEmailId) {
+    aplicarBlocos(TEMPLATES_EMAIL[id].blocos());
+  }
+
+  // Troca de modo: HTML -> Visual tenta reconstruir os blocos a partir do marcador embutido no
+  // HTML. Se o HTML foi editado manualmente desde então (ou nunca veio do editor visual), pede
+  // confirmação antes de sobrescrever — a troca reconstrói a partir dos blocos (ou começa em
+  // branco), perdendo a edição manual.
+  function handleTrocarModo(novoModo: string) {
+    if (novoModo !== "visual" && novoModo !== "html") return;
+    if (novoModo === "html") {
+      setModoEditor("html");
+      return;
+    }
+    if (htmlVeioDoEditorVisual(corpo)) {
+      setBlocos(extrairBlocosDoHtml(corpo) ?? []);
+      setModoEditor("visual");
+      return;
+    }
+    setAvisoSobrescrever(true);
+  }
+
+  function handleConfirmarSobrescrever() {
+    setBlocos(extrairBlocosDoHtml(corpo) ?? []);
+    setModoEditor("visual");
+    setAvisoSobrescrever(false);
   }
 
   // Salva (cria ou atualiza) e devolve o id — todo envio/agendamento parte do que está salvo.
@@ -201,7 +268,12 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
     });
   }
 
-  const podeEnviar = nome.trim() && assunto.trim() && corpo.trim() && (segmento !== "curso_especifico" || cursoId);
+  const podeEnviar =
+    nome.trim() &&
+    assunto.trim() &&
+    corpo.trim() &&
+    (!exigeCurso || cursoId) &&
+    (segmento !== "leads_campanha" || leadsCampanhaId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -240,29 +312,73 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="em-corpo">Corpo (HTML)</Label>
-            <EditorHtmlSimples id="em-corpo" value={corpo} onChange={setCorpo} />
+            <div className="flex items-center justify-between">
+              <Label>Corpo do e-mail</Label>
+              <Tabs value={modoEditor} onValueChange={handleTrocarModo}>
+                <TabsList>
+                  <TabsTrigger value="visual">🎨 Visual</TabsTrigger>
+                  <TabsTrigger value="html">
+                    <Code className="size-3.5" />
+                    HTML
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {modoEditor === "visual" ? (
+              <div className="flex flex-col gap-3">
+                {!campanha && blocos.length === 0 && (
+                  <Card>
+                    <CardContent className="flex flex-col gap-2">
+                      <Label>Começar de um modelo</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(TEMPLATES_EMAIL).map(([id, template]) => (
+                          <Button key={id} type="button" variant="outline" size="sm" onClick={() => aplicarTemplate(id as TemplateEmailId)}>
+                            {template.nome}
+                          </Button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                <EditorEmailVisual blocos={blocos} onChange={aplicarBlocos} />
+              </div>
+            ) : (
+              <EditorHtmlSimples id="em-corpo" value={corpo} onChange={setCorpo} />
+            )}
           </div>
 
           <Card>
             <CardContent className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="em-segmento">Segmento (quem recebe)</Label>
-                <Select items={SEGMENTO_LABELS} value={segmento} onValueChange={(v) => v && isSegmentoEmail(v) && setSegmento(v)}>
+                <Select items={segmentoItems} value={segmento} onValueChange={(v) => v && isSegmentoEmail(v) && setSegmento(v)}>
                   <SelectTrigger id="em-segmento" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SEGMENTOS_EMAIL.map((opcao) => (
-                      <SelectItem key={opcao} value={opcao}>
-                        {SEGMENTO_LABELS[opcao]}
-                      </SelectItem>
-                    ))}
+                    <SelectGroup>
+                      <SelectLabel>Alunos</SelectLabel>
+                      {SEGMENTOS_ALUNOS.map((opcao) => (
+                        <SelectItem key={opcao} value={opcao}>
+                          {SEGMENTO_LABELS[opcao]}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>Leads</SelectLabel>
+                      {SEGMENTOS_LEADS.map((opcao) => (
+                        <SelectItem key={opcao} value={opcao}>
+                          {SEGMENTO_LABELS[opcao]}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
 
-              {segmento === "curso_especifico" && (
+              {exigeCurso && (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="em-curso">Curso</Label>
                   <Select items={cursoItems} value={cursoId} onValueChange={(v) => setCursoId(v ?? "")}>
@@ -280,15 +396,33 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
                 </div>
               )}
 
+              {segmento === "leads_campanha" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="em-campanha">Campanha</Label>
+                  <Select items={campanhaItems} value={leadsCampanhaId} onValueChange={(v) => setLeadsCampanhaId(v ?? "")}>
+                    <SelectTrigger id="em-campanha" className="w-full">
+                      <SelectValue placeholder="Escolha a campanha" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {campanhasMarketing.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <p className="bg-muted/50 flex items-center gap-2 rounded-md p-3 text-sm">
                 <Users className="size-4" />
                 {contando ? (
                   "Contando destinatários..."
-                ) : total === null ? (
+                ) : resumo === null ? (
                   "Não foi possível estimar."
                 ) : (
                   <span>
-                    Destinatários estimados: <strong>{total}</strong> (alunos com e-mail válido, sem repetição)
+                    📧 <strong>{resumo.elegiveis}</strong> destinatário(s) elegível(eis) | ❌ <strong>{resumo.excluidos}</strong> excluído(s) (descadastro)
                   </span>
                 )}
               </p>
@@ -362,7 +496,7 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
           <AlertDialogHeader>
             <AlertDialogTitle>Enviar campanha agora</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão enviados <strong>{total ?? "?"}</strong> e-mail(s) — {SEGMENTO_LABELS[segmento].toLowerCase()}. O envio é em lotes
+              Serão enviados <strong>{resumo?.elegiveis ?? "?"}</strong> e-mail(s) — {SEGMENTO_LABELS[segmento].toLowerCase()}. O envio é em lotes
               (cerca de 100 e-mails por minuto, para respeitar o limite do provedor) e não pode ser desfeito depois de começar.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -373,7 +507,7 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={ocupado}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction disabled={ocupado || total === 0} onClick={handleConfirmarEnvio}>
+            <AlertDialogAction disabled={ocupado || resumo?.elegiveis === 0} onClick={handleConfirmarEnvio}>
               {ocupado ? "Iniciando..." : "Enviar agora"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -385,7 +519,7 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
           <DialogHeader>
             <DialogTitle>Agendar envio</DialogTitle>
             <DialogDescription>
-              Escolha quando enviar para ~{total ?? "?"} destinatário(s). Horário de Brasília. O envio roda uma vez por dia:
+              Escolha quando enviar para ~{resumo?.elegiveis ?? "?"} destinatário(s). Horário de Brasília. O envio roda uma vez por dia:
               a campanha sai na primeira execução depois do horário marcado.
             </DialogDescription>
           </DialogHeader>
@@ -408,6 +542,22 @@ export function EmailCampanhaEditor({ campanha, cursos }: { campanha: CampanhaEd
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={avisoSobrescrever} onOpenChange={setAvisoSobrescrever}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Este HTML foi editado manualmente</AlertDialogTitle>
+            <AlertDialogDescription>
+              O conteúdo atual não corresponde ao que o editor visual geraria. Trocar para o modo Visual agora vai reconstruir o e-mail a partir dos
+              últimos blocos conhecidos (ou começar em branco, se não houver nenhum) — as edições feitas direto no HTML serão perdidas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar em HTML</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmarSobrescrever}>Trocar para Visual</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

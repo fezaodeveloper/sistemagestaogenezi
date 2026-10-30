@@ -13,6 +13,7 @@ import {
 } from "@/lib/email/marketing-tipos";
 import { EmailCampanhaAcoes } from "@/components/admin/email-campanha-acoes";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 // uma Server Action desta página, então o limite de duração dela vale aqui.
 export const maxDuration = 60;
 
-const POR_PAGINA = 50;
+const POR_PAGINA = 25;
 
 type LinhaEnvio = {
   id: string;
@@ -31,6 +32,13 @@ type LinhaEnvio = {
   erro: string | null;
   enviado_at: string | null;
 };
+
+const ENVIO_STATUSES = ["enviado", "pendente", "erro"] as const;
+type EnvioStatus = (typeof ENVIO_STATUSES)[number];
+
+function isEnvioStatus(valor: unknown): valor is EnvioStatus {
+  return typeof valor === "string" && (ENVIO_STATUSES as readonly string[]).includes(valor);
+}
 
 const ENVIO_CLASSES: Record<string, string> = {
   pendente: "bg-muted text-muted-foreground",
@@ -48,12 +56,14 @@ export default async function CampanhaEmailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; status?: string }>;
 }) {
   await requireRole("admin");
   const { id } = await params;
-  const { page } = await searchParams;
+  const { page, status: statusParam } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+
+  const filtroEnvio = isEnvioStatus(statusParam) ? statusParam : null;
 
   const supabase = await createClient();
   const { data: campanha } = await supabase
@@ -68,14 +78,14 @@ export default async function CampanhaEmailPage({
 
   const paginaAtual = parsePagina(page);
   const offset = calcularOffset(paginaAtual, POR_PAGINA);
+  let consultaEnvios = supabase
+    .from("email_campanhas_envios")
+    .select("id, email, nome, status, erro, enviado_at", { count: "exact" })
+    .eq("campanha_id", id);
+  if (filtroEnvio) consultaEnvios = consultaEnvios.eq("status", filtroEnvio);
+
   const [{ data: envios, count }, { count: pendentes }] = await Promise.all([
-    supabase
-      .from("email_campanhas_envios")
-      .select("id, email, nome, status, erro, enviado_at", { count: "exact" })
-      .eq("campanha_id", id)
-      .order("created_at")
-      .order("id")
-      .range(offset, offset + POR_PAGINA - 1),
+    consultaEnvios.order("created_at").order("id").range(offset, offset + POR_PAGINA - 1),
     supabase.from("email_campanhas_envios").select("id", { count: "exact", head: true }).eq("campanha_id", id).eq("status", "pendente"),
   ]);
 
@@ -84,11 +94,16 @@ export default async function CampanhaEmailPage({
   const erros = campanha.total_erros as number;
   const cursoNome = (campanha.cursos as unknown as { nome: string } | null)?.nome;
   const progresso = total > 0 ? Math.round(((enviados + erros) / total) * 100) : 0;
+  // enviados e erros são contadores mutuamente exclusivos (cada envio termina em um dos dois,
+  // nunca nos dois) — taxa de entrega é enviados / (enviados + erros), não "enviados - erros"
+  // (que já seria o próprio total_enviados, sem subtrair nada de fato).
+  const taxaEntrega = enviados + erros > 0 ? Math.round((enviados / (enviados + erros)) * 100) : null;
 
   const cartoes = [
     { rotulo: "Destinatários", valor: total },
-    { rotulo: "Enviados", valor: enviados, cor: "text-green-600 dark:text-green-400" },
-    { rotulo: "Erros", valor: erros, cor: erros > 0 ? "text-red-600 dark:text-red-400" : "" },
+    { rotulo: "✅ Entregues", valor: enviados, cor: "text-green-600 dark:text-green-400" },
+    { rotulo: "❌ Falhas", valor: erros, cor: erros > 0 ? "text-red-600 dark:text-red-400" : "" },
+    { rotulo: "📊 Taxa de entrega", valor: taxaEntrega === null ? "—" : `${taxaEntrega}%` },
     { rotulo: "Pendentes", valor: pendentes ?? 0 },
   ];
 
@@ -114,7 +129,7 @@ export default async function CampanhaEmailPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {cartoes.map((cartao) => (
           <Card key={cartao.rotulo}>
             <CardContent className="flex flex-col gap-1">
@@ -138,6 +153,23 @@ export default async function CampanhaEmailPage({
       {status === "cancelada" && (pendentes ?? 0) > 0 && (
         <p className="text-muted-foreground text-sm">Envio cancelado: {pendentes} destinatário(s) não receberam.</p>
       )}
+
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por status do envio">
+        <Button size="sm" variant={filtroEnvio === null ? "secondary" : "outline"} render={<Link href={`/admin/email-marketing/${id}`} />} nativeButton={false}>
+          Todos
+        </Button>
+        {ENVIO_STATUSES.map((s) => (
+          <Button
+            key={s}
+            size="sm"
+            variant={filtroEnvio === s ? "secondary" : "outline"}
+            render={<Link href={`/admin/email-marketing/${id}?status=${s}`} />}
+            nativeButton={false}
+          >
+            {ENVIO_LABELS[s]}
+          </Button>
+        ))}
+      </div>
 
       <Card className="overflow-hidden py-0">
         <Table>
@@ -167,7 +199,7 @@ export default async function CampanhaEmailPage({
             {(envios ?? []).length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="text-muted-foreground py-8 text-center text-sm">
-                  Nenhum envio registrado.
+                  {filtroEnvio ? "Nenhum envio com esse status." : "Nenhum envio registrado."}
                 </TableCell>
               </TableRow>
             )}
@@ -181,7 +213,7 @@ export default async function CampanhaEmailPage({
         totalRegistros={count ?? 0}
         limite={POR_PAGINA}
         baseUrl={`/admin/email-marketing/${id}`}
-        searchParams={{}}
+        searchParams={filtroEnvio ? { status: filtroEnvio } : {}}
       />
     </div>
   );

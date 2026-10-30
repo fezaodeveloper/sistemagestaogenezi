@@ -8,6 +8,12 @@ export const SEGMENTOS_EMAIL = [
   "curso_especifico",
   "com_cobranca_atrasada",
   "sem_matricula",
+  // TAREFA email 2.3 — segmentos de leads (CRM), exigem a migration
+  // 20261030400000_fix_email_descadastros.sql aplicada (CHECK de `segmento` + coluna
+  // leads_campanha_id novos).
+  "leads_campanha",
+  "leads_ativos",
+  "leads_curso",
 ] as const;
 export type SegmentoEmail = (typeof SEGMENTOS_EMAIL)[number];
 
@@ -18,7 +24,21 @@ export const SEGMENTO_LABELS: Record<SegmentoEmail, string> = {
   curso_especifico: "Alunos de um curso específico",
   com_cobranca_atrasada: "Alunos com cobrança em atraso",
   sem_matricula: "Cadastrados sem nenhuma matrícula",
+  leads_campanha: "Leads de uma campanha",
+  leads_ativos: "Todos os leads (exceto descartados)",
+  leads_curso: "Leads por curso de interesse",
 };
+
+// Agrupamento visual do select (TAREFA: "--- Alunos ---" / "--- Leads ---").
+export const SEGMENTOS_ALUNOS: readonly SegmentoEmail[] = [
+  "todos",
+  "ativos",
+  "inativos",
+  "curso_especifico",
+  "com_cobranca_atrasada",
+  "sem_matricula",
+];
+export const SEGMENTOS_LEADS: readonly SegmentoEmail[] = ["leads_campanha", "leads_ativos", "leads_curso"];
 
 export const CAMPANHA_STATUSES = ["rascunho", "agendada", "enviando", "enviada", "cancelada"] as const;
 export type CampanhaEmailStatus = (typeof CAMPANHA_STATUSES)[number];

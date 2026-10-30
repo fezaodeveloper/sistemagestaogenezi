@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { EmailCampanhaEditor, type CursoOpcao } from "@/components/admin/email-campanha-editor";
+import { EmailCampanhaEditor, type CampanhaMarketingOpcao, type CursoOpcao } from "@/components/admin/email-campanha-editor";
 
 // "Enviar agora" roda em segundo plano depois da resposta e usa até ~50s dessa função.
 export const maxDuration = 60;
@@ -11,7 +11,10 @@ export default async function NovaCampanhaEmailPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const { data } = await supabase.from("cursos").select("id, nome").order("nome");
+  const [{ data: cursos }, { data: campanhas }] = await Promise.all([
+    supabase.from("cursos").select("id, nome").order("nome"),
+    supabase.from("campanhas_marketing").select("id, nome").eq("status", "ativa").order("nome"),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,7 +25,7 @@ export default async function NovaCampanhaEmailPage() {
         </Link>
         <h1 className="text-2xl font-semibold">Nova campanha</h1>
       </div>
-      <EmailCampanhaEditor campanha={null} cursos={(data ?? []) as CursoOpcao[]} />
+      <EmailCampanhaEditor campanha={null} cursos={(cursos ?? []) as CursoOpcao[]} campanhasMarketing={(campanhas ?? []) as CampanhaMarketingOpcao[]} />
     </div>
   );
 }

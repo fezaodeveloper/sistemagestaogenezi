@@ -17,7 +17,11 @@ import { anexarRodapeDescadastro, linkDescadastro } from "@/lib/email/descadastr
 // plano, tela de detalhes ou cron) continua depois. Nada se repete: só os `pendente`
 // são enviados, e uma trava curta impede duas execuções simultâneas.
 
-export type Destinatario = { email: string; nome: string; aluno_id: string };
+// aluno_id null = destinatário veio de leads (TAREFA email 2.3), não tem linha em alunos.
+// email_campanhas_envios.aluno_id já é nullable (on delete set null), não precisou de coluna nova.
+export type Destinatario = { email: string; nome: string; aluno_id: string | null };
+
+export type ResumoDestinatarios = { destinatarios: Destinatario[]; excluidosDescadastro: number };
 
 type Supabase = ReturnType<typeof createAdminClient>;
 
@@ -44,20 +48,28 @@ async function idsAlunos(consulta: (de: number, ate: number) => PromiseLike<{ da
 
 // ===== a) Destinatários =====
 
-export async function getDestinatarios(segmento: SegmentoEmail, cursoId?: string | null): Promise<Destinatario[]> {
-  const admin = createAdminClient();
+const SEGMENTOS_DE_LEADS = new Set<SegmentoEmail>(["leads_campanha", "leads_ativos", "leads_curso"]);
 
-  const alunos = await lerTudo<{ id: string; email: string | null; full_name: string | null; email_marketing_ativo: boolean | null }>((de, ate) =>
-    admin.from("alunos").select("id, email, full_name, email_marketing_ativo").not("email", "is", null).order("id").range(de, ate),
-  );
-
-  // Descadastrados (LGPD) NUNCA entram, em nenhum segmento. Dois critérios: a marca no
-  // aluno E o registro por e-mail — este último vale mesmo se o mesmo endereço estiver
-  // em outro cadastro, ou se o aluno original tiver sido excluído.
-  const descadastrados = new Set(
+// Descadastrados (LGPD) NUNCA entram, em nenhum segmento, nem alunos nem leads. Dois critérios
+// pra alunos (a marca em alunos.email_marketing_ativo E o registro por e-mail — este último vale
+// mesmo se o mesmo endereço estiver em outro cadastro, ou se o aluno original tiver sido
+// excluído); leads só têm o segundo critério (não têm essa coluna).
+async function emailsDescadastrados(admin: Supabase): Promise<Set<string>> {
+  return new Set(
     (await lerTudo<{ email: string }>((de, ate) => admin.from("email_descadastros").select("email").order("id").range(de, ate))).map((linha) =>
       linha.email.toLowerCase(),
     ),
+  );
+}
+
+async function destinatariosDeAlunos(
+  admin: Supabase,
+  segmento: SegmentoEmail,
+  cursoId: string | null | undefined,
+  descadastrados: Set<string>,
+): Promise<ResumoDestinatarios> {
+  const alunos = await lerTudo<{ id: string; email: string | null; full_name: string | null; email_marketing_ativo: boolean | null }>((de, ate) =>
+    admin.from("alunos").select("id, email, full_name, email_marketing_ativo").not("email", "is", null).order("id").range(de, ate),
   );
 
   let manter: (alunoId: string) => boolean = () => true;
@@ -71,7 +83,7 @@ export async function getDestinatarios(segmento: SegmentoEmail, cursoId?: string
     const atrasados = await idsAlunos((de, ate) => admin.from("parcelas").select("aluno_id").eq("status", "atrasado").order("id").range(de, ate));
     manter = (id) => atrasados.has(id);
   } else if (segmento === "curso_especifico") {
-    if (!cursoId) return [];
+    if (!cursoId) return { destinatarios: [], excluidosDescadastro: 0 };
     // Qualquer matrícula em turma do curso, exceto as canceladas.
     const doCurso = await idsAlunos((de, ate) =>
       admin
@@ -88,14 +100,77 @@ export async function getDestinatarios(segmento: SegmentoEmail, cursoId?: string
   // Dedup por e-mail (minúsculo): dois cadastros com o mesmo endereço recebem uma vez.
   const vistos = new Set<string>();
   const destinatarios: Destinatario[] = [];
+  let excluidosDescadastro = 0;
   for (const aluno of alunos) {
     const email = aluno.email?.trim().toLowerCase();
     if (!email || !REGEX_EMAIL.test(email) || vistos.has(email) || !manter(aluno.id)) continue;
-    if (aluno.email_marketing_ativo === false || descadastrados.has(email)) continue;
+    if (aluno.email_marketing_ativo === false || descadastrados.has(email)) {
+      if (descadastrados.has(email)) excluidosDescadastro++;
+      continue;
+    }
     vistos.add(email);
     destinatarios.push({ email, nome: aluno.full_name?.trim() || "", aluno_id: aluno.id });
   }
-  return destinatarios;
+  return { destinatarios, excluidosDescadastro };
+}
+
+// TAREFA email 2.3 (PARTE 2) — leads.email (CRM 2.1), nunca leads.curso_id/campanha_id vazios
+// pros segmentos que exigem (leads_curso/leads_campanha devolvem vazio sem o id escolhido, mesmo
+// comportamento de curso_especifico pra alunos).
+async function destinatariosDeLeads(
+  admin: Supabase,
+  segmento: SegmentoEmail,
+  cursoId: string | null | undefined,
+  leadsCampanhaId: string | null | undefined,
+  descadastrados: Set<string>,
+): Promise<ResumoDestinatarios> {
+  if (segmento === "leads_curso" && !cursoId) return { destinatarios: [], excluidosDescadastro: 0 };
+  if (segmento === "leads_campanha" && !leadsCampanhaId) return { destinatarios: [], excluidosDescadastro: 0 };
+
+  type LinhaLead = { id: string; nome: string; email: string | null; status: string };
+  const leads = await lerTudo<LinhaLead>((de, ate) => {
+    let query = admin.from("leads").select("id, nome, email, status").not("email", "is", null);
+    if (segmento === "leads_curso") query = query.eq("curso_id", cursoId as string);
+    if (segmento === "leads_campanha") query = query.eq("campanha_id", leadsCampanhaId as string);
+    if (segmento === "leads_ativos") query = query.neq("status", "descartado");
+    return query.order("id").range(de, ate);
+  });
+
+  const vistos = new Set<string>();
+  const destinatarios: Destinatario[] = [];
+  let excluidosDescadastro = 0;
+  for (const lead of leads) {
+    const email = lead.email?.trim().toLowerCase();
+    if (!email || !REGEX_EMAIL.test(email) || vistos.has(email)) continue;
+    if (descadastrados.has(email)) {
+      excluidosDescadastro++;
+      continue;
+    }
+    vistos.add(email);
+    destinatarios.push({ email, nome: lead.nome?.trim() || "", aluno_id: null });
+  }
+  return { destinatarios, excluidosDescadastro };
+}
+
+export async function getResumoDestinatarios(
+  segmento: SegmentoEmail,
+  cursoId?: string | null,
+  leadsCampanhaId?: string | null,
+): Promise<ResumoDestinatarios> {
+  const admin = createAdminClient();
+  const descadastrados = await emailsDescadastrados(admin);
+
+  return SEGMENTOS_DE_LEADS.has(segmento)
+    ? destinatariosDeLeads(admin, segmento, cursoId, leadsCampanhaId, descadastrados)
+    : destinatariosDeAlunos(admin, segmento, cursoId, descadastrados);
+}
+
+export async function getDestinatarios(
+  segmento: SegmentoEmail,
+  cursoId?: string | null,
+  leadsCampanhaId?: string | null,
+): Promise<Destinatario[]> {
+  return (await getResumoDestinatarios(segmento, cursoId, leadsCampanhaId)).destinatarios;
 }
 
 // ===== b) Envio =====
@@ -106,6 +181,7 @@ type LinhaCampanha = {
   corpo_html: string;
   segmento: SegmentoEmail;
   curso_id: string | null;
+  leads_campanha_id: string | null;
   status: string;
 };
 
@@ -119,7 +195,7 @@ export async function iniciarEnvioCampanha(campanhaId: string): Promise<Resultad
 
   const { data: atual, error: erroLeitura } = await admin
     .from("email_campanhas_marketing")
-    .select("id, assunto, corpo_html, segmento, curso_id, status")
+    .select("id, assunto, corpo_html, segmento, curso_id, leads_campanha_id, status")
     .eq("id", campanhaId)
     .maybeSingle();
   if (erroLeitura || !atual) return { ok: false, erro: "Campanha não encontrada." };
@@ -135,7 +211,7 @@ export async function iniciarEnvioCampanha(campanhaId: string): Promise<Resultad
 
   let destinatarios: Destinatario[];
   try {
-    destinatarios = await getDestinatarios(campanha.segmento, campanha.curso_id);
+    destinatarios = await getDestinatarios(campanha.segmento, campanha.curso_id, campanha.leads_campanha_id);
   } catch {
     return {
       ok: false,

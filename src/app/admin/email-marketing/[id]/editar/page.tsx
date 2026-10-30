@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { isSegmentoEmail } from "@/lib/email/marketing-tipos";
-import { EmailCampanhaEditor, type CampanhaEditavel, type CursoOpcao } from "@/components/admin/email-campanha-editor";
+import { EmailCampanhaEditor, type CampanhaEditavel, type CampanhaMarketingOpcao, type CursoOpcao } from "@/components/admin/email-campanha-editor";
 
 // "Enviar agora" roda em segundo plano depois da resposta e usa até ~50s dessa função.
 export const maxDuration = 60;
@@ -15,13 +15,14 @@ export default async function EditarCampanhaEmailPage({ params }: { params: Prom
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
   const supabase = await createClient();
-  const [{ data: campanha }, { data: cursos }] = await Promise.all([
+  const [{ data: campanha }, { data: cursos }, { data: campanhas }] = await Promise.all([
     supabase
       .from("email_campanhas_marketing")
-      .select("id, nome, assunto, corpo_html, segmento, curso_id, status, agendada_para")
+      .select("id, nome, assunto, corpo_html, segmento, curso_id, leads_campanha_id, status, agendada_para")
       .eq("id", id)
       .maybeSingle(),
     supabase.from("cursos").select("id, nome").order("nome"),
+    supabase.from("campanhas_marketing").select("id, nome").eq("status", "ativa").order("nome"),
   ]);
   if (!campanha) notFound();
 
@@ -35,6 +36,7 @@ export default async function EditarCampanhaEmailPage({ params }: { params: Prom
     corpo_html: campanha.corpo_html as string,
     segmento: isSegmentoEmail(campanha.segmento) ? campanha.segmento : "todos",
     curso_id: (campanha.curso_id as string | null) ?? null,
+    leads_campanha_id: (campanha.leads_campanha_id as string | null) ?? null,
     status: campanha.status as "rascunho" | "agendada",
     agendada_para: (campanha.agendada_para as string | null) ?? null,
   };
@@ -48,7 +50,11 @@ export default async function EditarCampanhaEmailPage({ params }: { params: Prom
         </Link>
         <h1 className="text-2xl font-semibold">Editar campanha</h1>
       </div>
-      <EmailCampanhaEditor campanha={editavel} cursos={(cursos ?? []) as CursoOpcao[]} />
+      <EmailCampanhaEditor
+        campanha={editavel}
+        cursos={(cursos ?? []) as CursoOpcao[]}
+        campanhasMarketing={(campanhas ?? []) as CampanhaMarketingOpcao[]}
+      />
     </div>
   );
 }

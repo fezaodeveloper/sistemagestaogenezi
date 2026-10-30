@@ -8,7 +8,12 @@ import { createClient } from "@/lib/supabase/server";
 import { emailConfigurado, enviarEmail } from "@/lib/email/provedor";
 import { htmlParaTexto, renderizarTexto } from "@/lib/email/renderizar";
 import { anexarRodapeDescadastro, linkDescadastro } from "@/lib/email/descadastro";
-import { getDestinatarios, iniciarEnvioCampanha, processarEnvios, type ResultadoProcessamento } from "@/lib/email/marketing";
+import {
+  getResumoDestinatarios,
+  iniciarEnvioCampanha,
+  processarEnvios,
+  type ResultadoProcessamento,
+} from "@/lib/email/marketing";
 import { EXEMPLO_CAMPANHA, SEGMENTOS_EMAIL, VARIAVEIS_CAMPANHA } from "@/lib/email/marketing-tipos";
 
 export type DadosCampanhaForm = {
@@ -16,8 +21,11 @@ export type DadosCampanhaForm = {
   assunto: string;
   corpoHtml: string;
   segmento: string;
-  // Só vale com segmento "curso_especifico".
+  // Só vale com segmento "curso_especifico" ou "leads_curso".
   cursoId: string;
+  // Só vale com segmento "leads_campanha" (TAREFA email 2.3) — id de campanhas_marketing, não
+  // de cursos (coluna separada, leads_campanha_id).
+  leadsCampanhaId: string;
 };
 
 const dadosSchema = z
@@ -27,10 +35,15 @@ const dadosSchema = z
     corpoHtml: z.string().trim().min(1, { error: "O corpo do e-mail não pode ficar vazio." }).max(200_000, { error: "Corpo longo demais." }),
     segmento: z.enum(SEGMENTOS_EMAIL, { error: "Escolha o segmento." }),
     cursoId: z.string(),
+    leadsCampanhaId: z.string(),
   })
-  .refine((d) => d.segmento !== "curso_especifico" || z.uuid().safeParse(d.cursoId).success, {
+  .refine((d) => (d.segmento !== "curso_especifico" && d.segmento !== "leads_curso") || z.uuid().safeParse(d.cursoId).success, {
     error: "Escolha o curso do segmento.",
     path: ["cursoId"],
+  })
+  .refine((d) => d.segmento !== "leads_campanha" || z.uuid().safeParse(d.leadsCampanhaId).success, {
+    error: "Escolha a campanha do segmento.",
+    path: ["leadsCampanhaId"],
   });
 
 const uuid = z.uuid();
@@ -55,7 +68,8 @@ export async function salvarCampanha(id: string | null, dadosBrutos: DadosCampan
     assunto: dados.assunto,
     corpo_html: dados.corpoHtml,
     segmento: dados.segmento,
-    curso_id: dados.segmento === "curso_especifico" ? dados.cursoId : null,
+    curso_id: dados.segmento === "curso_especifico" || dados.segmento === "leads_curso" ? dados.cursoId : null,
+    leads_campanha_id: dados.segmento === "leads_campanha" ? dados.leadsCampanhaId : null,
   };
 
   const supabase = await createClient();
@@ -79,13 +93,25 @@ export async function salvarCampanha(id: string | null, dadosBrutos: DadosCampan
   return { id };
 }
 
-export async function contarDestinatarios(segmento: string, cursoId: string): Promise<{ total: number } | { error: string }> {
+// TAREFA email 2.3 (PARTE 2) — resumo "X elegíveis | Y excluídos por descadastro", recalculado
+// ao mudar segmento/curso/campanha no editor.
+export async function contarDestinatarios(
+  segmento: string,
+  cursoId: string,
+  leadsCampanhaId: string = "",
+): Promise<{ elegiveis: number; excluidosDescadastro: number } | { error: string }> {
   await requireRole("admin");
   const seg = z.enum(SEGMENTOS_EMAIL).safeParse(segmento);
   if (!seg.success) return { error: "Segmento inválido." };
-  if (seg.data === "curso_especifico" && !uuid.safeParse(cursoId).success) return { total: 0 };
+  if ((seg.data === "curso_especifico" || seg.data === "leads_curso") && !uuid.safeParse(cursoId).success) {
+    return { elegiveis: 0, excluidosDescadastro: 0 };
+  }
+  if (seg.data === "leads_campanha" && !uuid.safeParse(leadsCampanhaId).success) {
+    return { elegiveis: 0, excluidosDescadastro: 0 };
+  }
   try {
-    return { total: (await getDestinatarios(seg.data, cursoId || null)).length };
+    const resumo = await getResumoDestinatarios(seg.data, cursoId || null, leadsCampanhaId || null);
+    return { elegiveis: resumo.destinatarios.length, excluidosDescadastro: resumo.excluidosDescadastro };
   } catch {
     return { error: "Não foi possível contar os destinatários." };
   }
@@ -218,7 +244,7 @@ export async function duplicarCampanha(id: string): Promise<{ id: string } | { e
   const supabase = await createClient();
   const { data: original } = await supabase
     .from("email_campanhas_marketing")
-    .select("nome, assunto, corpo_html, segmento, curso_id")
+    .select("nome, assunto, corpo_html, segmento, curso_id, leads_campanha_id")
     .eq("id", id)
     .maybeSingle();
   if (!original) return { error: "Campanha não encontrada." };
