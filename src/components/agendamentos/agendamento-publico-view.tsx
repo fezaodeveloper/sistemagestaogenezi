@@ -3,7 +3,14 @@
 import { useMemo, useState, useTransition, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { criarAgendamentoPublico } from "@/app/agendar/[slug]/actions";
-import { AGENDAMENTO_JANELA_DIAS, horarioBloqueadoPorIntervalo, type AgendamentoPagina } from "@/lib/agendamentos/schema";
+import {
+  AGENDAMENTO_JANELA_DIAS,
+  ARREDONDAMENTO_BOTAO_CSS,
+  expandirHorariosDisponiveis,
+  horarioBloqueadoPorIntervalo,
+  resolverConfigVisual,
+  type AgendamentoPagina,
+} from "@/lib/agendamentos/schema";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
 import { Button } from "@/components/ui/button";
@@ -137,12 +144,17 @@ export function AgendamentoPublicoView({
 
   const horariosPorDiaSemana = useMemo(() => {
     const mapa = new Map<number, string[]>();
-    for (const { dia_semana, horario } of pagina.horarios_disponiveis) {
-      mapa.set(dia_semana, [...(mapa.get(dia_semana) ?? []), horario]);
+    // TAREFA — PARTE 2: horarios_disponiveis pode ter janelas (hora_inicio/hora_fim) além do
+    // formato antigo (horario único) — expandirHorariosDisponiveis gera os horários concretos
+    // dos dois formatos num único ponto, respeitando duração/intervalo da página.
+    const expandidos = expandirHorariosDisponiveis(pagina.horarios_disponiveis, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0);
+    for (const { dia_semana, horario } of expandidos) {
+      const atual = mapa.get(dia_semana) ?? [];
+      if (!atual.includes(horario)) mapa.set(dia_semana, [...atual, horario]);
     }
     for (const horarios of mapa.values()) horarios.sort((a, b) => a.localeCompare(b));
     return mapa;
-  }, [pagina.horarios_disponiveis]);
+  }, [pagina.horarios_disponiveis, pagina.duracao_minutos, pagina.intervalo_entre_horarios]);
 
   // Horários que o servidor recusou por lotação durante ESTA sessão (o mapa de
   // contagem vem do carregamento da página e fica desatualizado).
@@ -196,6 +208,10 @@ export function AgendamentoPublicoView({
 
   const corPrimaria = pagina.cor_primaria;
   const style = { "--cor-primaria": corPrimaria } as CSSProperties;
+  // TAREFA agendamentos — PARTE 4: só o botão final de confirmação (CTA principal) recebe a
+  // personalização de config_visual — o resto da página pública (calendário, passos 1/2) segue
+  // usando cor_primaria, igual já funcionava, pra não arriscar quebrar o fluxo existente.
+  const visual = resolverConfigVisual(pagina.config_visual);
 
   const horariosDoDiaSelecionado = useMemo(() => {
     if (!dataSelecionada) return [];
@@ -687,8 +703,17 @@ export function AgendamentoPublicoView({
               <Button type="button" variant="outline" onClick={() => setPasso(2)} disabled={isPending}>
                 Voltar
               </Button>
-              <Button type="submit" className="flex-1" style={{ backgroundColor: corPrimaria }} disabled={isPending}>
-                {isPending ? "Confirmando..." : "Confirmar agendamento"}
+              <Button
+                type="submit"
+                className="flex-1"
+                style={{
+                  backgroundColor: visual.botao_cor,
+                  color: visual.botao_cor_texto,
+                  borderRadius: ARREDONDAMENTO_BOTAO_CSS[visual.botao_arredondamento],
+                }}
+                disabled={isPending}
+              >
+                {isPending ? "Confirmando..." : visual.botao_texto}
               </Button>
             </form>
           </CardContent>

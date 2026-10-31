@@ -7,7 +7,13 @@ import { AgendamentoPublicoView } from "@/components/agendamentos/agendamento-pu
 import { AgendarTema } from "@/components/agendamentos/agendar-tema";
 import { getPixelsParaPagina } from "@/lib/pixels/injetar";
 import { PixelsScripts } from "@/components/pixels/pixels-scripts";
-import { AGENDAMENTO_JANELA_DIAS } from "@/lib/agendamentos/schema";
+import {
+  AGENDAMENTO_JANELA_DIAS,
+  resolverConfigVisual,
+  TAMANHO_SUBTITULO_CSS,
+  TAMANHO_TITULO_CSS,
+} from "@/lib/agendamentos/schema";
+import { FONTE_AGENDAMENTO_CSS } from "@/lib/agendamentos/fontes";
 
 const JANELA_DIAS = AGENDAMENTO_JANELA_DIAS;
 
@@ -73,25 +79,52 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
   // Pixels de rastreamento (Apps > Pixels). O agendamento não tem curso: só recebe os sem restrição.
   const pixels = await getPixelsParaPagina();
 
+  // TAREFA agendamentos — PARTE 4: aparência personalizada (resolverConfigVisual nunca quebra em
+  // config_visual ausente/parcial/inválida — devolve sempre os 13 campos completos).
+  const visual = resolverConfigVisual(pagina.config_visual);
+
   return (
     <AgendarTema>
       <PixelsScripts pixels={pixels} />
-      <div className="flex w-full max-w-lg flex-col gap-6 py-6">
-        <div className="flex flex-col items-center gap-2 text-center">
+      <div
+        className="flex w-full max-w-lg flex-col gap-6 rounded-lg p-6"
+        style={{ backgroundColor: visual.cor_fundo, fontFamily: FONTE_AGENDAMENTO_CSS[visual.fonte] }}
+      >
+        <div className="flex flex-col items-center gap-2">
           {config?.escola_logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- logo vem do Storage do próprio projeto
             <img
               src={config.escola_logo_url}
               alt={config?.escola_nome ?? "Gênezi"}
-              className="h-12 object-contain dark:rounded-md dark:bg-white/95 dark:px-3 dark:py-1.5"
+              className="h-12 self-center object-contain dark:rounded-md dark:bg-white/95 dark:px-3 dark:py-1.5"
             />
           ) : (
-            <p className="text-lg font-semibold">{config?.escola_nome ?? "Gênezi — Educação Profissional"}</p>
+            <p className="self-center text-lg font-semibold" style={{ color: visual.cor_texto }}>
+              {config?.escola_nome ?? "Gênezi — Educação Profissional"}
+            </p>
           )}
-          <h1 className="text-2xl font-semibold">{pagina.titulo}</h1>
-          {pagina.descricao && <p className="text-muted-foreground text-sm">{pagina.descricao}</p>}
+          <h1
+            className="w-full font-semibold"
+            style={{ color: visual.cor_texto, fontSize: TAMANHO_TITULO_CSS[visual.titulo_tamanho], textAlign: visual.titulo_alinhamento }}
+          >
+            {pagina.titulo}
+          </h1>
+          {pagina.descricao && (
+            <p
+              className="w-full"
+              style={{
+                color: visual.cor_texto_secundario,
+                fontSize: TAMANHO_SUBTITULO_CSS[visual.subtitulo_tamanho],
+                textAlign: visual.subtitulo_alinhamento,
+              }}
+            >
+              {pagina.descricao}
+            </p>
+          )}
           {pagina.local_atendimento && (
-            <p className="text-muted-foreground text-sm">📍 {pagina.local_atendimento}</p>
+            <p className="w-full text-center text-sm" style={{ color: visual.cor_texto_secundario }}>
+              📍 {pagina.local_atendimento}
+            </p>
           )}
         </div>
 

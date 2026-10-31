@@ -1,14 +1,18 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getAgendamentoPaginasAdmin } from "@/lib/agendamentos/agendamentos";
-import { getResponsaveisAdmin } from "@/app/admin/comercial/agendamentos/actions";
+import { getCampanhasPaginasAtivas, getResponsaveisAdmin } from "@/app/admin/comercial/agendamentos/actions";
 import { AgendamentosAdminView } from "@/components/admin/agendamentos-admin-view";
 
 export default async function AgendamentosPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const [paginas, responsaveis] = await Promise.all([getAgendamentoPaginasAdmin(supabase), getResponsaveisAdmin()]);
+  const [paginas, responsaveis, campanhas] = await Promise.all([
+    getAgendamentoPaginasAdmin(supabase),
+    getResponsaveisAdmin(),
+    getCampanhasPaginasAtivas(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -19,7 +23,7 @@ export default async function AgendamentosPage() {
         </p>
       </div>
 
-      <AgendamentosAdminView paginas={paginas} responsaveis={responsaveis} />
+      <AgendamentosAdminView paginas={paginas} responsaveis={responsaveis} campanhas={campanhas} />
     </div>
   );
 }

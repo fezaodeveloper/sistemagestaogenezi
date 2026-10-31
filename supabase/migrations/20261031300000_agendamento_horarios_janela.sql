@@ -1,0 +1,22 @@
+-- TAREFA agendamentos — PARTE 2: horários com janela (início/fim) por dia.
+--
+-- Sem ALTER de coluna, de propósito (pedido explícito da tarefa) — `agendamento_paginas.
+-- horarios_disponiveis` continua sendo o mesmo jsonb de sempre, sem CHECK constraint sobre o seu
+-- formato interno. Esta migration só DOCUMENTA a mudança de estrutura do array:
+--
+--   Formato ANTIGO (continua aceito, retrocompatibilidade total — nenhuma página existente
+--   precisa ser editada):
+--     [{"dia_semana": 1, "horario": "09:00"}, {"dia_semana": 1, "horario": "10:00"}, ...]
+--
+--   Formato NOVO (janela — o editor da página passou a gravar nesse formato a partir desta
+--   tarefa; os horários individuais dentro da janela são gerados em runtime, nunca persistidos
+--   um a um):
+--     [{"dia_semana": 1, "hora_inicio": "08:00", "hora_fim": "12:00"}, ...]
+--
+-- Os dois formatos podem coexistir no MESMO array (uma página editada antes e depois desta
+-- tarefa) — todo consumidor (validação de slot, calendário público, reagendamento) lê através de
+-- expandirHorariosDisponiveis() (src/lib/agendamentos/schema.ts), que entende os dois e sempre
+-- devolve a lista plana de horários concretos, respeitando duracao_minutos +
+-- intervalo_entre_horarios da página.
+--
+-- NÃO APLICADA — não há nada pra aplicar de fato (migration documental, sem DDL).

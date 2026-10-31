@@ -18,6 +18,7 @@ import {
 import {
   agendamentoPaginaFormSchema,
   AGENDAMENTO_STATUSES,
+  expandirHorariosDisponiveis,
   horarioBloqueadoPorIntervalo,
   type Agendamento,
   type AgendamentoStatus,
@@ -51,6 +52,7 @@ function parseAgendamentoPaginaForm(formData: FormData) {
   const camposRaw = formData.get("campos_extras");
   const feriadosRaw = formData.get("feriados_bloqueados");
   const datasRaw = formData.get("datas_bloqueadas");
+  const configVisualRaw = formData.get("config_visual");
 
   return agendamentoPaginaFormSchema.safeParse({
     titulo: formData.get("titulo"),
@@ -71,6 +73,8 @@ function parseAgendamentoPaginaForm(formData: FormData) {
     responsavel_id: formData.get("responsavel_id") || "",
     feriados_bloqueados: feriadosRaw ? JSON.parse(String(feriadosRaw)) : [],
     datas_bloqueadas: datasRaw ? JSON.parse(String(datasRaw)) : [],
+    campanha_id: formData.get("campanha_id") || "",
+    config_visual: configVisualRaw ? JSON.parse(String(configVisualRaw)) : {},
   });
 }
 
@@ -81,6 +85,21 @@ export async function getResponsaveisAdmin(): Promise<ResponsavelOpcao[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("profiles").select("id, full_name").eq("role", "admin").order("full_name");
   return (data ?? []) as ResponsavelOpcao[];
+}
+
+// TAREFA agendamentos — PARTE 3: lista de campanha_paginas ativas pro <select> "Campanha
+// associada (opcional)" do editor de página de agendamento.
+export type CampanhaPaginaOpcao = { id: string; titulo: string };
+
+export async function getCampanhasPaginasAtivas(): Promise<CampanhaPaginaOpcao[]> {
+  await requireRole("admin");
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("campanha_paginas")
+    .select("id, titulo")
+    .eq("status", "ativa")
+    .order("titulo");
+  return (data ?? []) as CampanhaPaginaOpcao[];
 }
 
 export async function criarAgendamentoPagina(formData: FormData): Promise<{ error?: string; id?: string }> {
@@ -99,6 +118,8 @@ export async function criarAgendamentoPagina(formData: FormData): Promise<{ erro
     responsavel_id: parsed.data.responsavel_id || null,
     feriados_bloqueados: parsed.data.feriados_bloqueados,
     datas_bloqueadas: parsed.data.datas_bloqueadas,
+    campanha_id: parsed.data.campanha_id || null,
+    config_visual: parsed.data.config_visual,
   };
   let { data, error } = await supabase
     .from("agendamento_paginas")
@@ -191,6 +212,8 @@ export async function atualizarAgendamentoPagina(id: string, formData: FormData)
       responsavel_id: parsed.data.responsavel_id || null,
       feriados_bloqueados: parsed.data.feriados_bloqueados,
       datas_bloqueadas: parsed.data.datas_bloqueadas,
+      campanha_id: parsed.data.campanha_id || null,
+      config_visual: parsed.data.config_visual,
     })
     .eq("id", id);
 
@@ -322,6 +345,8 @@ export async function duplicarAgendamentoPagina(id: string): Promise<{ error?: s
         responsavel_id: original.responsavel_id,
         feriados_bloqueados: original.feriados_bloqueados,
         datas_bloqueadas: original.datas_bloqueadas,
+        campanha_id: original.campanha_id,
+        config_visual: original.config_visual,
       })
       .select("id")
       .single();
@@ -405,9 +430,8 @@ export async function getHorariosDisponiveisReagendamento(
   if (!pagina) return [];
 
   const diaSemana = new Date(`${dataISO}T00:00:00`).getDay();
-  const candidatos = [
-    ...new Set(pagina.horarios_disponiveis.filter((h) => h.dia_semana === diaSemana).map((h) => h.horario)),
-  ]
+  const expandidos = expandirHorariosDisponiveis(pagina.horarios_disponiveis, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0);
+  const candidatos = [...new Set(expandidos.filter((h) => h.dia_semana === diaSemana).map((h) => h.horario))]
     .filter((horario) => validarSlotPermitido(pagina, dataISO, horario))
     .sort();
   if (candidatos.length === 0) return [];

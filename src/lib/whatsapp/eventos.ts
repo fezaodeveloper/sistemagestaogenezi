@@ -46,7 +46,7 @@ import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
 // Best-effort: nunca pode interromper o envio em si, que já aconteceu com sucesso/falha antes
 // desta chamada. Respeita a constraint real de mensagens_enviadas (exatamente um entre
 // matricula_id/lead_id, nunca os dois, nunca nenhum) — chamadores garantem isso.
-type TipoNotificacaoAuditoria = "agendamento_lembrete" | "cobranca_atrasada" | "lead_followup";
+type TipoNotificacaoAuditoria = "agendamento_confirmacao" | "agendamento_lembrete" | "cobranca_atrasada" | "lead_followup";
 
 async function registrarEnvioWhatsapp(params: {
   tipo: TipoNotificacaoAuditoria;
@@ -117,6 +117,59 @@ const URL_SITE_PADRAO = "https://sistemagestaogenezi.vercel.app";
 
 function urlPortal(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL || URL_SITE_PADRAO).replace(/\/+$/, "");
+}
+
+// ----- Agendamento: confirmação imediata (src/app/agendar/[slug]/actions.ts) -----
+// TAREFA agendamentos — PARTE 5: substitui o console.log stub que existia desde sempre (ver
+// PERGUNTA DE FATO 1). Chamada fire-and-forget pela Server Action pública, depois da
+// resolução de lead (pra já existir lead_id pra logar em mensagens_enviadas) — nunca pode
+// atrasar nem quebrar a resposta de "agendamento confirmado" ao visitante.
+export function notificarWhatsappAgendamentoConfirmacao(agendamentoId: string): void {
+  emSegundoPlano(async () => {
+    if (!(await whatsappToggleHabilitado("wz_agendamento_confirmacao"))) return;
+
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("agendamentos")
+      .select("nome, whatsapp, data_agendada, horario, pagina_id, lead_id")
+      .eq("id", agendamentoId)
+      .maybeSingle();
+    const agendamento = data as
+      | { nome: string; whatsapp: string; data_agendada: string; horario: string; pagina_id: string; lead_id: string | null }
+      | null;
+    if (!agendamento?.whatsapp) return;
+
+    let slug = "";
+    let local = "";
+    try {
+      const { data: pagina } = await admin
+        .from("agendamento_paginas")
+        .select("slug, local_atendimento")
+        .eq("id", agendamento.pagina_id)
+        .maybeSingle();
+      slug = (pagina?.slug as string | undefined) ?? "";
+      local = (pagina?.local_atendimento as string | null | undefined) ?? "";
+    } catch {
+      // Mantém slug/local vazios — ver comentário de notificarWhatsappAgendamentoLembrete.
+    }
+
+    const mensagem = await renderTemplate("agendamento_confirmacao", {
+      nome: primeiroNome(agendamento.nome) || agendamento.nome,
+      data: dataBR(agendamento.data_agendada),
+      horario: agendamento.horario,
+      local: local || "A confirmar",
+      link_gerenciar: slug ? `${urlPortal()}/agendar/${slug}/meu-agendamento/${agendamentoId}` : "",
+    });
+    const resultado = await enviarWhatsApp(agendamento.whatsapp, mensagem);
+    await registrarEnvioWhatsapp({
+      tipo: "agendamento_confirmacao",
+      matriculaId: null,
+      leadId: agendamento.lead_id,
+      telefoneDestino: agendamento.whatsapp,
+      mensagemTexto: mensagem,
+      resultado,
+    });
+  });
 }
 
 // ----- Agendamento: lembrete D-1 (cron lembrete-agendamentos) -----

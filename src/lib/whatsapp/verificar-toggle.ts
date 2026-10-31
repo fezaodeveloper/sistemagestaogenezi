@@ -15,7 +15,7 @@ async function carregarToggleWhatsapp(): Promise<Record<string, boolean>> {
   const { data } = await createAdminClient()
     .from("configuracoes")
     .select(
-      "wz_matricula_criada, wz_lembrete_aula, wz_falta_aula, wz_dados_acesso, wz_cobranca_gerada, wz_cobranca_atrasada_d1, wz_cobranca_atrasada_d3, wz_cobranca_atrasada_d7, wz_cobranca_atrasada_d15, wz_recontato_lead, wz_followup_lead, wz_lembrete_agendamento, wz_agendamento_cancelado, wz_agendamento_falta",
+      "wz_matricula_criada, wz_lembrete_aula, wz_falta_aula, wz_dados_acesso, wz_cobranca_gerada, wz_cobranca_atrasada_d1, wz_cobranca_atrasada_d3, wz_cobranca_atrasada_d7, wz_cobranca_atrasada_d15, wz_recontato_lead, wz_followup_lead, wz_agendamento_confirmacao, wz_lembrete_agendamento, wz_agendamento_cancelado, wz_agendamento_falta",
     )
     .eq("id", true)
     .single();

@@ -26,38 +26,78 @@ export const AGENDAMENTO_STATUS_BADGE_CLASS: Record<AgendamentoStatus, string> =
   cancelado: "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400",
 };
 
-// Feriados nacionais fixos (data certa todo ano) + móveis (Carnaval/Sexta-feira Santa/Corpus
-// Christi, calculados à mão pra 2025/2026 — não há biblioteca de feriados no projeto). Botão
-// "Adicionar feriados nacionais 2025/2026" (TAREFA agendamentos 2.4, PARTE 2) só insere isto —
-// não tenta calcular Páscoa dinamicamente nem cobre feriados estaduais/municipais.
-export const FERIADOS_NACIONAIS_2025_2026: string[] = [
-  "2025-01-01",
-  "2025-03-03",
-  "2025-03-04",
-  "2025-04-18",
-  "2025-04-21",
-  "2025-05-01",
-  "2025-06-19",
-  "2025-09-07",
-  "2025-10-12",
-  "2025-11-02",
-  "2025-11-15",
-  "2025-11-20",
-  "2025-12-25",
-  "2026-01-01",
-  "2026-02-16",
-  "2026-02-17",
-  "2026-04-03",
-  "2026-04-21",
-  "2026-05-01",
-  "2026-06-04",
-  "2026-09-07",
-  "2026-10-12",
-  "2026-11-02",
-  "2026-11-15",
-  "2026-11-20",
-  "2026-12-25",
-];
+// Feriados nacionais — fixos (data certa todo ano) + móveis, calculados a partir da Páscoa
+// (algoritmo de Gauss/Butcher, válido pra qualquer ano do calendário gregoriano — não há
+// biblioteca de feriados no projeto). Cobre só feriados NACIONAIS (não estaduais/municipais).
+function dataISO(ano: number, mes: number, dia: number): string {
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+function somarDiasISO(iso: string, dias: number): string {
+  const [ano, mes, dia] = iso.split("-").map(Number);
+  // Meio-dia UTC: evita escorregar de dia por fuso (mesmo truque usado em todo o projeto, ex.
+  // src/lib/whatsapp/eventos.ts::diaDaSemana).
+  const data = new Date(Date.UTC(ano, mes - 1, dia + dias, 12));
+  return data.toISOString().slice(0, 10);
+}
+
+// Domingo de Páscoa do ano — algoritmo de Gauss/Butcher (anônimo gregoriano).
+function calcularPascoaISO(ano: number): string {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return dataISO(ano, mes, dia);
+}
+
+// Feriados nacionais de UM ano: fixos + móveis calculados a partir da Páscoa daquele ano.
+export function feriadosNacionaisDoAno(ano: number): string[] {
+  const pascoa = calcularPascoaISO(ano);
+  return [
+    dataISO(ano, 1, 1), // Confraternização universal
+    somarDiasISO(pascoa, -48), // Carnaval (segunda)
+    somarDiasISO(pascoa, -47), // Carnaval (terça)
+    somarDiasISO(pascoa, -2), // Sexta-feira Santa
+    dataISO(ano, 4, 21), // Tiradentes
+    dataISO(ano, 5, 1), // Dia do Trabalho
+    somarDiasISO(pascoa, 60), // Corpus Christi
+    dataISO(ano, 9, 7), // Independência
+    dataISO(ano, 10, 12), // Nossa Sra. Aparecida
+    dataISO(ano, 11, 2), // Finados
+    dataISO(ano, 11, 15), // Proclamação da República
+    dataISO(ano, 11, 20), // Consciência Negra (nacional desde 2024)
+    dataISO(ano, 12, 25), // Natal
+  ].sort();
+}
+
+// TAREFA — PARTE 1: feriados pro período configurado na página (data_inicio/data_fim), não uma
+// lista fixa de 1-2 anos hardcoded. Sem período definido, usa o ano atual + o próximo (nunca
+// anos passados). Com período definido, calcula todos os anos que o período atravessa e filtra
+// só as datas que caem dentro de [data_inicio, data_fim].
+export function feriadosNacionaisParaPeriodo(dataInicio: string | null, dataFim: string | null): string[] {
+  const anoAtual = new Date().getFullYear();
+  if (!dataInicio && !dataFim) {
+    return [...feriadosNacionaisDoAno(anoAtual), ...feriadosNacionaisDoAno(anoAtual + 1)].sort();
+  }
+
+  const anoInicio = dataInicio ? Number(dataInicio.slice(0, 4)) : anoAtual;
+  const anoFim = dataFim ? Number(dataFim.slice(0, 4)) : anoInicio;
+
+  const todos: string[] = [];
+  for (let ano = anoInicio; ano <= anoFim; ano++) todos.push(...feriadosNacionaisDoAno(ano));
+
+  return todos.filter((data) => (!dataInicio || data >= dataInicio) && (!dataFim || data <= dataFim)).sort();
+}
 
 // 0 = domingo, 6 = sábado — mesma convenção do Date.prototype.getDay().
 export const DIA_SEMANA_LABELS: Record<number, string> = {
@@ -71,12 +111,149 @@ export const DIA_SEMANA_LABELS: Record<number, string> = {
 };
 
 const HORARIO_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+const horarioRegexSchema = z.string().regex(HORARIO_REGEX, { error: "Horário inválido (use HH:MM)." });
 
-export const horarioDisponivelSchema = z.object({
-  dia_semana: z.number().int().min(0).max(6),
-  horario: z.string().regex(HORARIO_REGEX, { error: "Horário inválido (use HH:MM)." }),
-});
+// TAREFA agendamentos — PARTE 2: formato novo é uma JANELA por dia (hora_inicio/hora_fim), que
+// gera os horários individuais automaticamente (ver gerarSlotsDoDia). O formato antigo (um
+// `horario` por entrada) continua aceito — RETROCOMPATIBILIDADE, sem migration de dado (ver
+// 20261031300000_agendamento_horarios_janela.sql): páginas já criadas guardam entradas
+// {dia_semana, horario} e continuam funcionando exatamente como antes, sem precisar editá-las.
+export const horarioDisponivelSchema = z
+  .object({
+    dia_semana: z.number().int().min(0).max(6),
+    horario: horarioRegexSchema.optional(),
+    hora_inicio: horarioRegexSchema.optional(),
+    hora_fim: horarioRegexSchema.optional(),
+  })
+  .refine((v) => !!v.horario || (!!v.hora_inicio && !!v.hora_fim), {
+    error: "Informe um horário, ou uma janela com início e fim.",
+  });
 export type HorarioDisponivel = z.infer<typeof horarioDisponivelSchema>;
+
+// Gera os horários concretos de UMA entrada: formato antigo devolve o próprio horário; janela
+// nova gera os slots respeitando duração + intervalo (ex. tarefa: 08:00-12:00, 30min, 10min de
+// intervalo => 08:00, 08:40, 09:20, 10:00, 10:40, 11:20 — 12:00 não entra porque o slot de 30min
+// a partir de 12:00 terminaria depois do fim da janela).
+export function gerarSlotsDoDia(entrada: HorarioDisponivel, duracaoMinutos: number, intervaloMinutos: number): string[] {
+  if (entrada.horario) return [entrada.horario];
+  if (!entrada.hora_inicio || !entrada.hora_fim) return [];
+
+  const inicio = horarioParaMinutos(entrada.hora_inicio);
+  const fim = horarioParaMinutos(entrada.hora_fim);
+  const passo = duracaoMinutos + Math.max(0, intervaloMinutos);
+  if (passo <= 0 || fim <= inicio) return [];
+
+  const slots: string[] = [];
+  for (let t = inicio; t + duracaoMinutos <= fim; t += passo) {
+    const h = Math.floor(t / 60)
+      .toString()
+      .padStart(2, "0");
+    const m = (t % 60).toString().padStart(2, "0");
+    slots.push(`${h}:${m}`);
+  }
+  return slots;
+}
+
+// Achata horarios_disponiveis (mistura de entradas antigas e em janela) pro formato plano
+// {dia_semana, horario}[] que todo o resto do código já espera (validarSlotPermitido, calendário
+// público, reagendamento) — um único ponto de expansão, em vez de ensinar cada consumidor a
+// entender os dois formatos.
+export function expandirHorariosDisponiveis(
+  horarios: HorarioDisponivel[],
+  duracaoMinutos: number,
+  intervaloMinutos: number,
+): { dia_semana: number; horario: string }[] {
+  const expandidos: { dia_semana: number; horario: string }[] = [];
+  for (const entrada of horarios) {
+    for (const horario of gerarSlotsDoDia(entrada, duracaoMinutos, intervaloMinutos)) {
+      expandidos.push({ dia_semana: entrada.dia_semana, horario });
+    }
+  }
+  return expandidos;
+}
+
+// ===== Aparência do formulário público (TAREFA — PARTE 4) =====
+
+export const FONTES_AGENDAMENTO = ["Inter", "Roboto", "Poppins", "Georgia"] as const;
+export type FonteAgendamento = (typeof FONTES_AGENDAMENTO)[number];
+
+export const TAMANHOS_TITULO_AGENDAMENTO = ["xl", "2xl", "3xl", "4xl"] as const;
+export type TamanhoTituloAgendamento = (typeof TAMANHOS_TITULO_AGENDAMENTO)[number];
+
+export const TAMANHOS_SUBTITULO_AGENDAMENTO = ["sm", "base", "lg", "xl"] as const;
+export type TamanhoSubtituloAgendamento = (typeof TAMANHOS_SUBTITULO_AGENDAMENTO)[number];
+
+export const ALINHAMENTOS_AGENDAMENTO = ["left", "center", "right"] as const;
+export type AlinhamentoAgendamento = (typeof ALINHAMENTOS_AGENDAMENTO)[number];
+
+export const ARREDONDAMENTOS_BOTAO_AGENDAMENTO = ["none", "sm", "md", "lg", "full"] as const;
+export type ArredondamentoBotaoAgendamento = (typeof ARREDONDAMENTOS_BOTAO_AGENDAMENTO)[number];
+
+const corHexSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." });
+
+export const configVisualSchema = z.object({
+  cor_fundo: corHexSchema.optional(),
+  cor_primaria: corHexSchema.optional(),
+  cor_texto: corHexSchema.optional(),
+  cor_texto_secundario: corHexSchema.optional(),
+  fonte: z.enum(FONTES_AGENDAMENTO).optional(),
+  titulo_tamanho: z.enum(TAMANHOS_TITULO_AGENDAMENTO).optional(),
+  titulo_alinhamento: z.enum(ALINHAMENTOS_AGENDAMENTO).optional(),
+  subtitulo_tamanho: z.enum(TAMANHOS_SUBTITULO_AGENDAMENTO).optional(),
+  subtitulo_alinhamento: z.enum(ALINHAMENTOS_AGENDAMENTO).optional(),
+  botao_texto: z.string().trim().max(60).optional(),
+  botao_cor: corHexSchema.optional(),
+  botao_cor_texto: corHexSchema.optional(),
+  botao_arredondamento: z.enum(ARREDONDAMENTOS_BOTAO_AGENDAMENTO).optional(),
+});
+export type ConfigVisualAgendamento = z.infer<typeof configVisualSchema>;
+
+// Valores padrão — reproduzem o visual que a página já tinha antes deste recurso (sem o que o
+// admin nunca customizou, o formulário público não pode mudar de aparência).
+export const CONFIG_VISUAL_PADRAO: Required<ConfigVisualAgendamento> = {
+  cor_fundo: "#ffffff",
+  cor_primaria: "#2563eb",
+  cor_texto: "#111827",
+  cor_texto_secundario: "#6b7280",
+  fonte: "Inter",
+  titulo_tamanho: "2xl",
+  titulo_alinhamento: "center",
+  subtitulo_tamanho: "lg",
+  subtitulo_alinhamento: "center",
+  botao_texto: "Confirmar agendamento",
+  botao_cor: "#2563eb",
+  botao_cor_texto: "#ffffff",
+  botao_arredondamento: "md",
+};
+
+// Lê o jsonb do banco (pode ser {}, parcial ou lixo de uma versão antiga) e devolve sempre um
+// ConfigVisualAgendamento completo — a página pública nunca quebra por um valor ausente/inválido.
+export function resolverConfigVisual(bruto: unknown): Required<ConfigVisualAgendamento> {
+  const parsed = configVisualSchema.safeParse(bruto && typeof bruto === "object" ? bruto : {});
+  return { ...CONFIG_VISUAL_PADRAO, ...(parsed.success ? parsed.data : {}) };
+}
+
+export const TAMANHO_TITULO_CSS: Record<TamanhoTituloAgendamento, string> = {
+  xl: "1.25rem",
+  "2xl": "1.5rem",
+  "3xl": "1.875rem",
+  "4xl": "2.25rem",
+};
+export const TAMANHO_SUBTITULO_CSS: Record<TamanhoSubtituloAgendamento, string> = {
+  sm: "0.875rem",
+  base: "1rem",
+  lg: "1.125rem",
+  xl: "1.25rem",
+};
+export const ARREDONDAMENTO_BOTAO_CSS: Record<ArredondamentoBotaoAgendamento, string> = {
+  none: "0",
+  sm: "0.25rem",
+  md: "0.5rem",
+  lg: "0.75rem",
+  full: "9999px",
+};
+// FONTE_AGENDAMENTO_CSS mora em src/lib/agendamentos/fontes.ts (precisa de next/font/google,
+// não cabe neste módulo sem "server-only" que é importado por client components simples).
 
 export const CAMPO_EXTRA_TIPOS = ["texto", "select"] as const;
 export type CampoExtraTipo = (typeof CAMPO_EXTRA_TIPOS)[number];
@@ -125,6 +302,11 @@ export const agendamentoPaginaFormSchema = z
     responsavel_id: z.union([z.literal(""), z.uuid()]).optional(),
     feriados_bloqueados: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(60).default([]),
     datas_bloqueadas: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(200).default([]),
+    // TAREFA — PARTE 3: campanha_paginas associada (opcional) — nunca confundir com
+    // leads.campanha_id, que referencia campanhas_marketing (ver desvio na migration).
+    campanha_id: z.union([z.literal(""), z.uuid()]).optional(),
+    // TAREFA — PARTE 4: aparência do formulário público.
+    config_visual: configVisualSchema.default({}),
   })
   .refine((data) => !data.data_fim || !data.data_inicio || data.data_fim >= data.data_inicio, {
     error: "A data de término deve ser igual ou posterior à data de início.",
@@ -156,6 +338,9 @@ export type AgendamentoPagina = {
   datas_bloqueadas: string[];
   campos_extras: CampoExtra[];
   mensagem_confirmacao: string | null;
+  // Colunas novas (TAREFA) — ausentes antes das migrations 20261031400000/20261031500000.
+  campanha_id: string | null;
+  config_visual: unknown;
   created_by: string;
   created_at: string;
   updated_at: string;

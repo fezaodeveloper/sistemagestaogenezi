@@ -129,6 +129,7 @@ export const WHATSAPP_NOTIF_CHAVES = [
   "wz_recontato_lead",
   "wz_followup_lead",
   // Agendamentos
+  "wz_agendamento_confirmacao",
   "wz_lembrete_agendamento",
   "wz_agendamento_cancelado",
   "wz_agendamento_falta",

@@ -104,6 +104,11 @@ const CATEGORIAS: Categoria[] = [
     emoji: "📅",
     itens: [
       {
+        chave: "wz_agendamento_confirmacao",
+        label: "Confirmação de agendamento",
+        descricao: "Enviada imediatamente após o visitante confirmar um agendamento na página pública.",
+      },
+      {
         chave: "wz_lembrete_agendamento",
         label: "Lembrete de agendamento",
         descricao: "Aviso 1 dia antes do agendamento (cron diário).",

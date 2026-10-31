@@ -3,16 +3,38 @@
 import { useState, useTransition, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
-import { atualizarAgendamentoPagina, criarAgendamentoPagina } from "@/app/admin/comercial/agendamentos/actions";
 import {
+  atualizarAgendamentoPagina,
+  criarAgendamentoPagina,
+  type CampanhaPaginaOpcao,
+} from "@/app/admin/comercial/agendamentos/actions";
+import {
+  ALINHAMENTOS_AGENDAMENTO,
+  ARREDONDAMENTOS_BOTAO_AGENDAMENTO,
   CAMPO_EXTRA_TIPOS,
+  CONFIG_VISUAL_PADRAO,
   DIA_SEMANA_LABELS,
-  FERIADOS_NACIONAIS_2025_2026,
+  FONTES_AGENDAMENTO,
+  feriadosNacionaisParaPeriodo,
+  gerarSlotsDoDia,
+  resolverConfigVisual,
+  TAMANHOS_SUBTITULO_AGENDAMENTO,
+  TAMANHOS_TITULO_AGENDAMENTO,
+  TAMANHO_SUBTITULO_CSS,
+  TAMANHO_TITULO_CSS,
+  ARREDONDAMENTO_BOTAO_CSS,
   type AgendamentoPagina,
+  type AlinhamentoAgendamento,
+  type ArredondamentoBotaoAgendamento,
   type CampoExtraTipo,
+  type ConfigVisualAgendamento,
+  type FonteAgendamento,
   type HorarioDisponivel,
   type ResponsavelOpcao,
+  type TamanhoSubtituloAgendamento,
+  type TamanhoTituloAgendamento,
 } from "@/lib/agendamentos/schema";
+import { FONTE_AGENDAMENTO_CSS } from "@/lib/agendamentos/fontes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,16 +58,38 @@ const DIA_SEMANA_ITEMS: Record<string, string> = Object.fromEntries(
 );
 const CAMPO_EXTRA_TIPO_LABELS: Record<string, string> = { texto: "Texto", select: "Select" };
 
+const FONTE_ITEMS: Record<string, string> = Object.fromEntries(FONTES_AGENDAMENTO.map((f) => [f, f]));
+const TITULO_TAMANHO_ITEMS: Record<string, string> = Object.fromEntries(
+  TAMANHOS_TITULO_AGENDAMENTO.map((t) => [t, t.toUpperCase()]),
+);
+const SUBTITULO_TAMANHO_ITEMS: Record<string, string> = Object.fromEntries(
+  TAMANHOS_SUBTITULO_AGENDAMENTO.map((t) => [t, t.toUpperCase()]),
+);
+const ALINHAMENTO_LABELS: Record<AlinhamentoAgendamento, string> = { left: "Esquerda", center: "Centro", right: "Direita" };
+const ALINHAMENTO_ITEMS: Record<string, string> = Object.fromEntries(ALINHAMENTOS_AGENDAMENTO.map((a) => [a, ALINHAMENTO_LABELS[a]]));
+const ARREDONDAMENTO_LABELS: Record<ArredondamentoBotaoAgendamento, string> = {
+  none: "Nenhum",
+  sm: "Pequeno",
+  md: "Médio",
+  lg: "Grande",
+  full: "Total (pílula)",
+};
+const ARREDONDAMENTO_ITEMS: Record<string, string> = Object.fromEntries(
+  ARREDONDAMENTOS_BOTAO_AGENDAMENTO.map((a) => [a, ARREDONDAMENTO_LABELS[a]]),
+);
+
 type CampoExtraEdicao = { nome: string; tipo: CampoExtraTipo; opcoesTexto: string };
 
 export function AgendamentoPaginaDialog({
   pagina,
   responsaveis,
+  campanhas,
   trigger,
   onSalvo,
 }: {
   pagina?: AgendamentoPagina;
   responsaveis: ResponsavelOpcao[];
+  campanhas: CampanhaPaginaOpcao[];
   trigger: ReactElement;
   onSalvo?: (id: string) => void;
 }) {
@@ -58,16 +102,37 @@ export function AgendamentoPaginaDialog({
   const [corPrimaria, setCorPrimaria] = useState(pagina?.cor_primaria ?? "#06b6d4");
   const [horarios, setHorarios] = useState<HorarioDisponivel[]>(pagina?.horarios_disponiveis ?? []);
   const [novoDia, setNovoDia] = useState("1");
-  const [novoHorario, setNovoHorario] = useState("09:00");
+  // TAREFA — PARTE 2: janela "Das [hora_inicio] às [hora_fim]" por dia, substitui o antigo
+  // "adicionar um horário por vez". gerarSlotsDoDia (preview abaixo) mostra os horários que essa
+  // janela vai gerar de verdade, com a duração/intervalo atuais da página.
+  const [novaHoraInicio, setNovaHoraInicio] = useState("08:00");
+  const [novaHoraFim, setNovaHoraFim] = useState("12:00");
   const [campos, setCampos] = useState<CampoExtraEdicao[]>(
     (pagina?.campos_extras ?? []).map((c) => ({ nome: c.nome, tipo: c.tipo, opcoesTexto: (c.opcoes ?? []).join(", ") })),
   );
   const [responsavelId, setResponsavelId] = useState(pagina?.responsavel_id ?? "");
+  // Controlados (diferente da maioria dos campos simples deste form) — "Adicionar feriados
+  // nacionais" (PARTE 1) precisa ler o período digitado AGORA, mesmo antes de salvar.
+  const [dataInicio, setDataInicio] = useState(pagina?.data_inicio ?? "");
+  const [dataFim, setDataFim] = useState(pagina?.data_fim ?? "");
+  // Controlados (PARTE 2) — o preview de slots gerados precisa ler duração/intervalo ao vivo.
+  const [duracaoMinutos, setDuracaoMinutos] = useState(String(pagina?.duracao_minutos ?? 30));
+  const [intervaloMinutos, setIntervaloMinutos] = useState(String(pagina?.intervalo_entre_horarios ?? 0));
   const [datasBloqueadas, setDatasBloqueadas] = useState<string[]>(pagina?.datas_bloqueadas ?? []);
   const [feriadosBloqueados, setFeriadosBloqueados] = useState<string[]>(pagina?.feriados_bloqueados ?? []);
   const [novaDataBloqueada, setNovaDataBloqueada] = useState("");
+  // TAREFA — PARTE 3: campanha_paginas associada (opcional).
+  const [campanhaId, setCampanhaId] = useState(pagina?.campanha_id ?? "");
+  // TAREFA — PARTE 4: aparência do formulário público, com preview ao vivo.
+  const [configVisual, setConfigVisual] = useState<Required<ConfigVisualAgendamento>>(() =>
+    resolverConfigVisual(pagina?.config_visual),
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function atualizarConfigVisual(dados: Partial<ConfigVisualAgendamento>) {
+    setConfigVisual((prev) => ({ ...prev, ...dados }));
+  }
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
@@ -85,9 +150,15 @@ export function AgendamentoPaginaDialog({
         })),
       );
       setResponsavelId(pagina?.responsavel_id ?? "");
+      setDataInicio(pagina?.data_inicio ?? "");
+      setDataFim(pagina?.data_fim ?? "");
+      setDuracaoMinutos(String(pagina?.duracao_minutos ?? 30));
+      setIntervaloMinutos(String(pagina?.intervalo_entre_horarios ?? 0));
       setDatasBloqueadas(pagina?.datas_bloqueadas ?? []);
       setFeriadosBloqueados(pagina?.feriados_bloqueados ?? []);
       setNovaDataBloqueada("");
+      setCampanhaId(pagina?.campanha_id ?? "");
+      setConfigVisual(resolverConfigVisual(pagina?.config_visual));
       setError(null);
     }
   }
@@ -106,8 +177,11 @@ export function AgendamentoPaginaDialog({
     setFeriadosBloqueados((prev) => prev.filter((d) => d !== data));
   }
 
+  // TAREFA — PARTE 1: só os feriados dentro do período configurado (data_inicio/data_fim); sem
+  // período, ano atual + próximo (nunca anos passados) — ver feriadosNacionaisParaPeriodo.
   function adicionarFeriadosNacionais() {
-    setFeriadosBloqueados((prev) => [...new Set([...prev, ...FERIADOS_NACIONAIS_2025_2026])].sort());
+    const feriadosDoPeriodo = feriadosNacionaisParaPeriodo(dataInicio || null, dataFim || null);
+    setFeriadosBloqueados((prev) => [...new Set([...prev, ...feriadosDoPeriodo])].sort());
   }
 
   function handleTituloChange(valor: string) {
@@ -115,15 +189,10 @@ export function AgendamentoPaginaDialog({
     if (!slugEditadoManualmente) setSlug(slugify(valor));
   }
 
-  function adicionarHorario() {
+  function adicionarJanela() {
     const dia = Number(novoDia);
-    const jaExiste = horarios.some((h) => h.dia_semana === dia && h.horario === novoHorario);
-    if (jaExiste) return;
-    setHorarios((prev) =>
-      [...prev, { dia_semana: dia, horario: novoHorario }].sort((a, b) =>
-        a.dia_semana === b.dia_semana ? a.horario.localeCompare(b.horario) : a.dia_semana - b.dia_semana,
-      ),
-    );
+    if (novaHoraFim <= novaHoraInicio) return;
+    setHorarios((prev) => [...prev, { dia_semana: dia, hora_inicio: novaHoraInicio, hora_fim: novaHoraFim }]);
   }
 
   function removerHorario(index: number) {
@@ -149,6 +218,8 @@ export function AgendamentoPaginaDialog({
     formData.set("responsavel_id", responsavelId);
     formData.set("datas_bloqueadas", JSON.stringify(datasBloqueadas));
     formData.set("feriados_bloqueados", JSON.stringify(feriadosBloqueados));
+    formData.set("campanha_id", campanhaId);
+    formData.set("config_visual", JSON.stringify(configVisual));
     formData.set(
       "campos_extras",
       JSON.stringify(
@@ -270,6 +341,25 @@ export function AgendamentoPaginaDialog({
                 </Select>
               </div>
             </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="campanha_id">Campanha associada (opcional)</Label>
+              <Select
+                items={Object.fromEntries(campanhas.map((c) => [c.id, c.titulo]))}
+                value={campanhaId}
+                onValueChange={(v) => setCampanhaId(v ?? "")}
+              >
+                <SelectTrigger id="campanha_id" className="w-full">
+                  <SelectValue placeholder="Nenhuma" />
+                </SelectTrigger>
+                <SelectContent>
+                  {campanhas.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.titulo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 rounded-md border p-3">
@@ -277,11 +367,11 @@ export function AgendamentoPaginaDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="data_inicio">Data início (opcional)</Label>
-                <Input id="data_inicio" name="data_inicio" type="date" defaultValue={pagina?.data_inicio ?? ""} />
+                <Input id="data_inicio" name="data_inicio" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="data_fim">Data fim (opcional)</Label>
-                <Input id="data_fim" name="data_fim" type="date" defaultValue={pagina?.data_fim ?? ""} />
+                <Input id="data_fim" name="data_fim" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
               </div>
             </div>
 
@@ -304,7 +394,8 @@ export function AgendamentoPaginaDialog({
                   name="duracao_minutos"
                   type="number"
                   min="1"
-                  defaultValue={pagina?.duracao_minutos ?? 30}
+                  value={duracaoMinutos}
+                  onChange={(e) => setDuracaoMinutos(e.target.value)}
                   required
                 />
               </div>
@@ -315,7 +406,8 @@ export function AgendamentoPaginaDialog({
                   name="intervalo_entre_horarios"
                   type="number"
                   min="0"
-                  defaultValue={pagina?.intervalo_entre_horarios ?? 0}
+                  value={intervaloMinutos}
+                  onChange={(e) => setIntervaloMinutos(e.target.value)}
                   required
                 />
               </div>
@@ -362,20 +454,24 @@ export function AgendamentoPaginaDialog({
             <Label>Horários disponíveis</Label>
             {horarios.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {horarios.map((h, index) => (
-                  <span
-                    key={`${h.dia_semana}-${h.horario}`}
-                    className="bg-muted/50 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
-                  >
-                    {DIA_SEMANA_LABELS[h.dia_semana]} {h.horario}
-                    <button type="button" onClick={() => removerHorario(index)} aria-label="Remover horário">
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                ))}
+                {horarios.map((h, index) => {
+                  const slots = gerarSlotsDoDia(h, Number(duracaoMinutos) || 30, Number(intervaloMinutos) || 0);
+                  return (
+                    <span
+                      key={`${h.dia_semana}-${h.horario ?? `${h.hora_inicio}-${h.hora_fim}`}`}
+                      className="bg-muted/50 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+                      title={h.horario ? undefined : `Slots: ${slots.join(", ") || "nenhum (janela muito curta pra duração atual)"}`}
+                    >
+                      {DIA_SEMANA_LABELS[h.dia_semana]} {h.horario ? h.horario : `${h.hora_inicio}–${h.hora_fim} (${slots.length} horário${slots.length === 1 ? "" : "s"})`}
+                      <button type="button" onClick={() => removerHorario(index)} aria-label="Remover horário">
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-end gap-2">
               <Select items={DIA_SEMANA_ITEMS} value={novoDia} onValueChange={(v) => v && setNovoDia(v)}>
                 <SelectTrigger className="w-36">
                   <SelectValue />
@@ -388,17 +484,22 @@ export function AgendamentoPaginaDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <Input
-                type="time"
-                value={novoHorario}
-                onChange={(event) => setNovoHorario(event.target.value)}
-                className="w-32"
-              />
-              <Button type="button" variant="outline" size="sm" onClick={adicionarHorario}>
+              <div className="flex items-center gap-1.5 text-sm">
+                Das
+                <Input type="time" value={novaHoraInicio} onChange={(event) => setNovaHoraInicio(event.target.value)} className="w-28" />
+                às
+                <Input type="time" value={novaHoraFim} onChange={(event) => setNovaHoraFim(event.target.value)} className="w-28" />
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={adicionarJanela} disabled={novaHoraFim <= novaHoraInicio}>
                 <Plus />
-                Adicionar horário
+                Adicionar
               </Button>
             </div>
+            {novaHoraFim > novaHoraInicio && (
+              <p className="text-muted-foreground text-xs">
+                → Slots: {gerarSlotsDoDia({ dia_semana: Number(novoDia), hora_inicio: novaHoraInicio, hora_fim: novaHoraFim }, Number(duracaoMinutos) || 30, Number(intervaloMinutos) || 0).join(", ") || "nenhum (janela muito curta pra duração atual)"}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -430,7 +531,7 @@ export function AgendamentoPaginaDialog({
                 Adicionar data
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={adicionarFeriadosNacionais}>
-                🎉 Adicionar feriados nacionais 2025/2026
+                🎉 Adicionar feriados nacionais {dataInicio || dataFim ? "do período" : `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`}
               </Button>
             </div>
           </div>
@@ -483,6 +584,229 @@ export function AgendamentoPaginaDialog({
               <Plus />
               Adicionar campo
             </Button>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-md border p-3">
+            <Label className="text-muted-foreground text-xs uppercase">Aparência</Label>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {(
+                [
+                  ["cor_fundo", "Fundo"],
+                  ["cor_primaria", "Primária"],
+                  ["cor_texto", "Texto"],
+                  ["cor_texto_secundario", "Texto secundário"],
+                ] as const
+              ).map(([campo, label]) => (
+                <div key={campo} className="flex flex-col gap-2">
+                  <Label htmlFor={campo}>{label}</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id={campo}
+                      type="color"
+                      value={configVisual[campo]}
+                      onChange={(event) => atualizarConfigVisual({ [campo]: event.target.value })}
+                      className="border-input h-8 w-10 cursor-pointer rounded-md border bg-transparent p-0.5"
+                    />
+                    <span className="text-muted-foreground text-xs">{configVisual[campo]}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="fonte">Fonte</Label>
+                <Select
+                  items={FONTE_ITEMS}
+                  value={configVisual.fonte}
+                  onValueChange={(v) => v && atualizarConfigVisual({ fonte: v as FonteAgendamento })}
+                >
+                  <SelectTrigger id="fonte" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FONTES_AGENDAMENTO.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="titulo_tamanho">Tamanho do título</Label>
+                <Select
+                  items={TITULO_TAMANHO_ITEMS}
+                  value={configVisual.titulo_tamanho}
+                  onValueChange={(v) => v && atualizarConfigVisual({ titulo_tamanho: v as TamanhoTituloAgendamento })}
+                >
+                  <SelectTrigger id="titulo_tamanho" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAMANHOS_TITULO_AGENDAMENTO.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="titulo_alinhamento">Alinhamento do título</Label>
+                <Select
+                  items={ALINHAMENTO_ITEMS}
+                  value={configVisual.titulo_alinhamento}
+                  onValueChange={(v) => v && atualizarConfigVisual({ titulo_alinhamento: v as AlinhamentoAgendamento })}
+                >
+                  <SelectTrigger id="titulo_alinhamento" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALINHAMENTOS_AGENDAMENTO.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {ALINHAMENTO_LABELS[a]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="subtitulo_tamanho">Tamanho do subtítulo</Label>
+                <Select
+                  items={SUBTITULO_TAMANHO_ITEMS}
+                  value={configVisual.subtitulo_tamanho}
+                  onValueChange={(v) => v && atualizarConfigVisual({ subtitulo_tamanho: v as TamanhoSubtituloAgendamento })}
+                >
+                  <SelectTrigger id="subtitulo_tamanho" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAMANHOS_SUBTITULO_AGENDAMENTO.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="subtitulo_alinhamento">Alinhamento do subtítulo</Label>
+                <Select
+                  items={ALINHAMENTO_ITEMS}
+                  value={configVisual.subtitulo_alinhamento}
+                  onValueChange={(v) => v && atualizarConfigVisual({ subtitulo_alinhamento: v as AlinhamentoAgendamento })}
+                >
+                  <SelectTrigger id="subtitulo_alinhamento" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALINHAMENTOS_AGENDAMENTO.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {ALINHAMENTO_LABELS[a]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="col-span-2 flex flex-col gap-2 sm:col-span-1">
+                <Label htmlFor="botao_texto">Texto do botão</Label>
+                <Input
+                  id="botao_texto"
+                  value={configVisual.botao_texto}
+                  onChange={(event) => atualizarConfigVisual({ botao_texto: event.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="botao_cor">Cor do botão</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="botao_cor"
+                    type="color"
+                    value={configVisual.botao_cor}
+                    onChange={(event) => atualizarConfigVisual({ botao_cor: event.target.value })}
+                    className="border-input h-8 w-10 cursor-pointer rounded-md border bg-transparent p-0.5"
+                  />
+                  <span className="text-muted-foreground text-xs">{configVisual.botao_cor}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="botao_cor_texto">Cor do texto do botão</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="botao_cor_texto"
+                    type="color"
+                    value={configVisual.botao_cor_texto}
+                    onChange={(event) => atualizarConfigVisual({ botao_cor_texto: event.target.value })}
+                    className="border-input h-8 w-10 cursor-pointer rounded-md border bg-transparent p-0.5"
+                  />
+                  <span className="text-muted-foreground text-xs">{configVisual.botao_cor_texto}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="botao_arredondamento">Arredondamento</Label>
+                <Select
+                  items={ARREDONDAMENTO_ITEMS}
+                  value={configVisual.botao_arredondamento}
+                  onValueChange={(v) => v && atualizarConfigVisual({ botao_arredondamento: v as ArredondamentoBotaoAgendamento })}
+                >
+                  <SelectTrigger id="botao_arredondamento" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ARREDONDAMENTOS_BOTAO_AGENDAMENTO.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {ARREDONDAMENTO_LABELS[a]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Preview ao vivo — mesmo espírito do preview em tempo real de campanha-editor.tsx,
+                simplificado (sem o calendário/formulário completo da página pública). */}
+            <div
+              className="flex flex-col items-center gap-3 rounded-md border p-6 text-center"
+              style={{ backgroundColor: configVisual.cor_fundo, fontFamily: FONTE_AGENDAMENTO_CSS[configVisual.fonte] }}
+            >
+              <p
+                style={{
+                  color: configVisual.cor_texto,
+                  fontSize: TAMANHO_TITULO_CSS[configVisual.titulo_tamanho],
+                  textAlign: configVisual.titulo_alinhamento,
+                  fontWeight: 600,
+                  width: "100%",
+                }}
+              >
+                {titulo || "Título da página"}
+              </p>
+              <p
+                style={{
+                  color: configVisual.cor_texto_secundario,
+                  fontSize: TAMANHO_SUBTITULO_CSS[configVisual.subtitulo_tamanho],
+                  textAlign: configVisual.subtitulo_alinhamento,
+                  width: "100%",
+                }}
+              >
+                Pré-visualização do subtítulo/descrição da página.
+              </p>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium"
+                style={{
+                  backgroundColor: configVisual.botao_cor,
+                  color: configVisual.botao_cor_texto,
+                  borderRadius: ARREDONDAMENTO_BOTAO_CSS[configVisual.botao_arredondamento],
+                }}
+              >
+                {configVisual.botao_texto || CONFIG_VISUAL_PADRAO.botao_texto}
+              </button>
+            </div>
           </div>
 
           {error && (

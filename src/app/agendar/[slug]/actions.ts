@@ -15,6 +15,7 @@ import {
 import { agendamentoPublicoSchema, horarioBloqueadoPorIntervalo } from "@/lib/agendamentos/schema";
 import { encontrarLeadPorWhatsappOuEmail, getKanbanColunas, registrarHistoricoLead } from "@/lib/leads/leads";
 import { encontrarColunaVisitaAgendado } from "@/lib/leads/schema";
+import { notificarWhatsappAgendamentoConfirmacao } from "@/lib/whatsapp/eventos";
 
 // slotIndisponivel: o horário escolhido não está mais disponível (lotou ou
 // saiu das regras da página) — o client volta pro passo 1 e marca o horário
@@ -121,12 +122,23 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     const existente = await encontrarLeadPorWhatsappOuEmail(admin, parsed.data.whatsapp, parsed.data.email);
     const colunas = await getKanbanColunas(admin);
     const colunaVisita = encontrarColunaVisitaAgendado(colunas);
+    // TAREFA agendamentos — PARTE 3: pagina.campanha_id referencia campanha_paginas (construtor
+    // de landing pages), NÃO campanhas_marketing (leads.campanha_id) — são tabelas diferentes,
+    // gravar o id ali violaria a FK. Por isso o lead recebe campanha_origem (texto), o mesmo
+    // campo que campanha/[slug]/actions.ts já usa pro mesmo tipo de atribuição sem FK.
+    const campanhaOrigem = pagina.campanha_id
+      ? ((await admin.from("campanha_paginas").select("titulo").eq("id", pagina.campanha_id).maybeSingle()).data
+          ?.titulo as string | undefined) ?? null
+      : null;
 
     if (existente) {
       // Só move se achou a coluna de visita — sem ela, mantém a coluna atual do lead (REGRA da
       // tarefa).
       if (colunaVisita && existente.kanban_coluna !== colunaVisita.id) {
         await admin.from("leads").update({ kanban_coluna: colunaVisita.id }).eq("id", existente.id);
+      }
+      if (campanhaOrigem) {
+        await admin.from("leads").update({ campanha_origem: campanhaOrigem }).eq("id", existente.id);
       }
       await admin.from("agendamentos").update({ lead_id: existente.id }).eq("id", agendamento.id);
       await registrarHistoricoLead(
@@ -146,6 +158,7 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
           email: parsed.data.email?.trim() || null,
           curso_id: null,
           origem: "agendamento",
+          campanha_origem: campanhaOrigem,
           kanban_coluna: colunaNovo,
         })
         .select("id")
@@ -160,14 +173,10 @@ export async function criarAgendamentoPublico(slug: string, formData: FormData):
     // Best-effort — ver comentário acima.
   }
 
-  // Stub — confirmação automática de agendamento por WhatsApp ainda não tem template próprio
-  // (não é um dos 13 templates da Fase 2). Fluxos personalizados (Fase 3), sim: gatilho
-  // "agendamento_criado" abaixo já funciona independente desse stub.
-  console.log(
-    `[agendamentos] Enviaria confirmação por WhatsApp para ${parsed.data.nome} (${parsed.data.whatsapp}): ` +
-      `agendado para ${parsed.data.data_agendada} às ${parsed.data.horario}. Link pra cancelar/remarcar: ` +
-      `/agendar/${pagina.slug}/meu-agendamento/${agendamento.id}`,
-  );
+  // TAREFA agendamentos — PARTE 5: substitui o console.log stub (PERGUNTA DE FATO 1 — era a causa
+  // raiz de nenhuma confirmação por WhatsApp ter sido enviada até hoje). Fire-and-forget: não
+  // pode atrasar a resposta de sucesso ao visitante.
+  notificarWhatsappAgendamentoConfirmacao(agendamento.id);
 
   dispararFluxosPorGatilho(
     "agendamento_criado",

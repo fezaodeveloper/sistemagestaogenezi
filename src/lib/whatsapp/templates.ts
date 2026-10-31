@@ -13,6 +13,7 @@ export const WHATSAPP_TEMPLATE_IDS = [
   "lembrete_aula",
   "falta_aula",
   "recontato_lead",
+  "agendamento_confirmacao",
   "agendamento_lembrete",
   "agendamento_cancelado",
   "agendamento_falta",
@@ -96,6 +97,20 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
       { chave: "nome_curso", descricao: "Nome do curso", exemplo: "Informática Básica" },
       { chave: "nome_turma", descricao: "Nome da turma nova", exemplo: "Turma B - Manhã" },
       { chave: "data_inicio_turma", descricao: "Início da turma", exemplo: "01/11/2026" },
+    ],
+  },
+  agendamento_confirmacao: {
+    id: "agendamento_confirmacao",
+    nome: "Confirmação de agendamento",
+    gatilho: "Imediatamente após o visitante confirmar um agendamento na página pública.",
+    padrao:
+      "Olá {nome}! ✅ Seu agendamento foi confirmado!\n📅 Data: {data}\n⏰ Horário: {horario}\n📍 Local: {local}\n\nPara cancelar ou remarcar:\n{link_gerenciar}\n\nGênezi Educação Profissional 🎓",
+    placeholders: [
+      P_NOME,
+      P_DATA,
+      P_HORARIO,
+      { chave: "local", descricao: "Local de atendimento (ou 'A confirmar')", exemplo: "Sede Gênezi — Rua X, 123" },
+      { chave: "link_gerenciar", descricao: "Link pra cancelar/remarcar sem login", exemplo: "https://sistemagestaogenezi.vercel.app/agendar/visita-escola/meu-agendamento/..." },
     ],
   },
   agendamento_lembrete: {

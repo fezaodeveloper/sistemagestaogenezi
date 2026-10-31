@@ -8,6 +8,7 @@ import {
   alternarStatusPagina,
   duplicarAgendamentoPagina,
   excluirAgendamentoPagina,
+  type CampanhaPaginaOpcao,
 } from "@/app/admin/comercial/agendamentos/actions";
 import type { AgendamentoPaginaComContagem } from "@/lib/agendamentos/agendamentos";
 import type { ResponsavelOpcao } from "@/lib/agendamentos/schema";
@@ -29,7 +30,15 @@ import {
 
 const BASE_URL = "https://sistemagestaogenezi.vercel.app";
 
-function AgendamentoPaginaCard({ pagina, responsaveis }: { pagina: AgendamentoPaginaComContagem; responsaveis: ResponsavelOpcao[] }) {
+function AgendamentoPaginaCard({
+  pagina,
+  responsaveis,
+  campanhas,
+}: {
+  pagina: AgendamentoPaginaComContagem;
+  responsaveis: ResponsavelOpcao[];
+  campanhas: CampanhaPaginaOpcao[];
+}) {
   const router = useRouter();
   const [copiado, setCopiado] = useState(false);
   const [excluindoOpen, setExcluindoOpen] = useState(false);
@@ -119,6 +128,7 @@ function AgendamentoPaginaCard({ pagina, responsaveis }: { pagina: AgendamentoPa
           <AgendamentoPaginaDialog
             pagina={pagina}
             responsaveis={responsaveis}
+            campanhas={campanhas}
             trigger={
               <Button type="button" variant="ghost" size="sm">
                 <Pencil className="size-3.5" />
@@ -191,15 +201,18 @@ function AgendamentoPaginaCard({ pagina, responsaveis }: { pagina: AgendamentoPa
 export function AgendamentosAdminView({
   paginas,
   responsaveis,
+  campanhas,
 }: {
   paginas: AgendamentoPaginaComContagem[];
   responsaveis: ResponsavelOpcao[];
+  campanhas: CampanhaPaginaOpcao[];
 }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex justify-end">
         <AgendamentoPaginaDialog
           responsaveis={responsaveis}
+          campanhas={campanhas}
           trigger={
             <Button type="button">
               <Plus />
@@ -215,6 +228,7 @@ export function AgendamentosAdminView({
             <p className="text-muted-foreground text-sm">Nenhuma página de agendamento cadastrada ainda.</p>
             <AgendamentoPaginaDialog
               responsaveis={responsaveis}
+              campanhas={campanhas}
               trigger={
                 <Button type="button" variant="outline">
                   <Plus />
@@ -227,7 +241,7 @@ export function AgendamentosAdminView({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {paginas.map((pagina) => (
-            <AgendamentoPaginaCard key={pagina.id} pagina={pagina} responsaveis={responsaveis} />
+            <AgendamentoPaginaCard key={pagina.id} pagina={pagina} responsaveis={responsaveis} campanhas={campanhas} />
           ))}
         </div>
       )}

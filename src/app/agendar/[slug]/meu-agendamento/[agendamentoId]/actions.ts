@@ -13,7 +13,7 @@ import {
   getHorariosOcupadosPorDia,
   validarSlotPermitido,
 } from "@/lib/agendamentos/agendamentos";
-import { horarioBloqueadoPorIntervalo } from "@/lib/agendamentos/schema";
+import { expandirHorariosDisponiveis, horarioBloqueadoPorIntervalo } from "@/lib/agendamentos/schema";
 import { registrarHistoricoLead } from "@/lib/leads/leads";
 import { notificarWhatsappAgendamentoCancelado } from "@/lib/whatsapp/eventos";
 import { dispararFluxosPorGatilho } from "@/lib/whatsapp/fluxos";
@@ -75,9 +75,8 @@ export async function getHorariosParaRemarcacaoPublica(
   const { pagina } = encontrado;
 
   const diaSemana = new Date(`${dataISO}T00:00:00`).getDay();
-  const candidatos = [
-    ...new Set(pagina.horarios_disponiveis.filter((h) => h.dia_semana === diaSemana).map((h) => h.horario)),
-  ]
+  const expandidos = expandirHorariosDisponiveis(pagina.horarios_disponiveis, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0);
+  const candidatos = [...new Set(expandidos.filter((h) => h.dia_semana === diaSemana).map((h) => h.horario))]
     .filter((horario) => validarSlotPermitido(pagina, dataISO, horario))
     .sort();
   if (candidatos.length === 0) return [];

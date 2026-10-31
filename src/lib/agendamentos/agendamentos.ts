@@ -2,7 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
-import type { Agendamento, AgendamentoPagina, AgendamentoStatus } from "./schema";
+import { expandirHorariosDisponiveis, type Agendamento, type AgendamentoPagina, type AgendamentoStatus } from "./schema";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
@@ -217,7 +217,8 @@ export function validarSlotPermitido(pagina: AgendamentoPagina, dataISO: string,
   if ((pagina.feriados_bloqueados ?? []).includes(dataISO)) return false;
 
   const diaSemana = new Date(`${dataISO}T00:00:00`).getDay();
-  return pagina.horarios_disponiveis.some((h) => h.dia_semana === diaSemana && h.horario === horario);
+  const expandidos = expandirHorariosDisponiveis(pagina.horarios_disponiveis, pagina.duracao_minutos, pagina.intervalo_entre_horarios ?? 0);
+  return expandidos.some((h) => h.dia_semana === diaSemana && h.horario === horario);
 }
 
 // Horários distintos com agendamento confirmado, por dia, numa janela — base pro
