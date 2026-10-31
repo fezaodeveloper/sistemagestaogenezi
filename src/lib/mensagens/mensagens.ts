@@ -88,6 +88,11 @@ async function enviarCopiaParaResponsavel(
   );
 }
 
+// Resultado do envio — usado pelos disparos manuais (dropdown de WhatsApp da lista de
+// matrículas, TAREFA) pra mostrar toast de sucesso/erro de verdade. Os disparos automáticos
+// (cron, registrarPresencas) continuam ignorando o retorno, como já faziam antes.
+export type ResultadoEnvioMensagem = { ok: boolean; erro?: string };
+
 // Núcleo do envio: monta o texto a partir do template configurado, valida
 // telefone/config, chama a Evolution API e sempre grava uma linha no log —
 // nunca lança exceção (política "loga o erro e segue", ver CLAUDE.md/plano
@@ -106,7 +111,7 @@ async function enviarMensagem(params: {
   // Anexado ao final do texto renderizado (não substitui o template admin-editável em
   // whatsapp_templates) — usado hoje só pelo link do comprovante em matricula_criada.
   sufixoTexto?: string;
-}): Promise<void> {
+}): Promise<ResultadoEnvioMensagem> {
   try {
     const admin = createAdminClient();
 
@@ -117,7 +122,7 @@ async function enviarMensagem(params: {
       .single();
 
     // ativo=false é pausa deliberada do admin — não é falha, não loga nada.
-    if (!config || !config.ativo) return;
+    if (!config || !config.ativo) return { ok: false, erro: "O WhatsApp (GênZap) está desativado em Configurações." };
 
     // Texto do template: whatsapp_templates (GênZap Fase 2) — ativo lá, senão o padrão do
     // código; nunca lança (ver renderTemplate).
@@ -140,13 +145,13 @@ async function enviarMensagem(params: {
 
     if (!config.evolution_api_url || !config.evolution_instance_name || !config.evolution_api_key) {
       await registrar("falha", params.telefoneAlunoBruto, "Evolution API não configurada (URL/instância/chave ausente).");
-      return;
+      return { ok: false, erro: "Evolution API não configurada (Configurações > WhatsApp)." };
     }
 
     const numero = normalizarTelefone(params.telefoneAlunoBruto);
     if (!numero) {
       await registrar("falha", params.telefoneAlunoBruto, "Telefone do aluno inválido ou ausente.");
-      return;
+      return { ok: false, erro: "Telefone do aluno inválido ou ausente." };
     }
 
     // A chave passou a ser gravada criptografada (Configurações > WhatsApp — GênZap). Valor sem
@@ -157,7 +162,7 @@ async function enviarMensagem(params: {
       apiKey = descriptografar(config.evolution_api_key);
     } catch {
       await registrar("falha", numero, "Não foi possível ler a chave da Evolution API (chave de criptografia ausente ou trocada).");
-      return;
+      return { ok: false, erro: "Não foi possível ler a chave da Evolution API." };
     }
 
     const evolutionConfig = { url: config.evolution_api_url, instancia: config.evolution_instance_name, apiKey };
@@ -170,9 +175,12 @@ async function enviarMensagem(params: {
     if (resultado.ok && params.alunoId) {
       await enviarCopiaParaResponsavel(admin, params.alunoId, params.tipo, mensagemTexto, evolutionConfig);
     }
+
+    return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Falha ao enviar a mensagem." };
   } catch {
     // Rede de segurança final: nenhum erro inesperado aqui pode voltar a
     // interromper a matrícula/presença que chamou esta function.
+    return { ok: false, erro: "Falha inesperada ao enviar a mensagem." };
   }
 }
 
@@ -301,9 +309,11 @@ export async function enviarMensagemFalta(
   aulaId: string,
   dataAula: string,
   criadoPor: string,
-): Promise<void> {
+): Promise<ResultadoEnvioMensagem> {
   try {
-    if (!(await whatsappToggleHabilitado("wz_falta_aula"))) return;
+    if (!(await whatsappToggleHabilitado("wz_falta_aula"))) {
+      return { ok: false, erro: "Notificações de falta estão desativadas em Configurações." };
+    }
 
     const admin = createAdminClient();
 
@@ -317,9 +327,9 @@ export async function enviarMensagemFalta(
       | (ContextoAluno & { turmas: { cursos: { nome: string } | null } | null })
       | null;
 
-    if (!matricula?.alunos) return;
+    if (!matricula?.alunos) return { ok: false, erro: "Aluno não encontrado para esta matrícula." };
 
-    await enviarMensagem({
+    return await enviarMensagem({
       tipo: "falta",
       matriculaId,
       leadId: null,
@@ -335,6 +345,7 @@ export async function enviarMensagemFalta(
     });
   } catch {
     // idem: presença já foi registrada com sucesso antes desta chamada.
+    return { ok: false, erro: "Falha inesperada ao enviar a mensagem." };
   }
 }
 
@@ -346,18 +357,23 @@ export async function enviarMensagemLembreteAula(
   aulaId: string,
   dataAula: string,
   horarioAula: string | null,
-): Promise<void> {
+  // Só preenchido no disparo manual (dropdown de WhatsApp, TAREFA) — o cron automático não tem
+  // sessão, continua chamando sem este argumento (criadoPor fica null, como sempre).
+  criadoPor: string | null = null,
+): Promise<ResultadoEnvioMensagem> {
   try {
-    if (!(await whatsappToggleHabilitado("wz_lembrete_aula"))) return;
+    if (!(await whatsappToggleHabilitado("wz_lembrete_aula"))) {
+      return { ok: false, erro: "Notificações de lembrete de aula estão desativadas em Configurações." };
+    }
 
     const admin = createAdminClient();
 
-    // Evita lembrete duplicado (ex.: cron reexecutado no mesmo dia): aula_id + matricula_id +
-    // tipo já identifica de forma única "este lembrete, para esta aula, para esta matrícula",
-    // sem depender de janela de data — mais robusto do que checar "já enviado hoje", que
-    // bloquearia incorretamente o lembrete de uma SEGUNDA aula da mesma turma no mesmo dia.
-    // Só um envio com status "enviado" conta como já notificado — uma tentativa anterior com
-    // "falha" não deve bloquear o reenvio.
+    // Evita lembrete duplicado (ex.: cron reexecutado no mesmo dia, ou reenvio manual pela
+    // mesma aula já lembrada automaticamente): aula_id + matricula_id + tipo já identifica de
+    // forma única "este lembrete, para esta aula, para esta matrícula", sem depender de janela
+    // de data — mais robusto do que checar "já enviado hoje", que bloquearia incorretamente o
+    // lembrete de uma SEGUNDA aula da mesma turma no mesmo dia. Só um envio com status "enviado"
+    // conta como já notificado — uma tentativa anterior com "falha" não deve bloquear o reenvio.
     const { data: jaEnviado } = await admin
       .from("mensagens_enviadas")
       .select("id")
@@ -367,7 +383,7 @@ export async function enviarMensagemLembreteAula(
       .eq("status", "enviado")
       .maybeSingle();
 
-    if (jaEnviado) return;
+    if (jaEnviado) return { ok: false, erro: "O lembrete desta aula já havia sido enviado antes." };
 
     const { data } = await admin
       .from("matriculas")
@@ -379,16 +395,16 @@ export async function enviarMensagemLembreteAula(
       | (ContextoAluno & { turmas: { cursos: { nome: string } | null } | null })
       | null;
 
-    if (!matricula?.alunos) return;
+    if (!matricula?.alunos) return { ok: false, erro: "Aluno não encontrado para esta matrícula." };
 
-    await enviarMensagem({
+    return await enviarMensagem({
       tipo: "lembrete_aula",
       matriculaId,
       leadId: null,
       aulaId,
       alunoId: matricula.alunos.id,
       telefoneAlunoBruto: matricula.alunos.telefone,
-      criadoPor: null,
+      criadoPor,
       variaveis: {
         nome_aluno: matricula.alunos.profiles?.full_name ?? "aluno(a)",
         nome_curso: matricula.turmas?.cursos?.nome ?? "",
@@ -398,6 +414,7 @@ export async function enviarMensagemLembreteAula(
     });
   } catch {
     // idem.
+    return { ok: false, erro: "Falha inesperada ao enviar a mensagem." };
   }
 }
 

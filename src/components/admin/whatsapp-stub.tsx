@@ -6,6 +6,8 @@ import {
   registrarWhatsappStub,
   enviarComprovanteWhatsappAction,
   enviarContratoWhatsappAction,
+  enviarLembreteAulaWhatsappAction,
+  enviarLembreteFaltaWhatsappAction,
   type WhatsappStubTipo,
 } from "@/app/admin/matriculas/actions";
 import { Button } from "@/components/ui/button";
@@ -33,15 +35,17 @@ function disparar(tipo: WhatsappStubTipo, matriculaId: string, mensagem: string)
   window.alert(mensagem);
 }
 
-type TipoComEnvioReal = "contrato" | "comprovante";
+type TipoComEnvioReal = "contrato" | "comprovante" | "lembrete_aula" | "lembrete_falta";
 
 const ACOES_ENVIO_REAL: Record<TipoComEnvioReal, { action: (matriculaId: string) => Promise<{ success: true } | { error: string }>; sucesso: string }> = {
   contrato: { action: enviarContratoWhatsappAction, sucesso: "Contrato enviado via WhatsApp!" },
   comprovante: { action: enviarComprovanteWhatsappAction, sucesso: "Comprovante enviado via WhatsApp!" },
+  lembrete_aula: { action: enviarLembreteAulaWhatsappAction, sucesso: "Lembrete de aula enviado via WhatsApp!" },
+  lembrete_falta: { action: enviarLembreteFaltaWhatsappAction, sucesso: "Lembrete de falta enviado via WhatsApp!" },
 };
 
 function ehTipoComEnvioReal(tipo: WhatsappStubTipo): tipo is TipoComEnvioReal {
-  return tipo === "contrato" || tipo === "comprovante";
+  return tipo === "contrato" || tipo === "comprovante" || tipo === "lembrete_aula" || tipo === "lembrete_falta";
 }
 
 // Compartilhado entre WhatsappStubButton e WhatsappStubDropdown: "contrato"/"comprovante" são os
@@ -144,6 +148,10 @@ const OPCOES_PADRAO: OpcaoWhatsappStub[] = [
   { tipo: "contrato", label: "📱 Enviar contrato" },
   { tipo: "comprovante", label: "📱 Enviar comprovante" },
   { tipo: "dados_acesso", label: "📱 Dados de acesso", mensagem: MENSAGEM_DADOS_ACESSO },
+  // TAREFA — mesmo envio real (GênZap) dos dois de cima, reaproveitando o template/função do
+  // disparo automático (cron de lembrete-aula / registrarPresencas, ver lib/mensagens/mensagens.ts).
+  { tipo: "lembrete_aula", label: "📚 Lembrete de aula" },
+  { tipo: "lembrete_falta", label: "⚠️ Lembrete de falta" },
 ];
 
 export function WhatsappStubDropdown({
@@ -160,8 +168,10 @@ export function WhatsappStubDropdown({
 }) {
   const contrato = useEnviarDocumentoWhatsapp("contrato", matriculaId);
   const comprovante = useEnviarDocumentoWhatsapp("comprovante", matriculaId);
-  const estadoPorTipo = { contrato, comprovante } as const;
-  const mensagemAtual = contrato.mensagem ?? comprovante.mensagem;
+  const lembreteAula = useEnviarDocumentoWhatsapp("lembrete_aula", matriculaId);
+  const lembreteFalta = useEnviarDocumentoWhatsapp("lembrete_falta", matriculaId);
+  const estadoPorTipo = { contrato, comprovante, lembrete_aula: lembreteAula, lembrete_falta: lembreteFalta } as const;
+  const mensagemAtual = contrato.mensagem ?? comprovante.mensagem ?? lembreteAula.mensagem ?? lembreteFalta.mensagem;
 
   return (
     <div className="flex flex-col items-end gap-1">

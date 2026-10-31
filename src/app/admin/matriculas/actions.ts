@@ -13,7 +13,7 @@ import {
   type MatriculaWizardInput,
 } from "@/lib/matriculas/schema";
 import { cancelarCobrancasAsaasPendentes } from "@/lib/financeiro/limpeza";
-import { enviarMensagemMatriculaCriada } from "@/lib/mensagens/mensagens";
+import { enviarMensagemFalta, enviarMensagemLembreteAula, enviarMensagemMatriculaCriada } from "@/lib/mensagens/mensagens";
 import { registrarAlteracao } from "@/lib/historico/registrar";
 import { dispararEvento } from "@/lib/automacoes/motor";
 import { dispararWebhookDeMatricula } from "@/lib/webhooks/payloads";
@@ -779,6 +779,63 @@ export async function enviarComprovanteWhatsappAction(matriculaId: string): Prom
   return { success: true };
 }
 
+// TAREFA — "Lembrete de aula" manual no dropdown WhatsApp: mesmo template/função do cron
+// automático (/api/cron/lembretes-aula, enviarMensagemLembreteAula em lib/mensagens/mensagens.ts),
+// só que resolvendo a PRÓXIMA aula da turma a partir de hoje (o cron usa uma janela fixa de dias
+// configurada em Configurações; o clique manual não deve depender dela).
+export async function enviarLembreteAulaWhatsappAction(matriculaId: string): Promise<EnviarContratoWhatsappResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+
+  const { data: matricula } = await supabase.from("matriculas").select("turma_id").eq("id", matriculaId).maybeSingle();
+  if (!matricula) return { error: "Matrícula não encontrada." };
+
+  const { data: turma } = await supabase.from("turmas").select("horario_aula").eq("id", matricula.turma_id).maybeSingle();
+  const { data: calendario } = await supabase.rpc("calendario_aulas_turma", { p_turma_id: matricula.turma_id });
+
+  const hojeISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const proximaAula = ((calendario ?? []) as { aula_id: string; data_liberacao: string }[])
+    .filter((aula) => aula.data_liberacao >= hojeISO)
+    .sort((a, b) => a.data_liberacao.localeCompare(b.data_liberacao))[0];
+
+  if (!proximaAula) return { error: "Não há próxima aula cadastrada para esta turma." };
+
+  const resultado = await enviarMensagemLembreteAula(
+    matriculaId,
+    proximaAula.aula_id,
+    proximaAula.data_liberacao,
+    turma?.horario_aula ?? null,
+    user.id,
+  );
+  if (!resultado.ok) return { error: resultado.erro ?? "Não foi possível enviar o lembrete de aula." };
+  return { success: true };
+}
+
+// TAREFA — "Lembrete de falta" manual: usa a mesma função/template do disparo automático de
+// falta (enviarMensagemFalta, chamada hoje por registrarPresencas quando detecta uma falta nova).
+// Diferente daquele fluxo, aqui não existe uma falta recém-registrada pra apontar — por isso usa
+// a aula de HOJE da turma (sem ela, a mensagem "sentimos sua falta na aula de hoje" não faria
+// sentido).
+export async function enviarLembreteFaltaWhatsappAction(matriculaId: string): Promise<EnviarContratoWhatsappResult> {
+  const user = await requireRole("admin");
+  const supabase = await createClient();
+
+  const { data: matricula } = await supabase.from("matriculas").select("turma_id").eq("id", matriculaId).maybeSingle();
+  if (!matricula) return { error: "Matrícula não encontrada." };
+
+  const { data: calendario } = await supabase.rpc("calendario_aulas_turma", { p_turma_id: matricula.turma_id });
+  const hojeISO = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const aulaHoje = ((calendario ?? []) as { aula_id: string; data_liberacao: string }[]).find(
+    (aula) => aula.data_liberacao === hojeISO,
+  );
+
+  if (!aulaHoje) return { error: "Não há aula registrada hoje para esta turma." };
+
+  const resultado = await enviarMensagemFalta(matriculaId, aulaHoje.aula_id, aulaHoje.data_liberacao, user.id);
+  if (!resultado.ok) return { error: resultado.erro ?? "Não foi possível enviar o lembrete de falta." };
+  return { success: true };
+}
+
 // ===== Botões WhatsApp (5 melhorias: WhatsApp stub + taxa de matrícula) =====
 
 // "dados_acesso" não estava no exemplo de payload da tarefa original
@@ -790,7 +847,7 @@ export async function enviarComprovanteWhatsappAction(matriculaId: string): Prom
 // dispararEvento, sem chamar WhatsApp de verdade) — ficam pra quando ganharem template próprio.
 // "dados_acesso" passou a enviar de verdade pelo GênZap (Evolution API) — ver
 // notificarWhatsappDadosAcesso.
-export type WhatsappStubTipo = "contrato" | "comprovante" | "cobranca" | "dados_acesso";
+export type WhatsappStubTipo = "contrato" | "comprovante" | "cobranca" | "dados_acesso" | "lembrete_aula" | "lembrete_falta";
 
 export async function registrarWhatsappStub(tipo: WhatsappStubTipo, matriculaId: string): Promise<void> {
   await requireRole("admin");
