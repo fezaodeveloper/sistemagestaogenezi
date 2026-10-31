@@ -12,6 +12,7 @@ import {
 } from "@/app/agendar/[slug]/meu-agendamento/[agendamentoId]/actions";
 import type { Agendamento, AgendamentoPagina } from "@/lib/agendamentos/schema";
 import { dataComDiaSemana } from "@/lib/datas/util";
+import { CAMPO_PUBLICO_ADAPTATIVO } from "@/lib/cores/campo-publico";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -112,8 +113,8 @@ export function MeuAgendamentoView({ agendamento, pagina }: { agendamento: Agend
                   <AlertDialogDescription>Tem certeza que deseja cancelar? Esta ação não pode ser desfeita.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="motivo">Motivo (opcional)</Label>
-                  <Textarea id="motivo" rows={2} value={motivo} onChange={(event) => setMotivo(event.target.value)} />
+                  <Label className="font-semibold" htmlFor="motivo">Motivo (opcional)</Label>
+                  <Textarea id="motivo" rows={2} value={motivo} onChange={(event) => setMotivo(event.target.value)} className={CAMPO_PUBLICO_ADAPTATIVO} />
                 </div>
                 {erro && (
                   <p role="alert" className="text-destructive text-sm">
@@ -138,8 +139,15 @@ export function MeuAgendamentoView({ agendamento, pagina }: { agendamento: Agend
                 </DialogHeader>
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="nova-data">Nova data</Label>
-                    <Input id="nova-data" type="date" min={hojeISO()} value={data} onChange={(event) => handleDataChange(event.target.value)} />
+                    <Label className="font-semibold" htmlFor="nova-data">Nova data</Label>
+                    <Input
+                      id="nova-data"
+                      type="date"
+                      min={hojeISO()}
+                      value={data}
+                      onChange={(event) => handleDataChange(event.target.value)}
+                      className={CAMPO_PUBLICO_ADAPTATIVO}
+                    />
                   </div>
                   {carregandoHorarios && <p className="text-muted-foreground text-sm">Buscando horários...</p>}
                   {!carregandoHorarios && data && horarios !== null && horarios.length === 0 && (
@@ -147,7 +155,7 @@ export function MeuAgendamentoView({ agendamento, pagina }: { agendamento: Agend
                   )}
                   {!carregandoHorarios && horarios !== null && horarios.length > 0 && (
                     <div className="flex flex-col gap-1.5">
-                      <Label>Horário</Label>
+                      <Label className="font-semibold">Horário</Label>
                       <div className="flex flex-wrap gap-2">
                         {horarios.map((item) => (
                           <Button

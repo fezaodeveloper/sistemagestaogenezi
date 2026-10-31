@@ -19,6 +19,8 @@ import {
 } from "@/lib/campanha-paginas/schema";
 import { FONTE_CSS } from "@/lib/campanha-paginas/fontes";
 import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
+import { classesCampoPublico, estiloCampoPublicoHex } from "@/lib/cores/campo-publico";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -102,14 +104,17 @@ function lerRascunho(chave: string): Partial<Rascunho> | null {
 }
 
 // <select> HTML nativo (não o Select do Base UI) — pedido explícito, e o
-// nativo funciona bem em celular. Estilizado com cor_fonte/cor_fundo/
-// cor_primaria por valor direto, igual aos cards A/B/C/D.
+// nativo funciona bem em celular. Caixa fechada (borda/fundo/texto) usa
+// estiloCampoPublicoHex(corCampo) — fix de visibilidade (TAREFA fix visibilidade de campos
+// públicos): o token de tema do shadcn não garante contraste contra uma cor de fundo livre.
+// <option> continua usando corFundo/corFonte da PÁGINA (sempre cor sólida, nunca o problema
+// reportado) — só a caixa fechada ficava quase invisível.
 function SelectNativo({
   id,
   valor,
   opcoes,
   placeholder,
-  corPrimaria,
+  corCampo,
   corFundo,
   corFonte,
   disabled = false,
@@ -120,19 +125,20 @@ function SelectNativo({
   valor: string;
   opcoes: { valor: string; texto: string }[];
   placeholder: string;
-  corPrimaria: string;
+  corCampo: string;
   corFundo: string;
   corFonte: string;
   onChange: (valor: string) => void;
 }) {
+  const estilo = estiloCampoPublicoHex(corCampo);
   return (
     <select
       id={id}
       value={valor}
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}
-      className="h-9 w-full rounded-md px-2.5 text-[0.875em] outline-none disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ color: corFonte, backgroundColor: corFundo, border: `2px solid ${corPrimaria}` }}
+      className="h-auto w-full rounded-lg border-2 px-4 py-3 text-[0.875em] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--cor-primaria)] disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ color: estilo.texto, backgroundColor: estilo.fundo, borderColor: estilo.borda }}
     >
       <option value="" style={{ color: corFonte, backgroundColor: corFundo }}>
         {placeholder}
@@ -150,6 +156,7 @@ function QuestaoCampo({
   questao,
   valor,
   corPrimaria,
+  corCampo,
   corFundo,
   corFonte,
   onResponder,
@@ -157,6 +164,7 @@ function QuestaoCampo({
   questao: Questao;
   valor: RespostaValor | undefined;
   corPrimaria: string;
+  corCampo: string;
   corFundo: string;
   corFonte: string;
   onResponder: (valor: RespostaValor) => void;
@@ -263,7 +271,7 @@ function QuestaoCampo({
         valor={typeof valor === "string" ? valor : ""}
         opcoes={(questao.opcoes ?? []).map((o) => ({ valor: o.texto, texto: o.texto }))}
         placeholder="Selecione"
-        corPrimaria={corPrimaria}
+        corCampo={corCampo}
         corFundo={corFundo}
         corFonte={corFonte}
         onChange={onResponder}
@@ -276,8 +284,7 @@ function QuestaoCampo({
       rows={3}
       value={typeof valor === "string" ? valor : ""}
       onChange={(event) => onResponder(event.target.value)}
-      className="text-[1em] md:text-[1em]"
-      style={{ color: corFonte }}
+      className={cn("text-[1em] md:text-[1em]", classesCampoPublico(corCampo))}
     />
   );
 }
@@ -618,20 +625,19 @@ export function CampanhaPublicaView({
           {tela === 0 && (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
-                <Label className="text-[1em]" htmlFor="nome" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em] font-semibold" htmlFor="nome" style={{ color: pagina.cor_fonte }}>
                   Nome completo
                 </Label>
                 <Input
                   id="nome"
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
-                  className={escalaTexto}
-                  style={{ color: pagina.cor_fonte }}
+                  className={cn(escalaTexto, classesCampoPublico(corCard))}
                   required
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label className="text-[1em]" htmlFor="whatsapp" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em] font-semibold" htmlFor="whatsapp" style={{ color: pagina.cor_fonte }}>
                   WhatsApp
                 </Label>
                 <Input
@@ -640,13 +646,12 @@ export function CampanhaPublicaView({
                   placeholder="(11) 99999-9999"
                   value={whatsapp}
                   onChange={(event) => setWhatsapp(event.target.value)}
-                  className={escalaTexto}
-                  style={{ color: pagina.cor_fonte }}
+                  className={cn(escalaTexto, classesCampoPublico(corCard))}
                   required
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label className="text-[1em]" htmlFor="idade" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em] font-semibold" htmlFor="idade" style={{ color: pagina.cor_fonte }}>
                   Idade
                 </Label>
                 <Input
@@ -655,14 +660,13 @@ export function CampanhaPublicaView({
                   min="1"
                   value={idade}
                   onChange={(event) => setIdade(event.target.value)}
-                  className={escalaTexto}
-                  style={{ color: pagina.cor_fonte }}
+                  className={cn(escalaTexto, classesCampoPublico(corCard))}
                   required
                 />
               </div>
               {pagina.coletar_email && (
                 <div className="flex flex-col gap-2">
-                  <Label className="text-[1em]" htmlFor="email" style={{ color: pagina.cor_fonte }}>
+                  <Label className="text-[1em] font-semibold" htmlFor="email" style={{ color: pagina.cor_fonte }}>
                     Email
                   </Label>
                   <Input
@@ -670,14 +674,13 @@ export function CampanhaPublicaView({
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className={escalaTexto}
-                    style={{ color: pagina.cor_fonte }}
+                    className={cn(escalaTexto, classesCampoPublico(corCard))}
                     required
                   />
                 </div>
               )}
               <div className="flex flex-col gap-2">
-                <Label className="text-[1em]" htmlFor="estado" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em] font-semibold" htmlFor="estado" style={{ color: pagina.cor_fonte }}>
                   Estado
                 </Label>
                 <SelectNativo
@@ -685,14 +688,14 @@ export function CampanhaPublicaView({
                   valor={estado}
                   opcoes={UFS_BRASIL.map((uf) => ({ valor: uf, texto: uf }))}
                   placeholder="Selecione o estado"
-                  corPrimaria={pagina.cor_primaria}
+                  corCampo={corCard}
                   corFundo={pagina.cor_fundo}
                   corFonte={pagina.cor_fonte}
                   onChange={escolherEstado}
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label className="text-[1em]" htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
+                <Label className="text-[1em] font-semibold" htmlFor="cidade" style={{ color: pagina.cor_fonte }}>
                   Município
                 </Label>
                 <SelectNativo
@@ -700,7 +703,7 @@ export function CampanhaPublicaView({
                   valor={cidadeValida ? cidade : ""}
                   opcoes={municipios.map((municipio) => ({ valor: municipio, texto: municipio }))}
                   placeholder={estado ? "Selecione o município" : "Selecione o estado primeiro"}
-                  corPrimaria={pagina.cor_primaria}
+                  corCampo={corCard}
                   corFundo={pagina.cor_fundo}
                   corFonte={pagina.cor_fonte}
                   disabled={!estado}
@@ -728,11 +731,12 @@ export function CampanhaPublicaView({
 
               {etapaAtual.questoes.map((questao) => (
                 <div key={questao.id} className="flex flex-col gap-2">
-                  <Label className="text-[1em]" style={{ color: pagina.cor_fonte }}>{questao.pergunta}</Label>
+                  <Label className="text-[1em] font-semibold" style={{ color: pagina.cor_fonte }}>{questao.pergunta}</Label>
                   <QuestaoCampo
                     questao={questao}
                     valor={respostas[questao.id]}
                     corPrimaria={pagina.cor_primaria}
+                    corCampo={corCard}
                     corFundo={pagina.cor_fundo}
                     corFonte={pagina.cor_fonte}
                     onResponder={(valor) => {

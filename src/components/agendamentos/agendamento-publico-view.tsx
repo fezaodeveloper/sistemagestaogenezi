@@ -13,6 +13,8 @@ import {
 } from "@/lib/agendamentos/schema";
 import { dataComDiaSemana } from "@/lib/datas/util";
 import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
+import { CAMPO_PUBLICO_ADAPTATIVO } from "@/lib/cores/campo-publico";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -430,14 +432,14 @@ export function AgendamentoPublicoView({
                     }}
                     style={selecionado ? { backgroundColor: corPrimaria, color: "#fff" } : undefined}
                     className={
-                      "flex aspect-square min-h-9 items-center justify-center rounded-md text-sm transition-colors " +
+                      "flex aspect-square min-h-9 items-center justify-center rounded-md border-2 text-sm transition-colors " +
                       (status === "disponivel"
                         ? selecionado
-                          ? "font-semibold ring-2 ring-offset-1"
-                          : "bg-muted/60 hover:bg-muted cursor-pointer font-medium"
+                          ? "border-transparent font-semibold ring-2 ring-offset-1"
+                          : "cursor-pointer border-gray-400 bg-white font-medium text-gray-900 hover:bg-gray-50 dark:border-white/60 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
                         : status === "lotado"
-                          ? "cursor-not-allowed bg-red-500/10 text-red-600/60 line-through dark:text-red-400/60"
-                          : "text-muted-foreground/30 cursor-not-allowed")
+                          ? "cursor-not-allowed border-red-300 bg-red-500/10 text-red-600/60 line-through dark:border-red-500/30 dark:text-red-400/60"
+                          : "cursor-not-allowed border-gray-300 bg-gray-200 text-gray-400 dark:border-white/15 dark:bg-white/5 dark:text-white/30")
                     }
                   >
                     {data.getDate()}
@@ -471,7 +473,7 @@ export function AgendamentoPublicoView({
 
             {dataSelecionada && (
               <div className="flex flex-col gap-2">
-                <Label>Horários disponíveis em {dataComDiaSemana(dataSelecionada)}</Label>
+                <Label className="font-semibold">Horários disponíveis em {dataComDiaSemana(dataSelecionada)}</Label>
                 {horariosDoDiaSelecionado.length === 0 ? (
                   <p className="text-muted-foreground text-sm">Nenhum horário configurado para esse dia.</p>
                 ) : horariosDoDiaSelecionado.every((h) => h.lotado) ? (
@@ -494,12 +496,12 @@ export function AgendamentoPublicoView({
                           }}
                           style={selecionado ? { backgroundColor: corPrimaria, borderColor: corPrimaria, color: "#fff" } : undefined}
                           className={
-                            "flex min-h-11 flex-col items-center justify-center rounded-md border px-4 py-1.5 text-sm transition-colors " +
+                            "flex min-h-11 flex-col items-center justify-center rounded-lg border-2 px-4 py-1.5 text-sm transition-colors " +
                             (lotado
-                              ? "text-muted-foreground/50 cursor-not-allowed"
+                              ? "cursor-not-allowed border-gray-300 bg-gray-200 text-gray-400 dark:border-white/15 dark:bg-white/5 dark:text-white/30"
                               : selecionado
                                 ? "font-semibold"
-                                : "hover:bg-muted cursor-pointer")
+                                : "cursor-pointer border-gray-400 bg-white text-gray-900 hover:bg-gray-50 dark:border-white/60 dark:bg-white/10 dark:text-white dark:hover:bg-white/15")
                           }
                         >
                           <span className={lotado ? "line-through" : undefined}>{horario}</span>
@@ -548,7 +550,7 @@ export function AgendamentoPublicoView({
             </p>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="nome">Nome completo</Label>
+              <Label className="font-semibold" htmlFor="nome">Nome completo</Label>
               <Input
                 id="nome"
                 autoComplete="name"
@@ -556,6 +558,7 @@ export function AgendamentoPublicoView({
                 onChange={(event) => setNome(event.target.value)}
                 aria-invalid={tentouAvancar && !!errosPasso2.nome}
                 aria-describedby={tentouAvancar && errosPasso2.nome ? "erro-nome" : undefined}
+                className={CAMPO_PUBLICO_ADAPTATIVO}
               />
               {tentouAvancar && errosPasso2.nome && (
                 <p id="erro-nome" role="alert" className="text-destructive text-xs">
@@ -565,7 +568,7 @@ export function AgendamentoPublicoView({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="whatsapp">WhatsApp</Label>
+              <Label className="font-semibold" htmlFor="whatsapp">WhatsApp</Label>
               <TelefoneInput
                 id="whatsapp"
                 autoComplete="tel"
@@ -573,6 +576,7 @@ export function AgendamentoPublicoView({
                 onValueChange={setWhatsapp}
                 aria-invalid={tentouAvancar && !!errosPasso2.whatsapp}
                 aria-describedby={tentouAvancar && errosPasso2.whatsapp ? "erro-whatsapp" : undefined}
+                className={CAMPO_PUBLICO_ADAPTATIVO}
               />
               {tentouAvancar && errosPasso2.whatsapp && (
                 <p id="erro-whatsapp" role="alert" className="text-destructive text-xs">
@@ -582,7 +586,7 @@ export function AgendamentoPublicoView({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">
+              <Label className="font-semibold" htmlFor="email">
                 E-mail <span className="text-muted-foreground">(opcional)</span>
               </Label>
               <Input
@@ -591,19 +595,20 @@ export function AgendamentoPublicoView({
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                className={CAMPO_PUBLICO_ADAPTATIVO}
               />
             </div>
 
             {pagina.campos_extras.map((campo) => (
               <div key={campo.nome} className="flex flex-col gap-2">
-                <Label htmlFor={`campo-${campo.nome}`}>{campo.nome}</Label>
+                <Label className="font-semibold" htmlFor={`campo-${campo.nome}`}>{campo.nome}</Label>
                 {campo.tipo === "select" ? (
                   <Select
                     items={Object.fromEntries((campo.opcoes ?? []).map((o) => [o, o]))}
                     value={camposExtras[campo.nome] ?? ""}
                     onValueChange={(v) => v && setCamposExtras((prev) => ({ ...prev, [campo.nome]: v }))}
                   >
-                    <SelectTrigger id={`campo-${campo.nome}`} className="w-full">
+                    <SelectTrigger id={`campo-${campo.nome}`} className={cn("w-full !h-auto", CAMPO_PUBLICO_ADAPTATIVO)}>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
@@ -619,13 +624,14 @@ export function AgendamentoPublicoView({
                     id={`campo-${campo.nome}`}
                     value={camposExtras[campo.nome] ?? ""}
                     onChange={(event) => setCamposExtras((prev) => ({ ...prev, [campo.nome]: event.target.value }))}
+                    className={CAMPO_PUBLICO_ADAPTATIVO}
                   />
                 )}
               </div>
             ))}
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="mensagem">Mensagem ou observação (opcional)</Label>
+              <Label className="font-semibold" htmlFor="mensagem">Mensagem ou observação (opcional)</Label>
               <Textarea
                 id="mensagem"
                 rows={3}
@@ -633,6 +639,7 @@ export function AgendamentoPublicoView({
                 placeholder="Quer deixar um recado? Escreva aqui."
                 value={mensagem}
                 onChange={(event) => setMensagem(event.target.value)}
+                className={CAMPO_PUBLICO_ADAPTATIVO}
               />
               <span className="text-muted-foreground self-end text-xs">
                 {mensagem.length}/{MENSAGEM_MAXIMO}
