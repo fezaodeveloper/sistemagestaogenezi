@@ -34,10 +34,12 @@ function AgendamentoPaginaCard({
   pagina,
   responsaveis,
   campanhas,
+  escolaLogoUrl,
 }: {
   pagina: AgendamentoPaginaComContagem;
   responsaveis: ResponsavelOpcao[];
   campanhas: CampanhaPaginaOpcao[];
+  escolaLogoUrl: string | null;
 }) {
   const router = useRouter();
   const [copiado, setCopiado] = useState(false);
@@ -129,6 +131,7 @@ function AgendamentoPaginaCard({
             pagina={pagina}
             responsaveis={responsaveis}
             campanhas={campanhas}
+            escolaLogoUrl={escolaLogoUrl}
             trigger={
               <Button type="button" variant="ghost" size="sm">
                 <Pencil className="size-3.5" />
@@ -202,10 +205,12 @@ export function AgendamentosAdminView({
   paginas,
   responsaveis,
   campanhas,
+  escolaLogoUrl,
 }: {
   paginas: AgendamentoPaginaComContagem[];
   responsaveis: ResponsavelOpcao[];
   campanhas: CampanhaPaginaOpcao[];
+  escolaLogoUrl: string | null;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -213,6 +218,7 @@ export function AgendamentosAdminView({
         <AgendamentoPaginaDialog
           responsaveis={responsaveis}
           campanhas={campanhas}
+          escolaLogoUrl={escolaLogoUrl}
           trigger={
             <Button type="button">
               <Plus />
@@ -229,6 +235,7 @@ export function AgendamentosAdminView({
             <AgendamentoPaginaDialog
               responsaveis={responsaveis}
               campanhas={campanhas}
+              escolaLogoUrl={escolaLogoUrl}
               trigger={
                 <Button type="button" variant="outline">
                   <Plus />
@@ -241,7 +248,13 @@ export function AgendamentosAdminView({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {paginas.map((pagina) => (
-            <AgendamentoPaginaCard key={pagina.id} pagina={pagina} responsaveis={responsaveis} campanhas={campanhas} />
+            <AgendamentoPaginaCard
+              key={pagina.id}
+              pagina={pagina}
+              responsaveis={responsaveis}
+              campanhas={campanhas}
+              escolaLogoUrl={escolaLogoUrl}
+            />
           ))}
         </div>
       )}

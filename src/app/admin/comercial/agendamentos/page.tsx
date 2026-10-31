@@ -8,10 +8,11 @@ export default async function AgendamentosPage() {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const [paginas, responsaveis, campanhas] = await Promise.all([
+  const [paginas, responsaveis, campanhas, { data: config }] = await Promise.all([
     getAgendamentoPaginasAdmin(supabase),
     getResponsaveisAdmin(),
     getCampanhasPaginasAtivas(),
+    supabase.from("configuracoes").select("escola_logo_url").eq("id", true).maybeSingle(),
   ]);
 
   return (
@@ -23,7 +24,12 @@ export default async function AgendamentosPage() {
         </p>
       </div>
 
-      <AgendamentosAdminView paginas={paginas} responsaveis={responsaveis} campanhas={campanhas} />
+      <AgendamentosAdminView
+        paginas={paginas}
+        responsaveis={responsaveis}
+        campanhas={campanhas}
+        escolaLogoUrl={config?.escola_logo_url ?? null}
+      />
     </div>
   );
 }

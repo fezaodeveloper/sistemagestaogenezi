@@ -82,6 +82,9 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
   // TAREFA agendamentos — PARTE 4: aparência personalizada (resolverConfigVisual nunca quebra em
   // config_visual ausente/parcial/inválida — devolve sempre os 13 campos completos).
   const visual = resolverConfigVisual(pagina.config_visual);
+  // TAREFA logo — PARTE 1: logo própria da página tem prioridade sobre a logo global da escola;
+  // sem nenhuma das duas, cai no nome da escola em texto (nunca um espaço vazio/quebrado).
+  const logoUrl = pagina.logo_url || config?.escola_logo_url || null;
 
   return (
     <AgendarTema>
@@ -91,12 +94,12 @@ export default async function AgendarPage({ params }: { params: Promise<{ slug: 
         style={{ backgroundColor: visual.cor_fundo, fontFamily: FONTE_AGENDAMENTO_CSS[visual.fonte] }}
       >
         <div className="flex flex-col items-center gap-2">
-          {config?.escola_logo_url ? (
+          {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- logo vem do Storage do próprio projeto
             <img
-              src={config.escola_logo_url}
-              alt={config?.escola_nome ?? "Gênezi"}
-              className="h-12 self-center object-contain dark:rounded-md dark:bg-white/95 dark:px-3 dark:py-1.5"
+              src={logoUrl}
+              alt={pagina.titulo}
+              className="max-h-20 w-auto self-center object-contain dark:rounded-md dark:bg-white/95 dark:px-3 dark:py-1.5"
             />
           ) : (
             <p className="self-center text-lg font-semibold" style={{ color: visual.cor_texto }}>

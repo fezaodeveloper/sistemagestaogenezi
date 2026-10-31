@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useTransition, type ReactElement } from "react";
+import { useRef, useState, useTransition, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { Plus, Trash2, Upload, X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import {
+  CAMPANHA_PAGINA_BUCKET,
+  CAMPANHA_PAGINA_IMAGEM_MAXIMO_BYTES,
+  CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS,
+} from "@/lib/storage/campanha-paginas";
 import {
   atualizarAgendamentoPagina,
   criarAgendamentoPagina,
@@ -84,12 +90,14 @@ export function AgendamentoPaginaDialog({
   pagina,
   responsaveis,
   campanhas,
+  escolaLogoUrl,
   trigger,
   onSalvo,
 }: {
   pagina?: AgendamentoPagina;
   responsaveis: ResponsavelOpcao[];
   campanhas: CampanhaPaginaOpcao[];
+  escolaLogoUrl: string | null;
   trigger: ReactElement;
   onSalvo?: (id: string) => void;
 }) {
@@ -100,6 +108,11 @@ export function AgendamentoPaginaDialog({
   const [slug, setSlug] = useState(pagina?.slug ?? "");
   const [slugEditadoManualmente, setSlugEditadoManualmente] = useState(editando);
   const [corPrimaria, setCorPrimaria] = useState(pagina?.cor_primaria ?? "#06b6d4");
+  // TAREFA logo — PARTE 2: logo específica da página (prioridade sobre a logo global da escola
+  // na página pública — ver resolução em src/app/agendar/[slug]/page.tsx).
+  const [logoUrl, setLogoUrl] = useState(pagina?.logo_url ?? "");
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [horarios, setHorarios] = useState<HorarioDisponivel[]>(pagina?.horarios_disponiveis ?? []);
   const [novoDia, setNovoDia] = useState("1");
   // TAREFA — PARTE 2: janela "Das [hora_inicio] às [hora_fim]" por dia, substitui o antigo
@@ -134,6 +147,44 @@ export function AgendamentoPaginaDialog({
     setConfigVisual((prev) => ({ ...prev, ...dados }));
   }
 
+  // TAREFA logo — PARTE 2: reaproveita o bucket "campanha-paginas" (já existe, já é público, já
+  // tem policies de admin — ver src/lib/storage/campanha-paginas.ts) em vez de criar um bucket
+  // novo só pra isso; mesmo padrão de upload de campanha-editor.tsx.
+  async function handleUploadLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) return;
+
+    setError(null);
+    if (!(CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS as readonly string[]).includes(file.type)) {
+      setError("Formato não aceito. Use JPG, PNG, WebP ou SVG.");
+      return;
+    }
+    if (file.size > CAMPANHA_PAGINA_IMAGEM_MAXIMO_BYTES) {
+      setError("Arquivo muito grande. Máximo permitido: 5MB.");
+      return;
+    }
+
+    setEnviandoLogo(true);
+    try {
+      const supabase = createClient();
+      const nomeSeguro = file.name
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const path = `agendamentos/${Date.now()}-${nomeSeguro}`;
+      const { error: uploadError } = await supabase.storage.from(CAMPANHA_PAGINA_BUCKET).upload(path, file);
+      if (uploadError) {
+        setError("Não foi possível enviar a imagem. Tente novamente.");
+        return;
+      }
+      const { data: urlData } = supabase.storage.from(CAMPANHA_PAGINA_BUCKET).getPublicUrl(path);
+      setLogoUrl(urlData.publicUrl);
+    } finally {
+      setEnviandoLogo(false);
+    }
+  }
+
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
     if (nextOpen) {
@@ -141,6 +192,7 @@ export function AgendamentoPaginaDialog({
       setSlug(pagina?.slug ?? "");
       setSlugEditadoManualmente(editando);
       setCorPrimaria(pagina?.cor_primaria ?? "#06b6d4");
+      setLogoUrl(pagina?.logo_url ?? "");
       setHorarios(pagina?.horarios_disponiveis ?? []);
       setCampos(
         (pagina?.campos_extras ?? []).map((c) => ({
@@ -214,6 +266,7 @@ export function AgendamentoPaginaDialog({
   function handleSubmit(formData: FormData) {
     setError(null);
     formData.set("cor_primaria", corPrimaria);
+    formData.set("logo_url", logoUrl);
     formData.set("horarios_disponiveis", JSON.stringify(horarios));
     formData.set("responsavel_id", responsavelId);
     formData.set("datas_bloqueadas", JSON.stringify(datasBloqueadas));
@@ -307,6 +360,47 @@ export function AgendamentoPaginaDialog({
               />
               <span className="text-muted-foreground text-sm">{corPrimaria}</span>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Logo da página (opcional)</Label>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept={CAMPANHA_PAGINA_IMAGEM_TIPOS_ACEITOS.join(",")}
+              onChange={handleUploadLogo}
+              className="hidden"
+            />
+            <div className="flex items-center gap-3">
+              {logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- imagem vem do Storage do próprio projeto
+                <img src={logoUrl} alt="Logo" className="h-14 w-28 rounded-md border bg-white object-contain p-1" />
+              ) : (
+                <div className="text-muted-foreground flex h-14 w-28 items-center justify-center rounded-md border-2 border-dashed text-xs">
+                  Sem logo
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={enviandoLogo} onClick={() => logoInputRef.current?.click()}>
+                  <Upload className="size-3.5" />
+                  {enviandoLogo ? "Enviando..." : logoUrl ? "Trocar" : "Carregar imagem"}
+                </Button>
+                {escolaLogoUrl && logoUrl !== escolaLogoUrl && (
+                  <Button type="button" variant="outline" size="sm" disabled={enviandoLogo} onClick={() => setLogoUrl(escolaLogoUrl)}>
+                    Usar logo da escola
+                  </Button>
+                )}
+                {logoUrl && (
+                  <Button type="button" variant="ghost" size="sm" disabled={enviandoLogo} onClick={() => setLogoUrl("")}>
+                    <Trash2 className="size-3.5" />
+                    Remover
+                  </Button>
+                )}
+              </div>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Sem logo própria, a página pública usa a logo da escola. JPG, PNG, WebP ou SVG · máx. 5MB.
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 rounded-md border p-3">

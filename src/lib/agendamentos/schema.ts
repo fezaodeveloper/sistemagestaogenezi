@@ -282,6 +282,9 @@ export const agendamentoPaginaFormSchema = z
       }),
     descricao: z.string().trim().max(2000).optional(),
     cor_primaria: z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." }),
+    // TAREFA logo — PARTE 2: logo_url é coluna original (20260918000000), mas nunca tinha sido
+    // exposta no editor nem usada na página pública até esta tarefa.
+    logo_url: z.string().trim().max(2000).optional(),
     data_inicio: z.string().trim().optional(),
     data_fim: z.string().trim().optional(),
     vagas_por_horario: z.coerce
