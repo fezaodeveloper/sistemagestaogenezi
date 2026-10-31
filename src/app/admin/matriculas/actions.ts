@@ -137,14 +137,16 @@ export async function getCursosGratuitos(): Promise<CursoParaMatricula[]> {
 // Sem limit: o filtro por curso_id já é o que mantém isso pequeno (poucas
 // turmas por curso); se passar de 10, o wizard mostra um campo de busca
 // que filtra esse mesmo array no client, sem nova ida ao servidor.
+// TAREFA múltiplos cursos por turma — via turma_cursos (não mais turmas.curso_id direto), pra
+// uma turma vinculada a 2+ cursos aparecer na busca de QUALQUER um deles.
 export async function buscarTurmasParaWizard(cursoId: string): Promise<TurmaParaMatricula[]> {
   await requireRole("admin");
 
   const supabase = await createClient();
   const { data } = await supabase
     .from("turmas")
-    .select("id, nome, vagas_total, vagas_ocupadas, cadencia_dias_semana, horario_aula, data_inicio, data_fim")
-    .eq("curso_id", cursoId)
+    .select("id, nome, vagas_total, vagas_ocupadas, cadencia_dias_semana, horario_aula, data_inicio, data_fim, turma_cursos!inner(curso_id)")
+    .eq("turma_cursos.curso_id", cursoId)
     .eq("status", "ativa")
     .order("nome");
 
@@ -240,6 +242,7 @@ export async function createMatricula(
       taxa_matricula_forma_pagamento: data.taxa_matricula_forma_pagamento,
       taxa_matricula_paga: data.taxa_matricula_paga,
       curso_bonus_id: data.curso_bonus_id,
+      curso_id: data.curso_id,
     })
     .select()
     .single();

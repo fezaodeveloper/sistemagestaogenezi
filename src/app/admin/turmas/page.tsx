@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, parseLimite, parsePagina } from "@/lib/paginacao";
 import { parseBusca, termoIlike } from "@/lib/busca";
-import type { TurmaWithCurso } from "@/lib/turmas/schema";
+import type { TurmaCursoVinculo, TurmaWithCurso } from "@/lib/turmas/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TurmasTable } from "@/components/admin/turmas-table";
@@ -34,7 +34,9 @@ export default async function TurmasPage({
   const orderBy = parseTurmasOrderBy(orderByRaw);
 
   const supabase = await createClient();
-  let query = supabase.from("turmas").select("*, cursos(nome)", { count: "exact" });
+  // turma_cursos (TAREFA múltiplos cursos por turma) — curso principal continua em
+  // turmas.curso_id/cursos(nome) (compatibilidade), turma_cursos é só pro badge "+N cursos".
+  let query = supabase.from("turmas").select("*, cursos(nome), turma_cursos(curso_id, ordem, cursos(nome))", { count: "exact" });
   if (q) {
     // Nome da turma OU nome do curso. O curso vem por embed, e um filtro `or`
     // não alcança colunas de tabela embutida — então primeiro acha os cursos
@@ -68,7 +70,7 @@ export default async function TurmasPage({
       .in("status", ["planejada", "ativa"])
       .limit(1000),
   ]);
-  const turmas = data as TurmaWithCurso[] | null;
+  const turmas = data as (TurmaWithCurso & { turma_cursos: TurmaCursoVinculo[] })[] | null;
   const totalRegistros = count ?? 0;
   const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
 

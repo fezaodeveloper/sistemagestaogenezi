@@ -6,7 +6,7 @@ import {
   type TurmaMatriculaAluno,
   type TurmaPresencaRow,
 } from "@/components/admin/turma-detalhes";
-import type { TurmaWithCurso } from "@/lib/turmas/schema";
+import type { TurmaCursoVinculo, TurmaWithCurso } from "@/lib/turmas/schema";
 
 export default async function TurmaDetalhesPage({
   params,
@@ -19,7 +19,7 @@ export default async function TurmaDetalhesPage({
   const supabase = await createClient();
   const [{ data: turmaData }, { data: matriculasData }, { data: presencasData }] =
     await Promise.all([
-      supabase.from("turmas").select("*, cursos(nome)").eq("id", id).single(),
+      supabase.from("turmas").select("*, cursos(nome), turma_cursos(curso_id, ordem, cursos(nome))").eq("id", id).single(),
       supabase
         .from("matriculas")
         .select("id, status, alunos(full_name, email, telefone)")
@@ -35,7 +35,7 @@ export default async function TurmaDetalhesPage({
         .select("matricula_id, status, matriculas!inner(turma_id)")
         .eq("matriculas.turma_id", id),
     ]);
-  const turma = turmaData as TurmaWithCurso | null;
+  const turma = turmaData as (TurmaWithCurso & { turma_cursos: TurmaCursoVinculo[] }) | null;
 
   if (!turma) {
     notFound();

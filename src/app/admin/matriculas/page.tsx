@@ -42,7 +42,7 @@ export default async function MatriculasPage({
   let query = supabase
     .from("matriculas")
     .select(
-      "*, alunos(full_name, email, cpf), turmas(nome, vagas_total, vagas_ocupadas, cursos(nome)), contratos_assinados(status, aceito_em)",
+      "*, alunos(full_name, email, cpf), turmas(nome, vagas_total, vagas_ocupadas, cursos(nome), turma_cursos(curso_id, ordem, cursos(nome))), contratos_assinados(status, aceito_em)",
       { count: "exact" },
     )
     .order("created_at", { ascending: false });

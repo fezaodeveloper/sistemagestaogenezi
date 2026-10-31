@@ -2,6 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,24 +44,42 @@ export function TurmaForm({
   defaultValues,
   submitLabel,
   cursos,
+  cursoIdsVinculados,
 }: {
   action: (state: TurmaFormState, formData: FormData) => Promise<TurmaFormState>;
   defaultValues?: Partial<TurmaFormValues>;
   submitLabel: string;
   cursos: CursoOption[];
+  // TAREFA múltiplos cursos por turma (PARTE 2) — ids já vinculados (turma_cursos), em ordem;
+  // o primeiro é o "curso principal" (turmas.curso_id, compatibilidade). Vazio/ausente = turma
+  // nova, nenhum curso selecionado ainda.
+  cursoIdsVinculados?: string[];
 }) {
   const [state, formAction] = useActionState<TurmaFormState, FormData>(action, undefined);
   // Se a validação falhar, o formulário reaparece com defaultValue do mount
   // original — sem isso, o usuário perde tudo que digitou. Trocar a key força
   // o React a remontar os inputs não controlados com os valores ecoados.
   const values = state?.values ?? defaultValues;
-  const cursoItems = Object.fromEntries(cursos.map((curso) => [curso.id, curso.nome]));
 
-  // O bloco de cadência só aparece pra curso presencial/híbrido — precisa
-  // saber o tipo do curso selecionado em tempo real (não só no mount), daí
-  // o Select de curso ser controlado por esse estado via onValueChange.
-  const [cursoId, setCursoId] = useState(values?.curso_id ?? "");
-  const cursoSelecionado = cursos.find((curso) => curso.id === cursoId);
+  // Múltiplos cursos (TAREFA, PARTE 2): lista ordenada de ids — o primeiro é sempre o "curso
+  // principal" (vai pra turmas.curso_id, compatibilidade com o código legado). Substitui o
+  // antigo <Select> único de curso_id por chips removíveis + "Adicionar curso...".
+  const [cursoIds, setCursoIds] = useState<string[]>(state?.values?.curso_ids ?? cursoIdsVinculados ?? []);
+  const cursosVinculados = cursoIds.map((id) => cursos.find((c) => c.id === id)).filter((c): c is CursoOption => !!c);
+  const cursosDisponiveis = cursos.filter((c) => !cursoIds.includes(c.id));
+
+  function adicionarCurso(id: string) {
+    if (!id || cursoIds.includes(id)) return;
+    setCursoIds((prev) => [...prev, id]);
+  }
+
+  function removerCurso(id: string) {
+    setCursoIds((prev) => prev.filter((cursoId) => cursoId !== id));
+  }
+
+  // O bloco de cadência só aparece pra curso presencial/híbrido — precisa saber o tipo do curso
+  // PRINCIPAL (primeiro da lista) em tempo real, não só no mount.
+  const cursoSelecionado = cursos.find((curso) => curso.id === cursoIds[0]);
   const mostrarCadencia = !!cursoSelecionado && cursoSelecionado.tipo !== "ead";
 
   const [diasSelecionados, setDiasSelecionados] = useState<string[]>(
@@ -79,27 +99,46 @@ export function TurmaForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="curso_id">Curso</Label>
-            <Select
-              name="curso_id"
-              items={cursoItems}
-              defaultValue={values?.curso_id || undefined}
-              onValueChange={(value) => setCursoId(String(value))}
-            >
-              <SelectTrigger id="curso_id" className="w-full">
-                <SelectValue placeholder="Selecione o curso" />
-              </SelectTrigger>
-              <SelectContent>
-                {cursos.map((curso) => (
-                  <SelectItem key={curso.id} value={curso.id}>
+            <Label>Cursos desta turma</Label>
+            {/* Hidden inputs: FormData.getAll("curso_ids") no servidor — mesmo padrão de
+                cadencia_dias_semana (Checkbox com name repetido) só que via inputs ocultos, já
+                que a lista é controlada pelos chips, não por um grupo de checkbox marcado. */}
+            {cursoIds.map((id) => (
+              <input key={id} type="hidden" name="curso_ids" value={id} />
+            ))}
+            {cursosVinculados.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {cursosVinculados.map((curso, index) => (
+                  <Badge key={curso.id} variant={index === 0 ? "default" : "outline"} className="gap-1 pr-1">
                     {curso.nome}
-                  </SelectItem>
+                    {index === 0 && cursosVinculados.length > 1 && <span className="text-[10px] opacity-70">(principal)</span>}
+                    <button type="button" onClick={() => removerCurso(curso.id)} aria-label={`Remover ${curso.nome}`} className="hover:opacity-70">
+                      <X className="size-3" />
+                    </button>
+                  </Badge>
                 ))}
-              </SelectContent>
-            </Select>
-            {state?.errors?.curso_id && (
+              </div>
+            )}
+            {cursosDisponiveis.length > 0 && (
+              <Select items={Object.fromEntries(cursosDisponiveis.map((c) => [c.id, c.nome]))} value="" onValueChange={(v) => v && adicionarCurso(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Adicionar curso..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursosDisponiveis.map((curso) => (
+                    <SelectItem key={curso.id} value={curso.id}>
+                      {curso.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {cursoIds.length === 0 && (
+              <p className="text-muted-foreground text-xs">Selecione ao menos um curso.</p>
+            )}
+            {state?.errors?.curso_ids && (
               <p role="alert" className="text-destructive text-sm">
-                {state.errors.curso_id[0]}
+                {state.errors.curso_ids[0]}
               </p>
             )}
           </div>

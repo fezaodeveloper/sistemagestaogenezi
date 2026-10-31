@@ -51,6 +51,8 @@ import {
   type Matricula,
 } from "@/lib/matriculas/schema";
 import type { ContratoStatus } from "@/lib/contratos/schema";
+import type { TurmaCursoVinculo } from "@/lib/turmas/schema";
+import { TurmaCursosBadge } from "@/components/admin/turma-cursos-badge";
 
 export type MatriculaListItem = Matricula & {
   alunos: { full_name: string | null; email: string; cpf: string } | null;
@@ -59,6 +61,9 @@ export type MatriculaListItem = Matricula & {
     vagas_total: number;
     vagas_ocupadas: number;
     cursos: { nome: string } | null;
+    // TAREFA múltiplos cursos por turma (PARTE 3) — badge "+N cursos" quando a turma tem mais
+    // de um curso vinculado.
+    turma_cursos: TurmaCursoVinculo[];
   } | null;
   // Objeto único, não array: contratos_assinados.matricula_id é UNIQUE (1 contrato por
   // matrícula no máximo), então o PostgREST resolve esse embed como relação to-one. Bug real
@@ -733,7 +738,9 @@ export function MatriculasTable({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell>{matricula.turmas?.cursos?.nome ?? "—"}</TableCell>
+                <TableCell>
+                  <TurmaCursosBadge vinculos={matricula.turmas?.turma_cursos} />
+                </TableCell>
                 <TableCell>{matricula.turmas?.nome ?? "—"}</TableCell>
                 <TableCell>{formatValor(matricula.valor_final)}</TableCell>
                 <TableCell>{formatDesconto(matricula)}</TableCell>

@@ -451,6 +451,10 @@ export function MatriculaWizard({ escola }: { escola: EscolaInfo }) {
       taxa_matricula_forma_pagamento: cobrarTaxaMatricula ? taxaMatriculaFormaPagamento : null,
       taxa_matricula_paga: cobrarTaxaMatricula ? taxaMatriculaPaga : false,
       curso_bonus_id: cursoBonus?.id ?? null,
+      // TAREFA múltiplos cursos por turma — a Etapa 2 já pede "qual curso" antes de filtrar as
+      // turmas (handleSelecionarCurso); curso.id é sempre a resposta certa, mesmo quando a turma
+      // só tem 1 curso (nesse caso é idêntico a turmas.curso_id).
+      curso_id: curso.id,
     };
 
     startTransition(async () => {

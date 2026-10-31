@@ -38,8 +38,10 @@ import {
   TURNO_BADGE_CLASS,
   TURNO_LABELS,
   type DIAS_SEMANA,
+  type TurmaCursoVinculo,
   type TurmaWithCurso,
 } from "@/lib/turmas/schema";
+import { TurmaCursosBadge } from "@/components/admin/turma-cursos-badge";
 
 const STATUS_FILTRO_TODOS = "todos";
 const STATUS_FILTRO_ITEMS: Record<string, string> = {
@@ -196,7 +198,7 @@ export function TurmasTable({
   orderBy,
   q,
 }: {
-  turmas: TurmaWithCurso[];
+  turmas: (TurmaWithCurso & { turma_cursos: TurmaCursoVinculo[] })[];
   paginaAtual: number;
   totalPaginas: number;
   totalRegistros: number;
@@ -418,7 +420,9 @@ export function TurmasTable({
             {turmasFiltradas.map((turma) => (
               <TableRow key={turma.id}>
                 <TableCell className="font-medium">{turma.nome}</TableCell>
-                <TableCell>{turma.cursos?.nome ?? "—"}</TableCell>
+                <TableCell>
+                  <TurmaCursosBadge vinculos={turma.turma_cursos} />
+                </TableCell>
                 <TableCell>{turma.professor ?? "—"}</TableCell>
                 <TableCell>
                   {turma.turno ? (

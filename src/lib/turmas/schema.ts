@@ -57,7 +57,9 @@ export const TURNO_BADGE_CLASS: Record<Turno, string> = {
 
 export const turmaFormSchema = z
   .object({
-    curso_id: z.uuid({ error: "Selecione o curso." }),
+    // TAREFA múltiplos cursos por turma — substituiu o antigo curso_id único. O primeiro item
+    // da lista é o "curso principal" (vai pra turmas.curso_id, compatibilidade).
+    curso_ids: z.array(z.uuid()).min(1, { error: "Selecione ao menos um curso." }),
     nome: z
       .string({ error: "Informe o nome da turma." })
       .trim()
@@ -128,3 +130,23 @@ export type Turma = {
 };
 
 export type TurmaWithCurso = Turma & { cursos: { nome: string } | null };
+
+// ===== Múltiplos cursos por turma (TAREFA) =====
+//
+// turma_cursos é a fonte de verdade pra "quais cursos esta turma tem" — turmas.curso_id (NOT
+// NULL removido na mesma migration) continua existindo só como o "curso principal"
+// (compatibilidade com o código legado que faz JOIN turmas->cursos direto, fora do escopo desta
+// tarefa: dezenas de lugares, ver AUDITORIA/resumo da tarefa).
+export type TurmaCursoVinculo = { curso_id: string; ordem: number; cursos: { nome: string } | null };
+
+// Nome do curso principal (ordem 0) + quantos cursos a mais, pra exibir "Nome do curso" sozinho
+// quando só tem 1, ou "Nome do curso" + badge "+N cursos" quando tem mais — mesmo cálculo nos 3
+// lugares da PARTE 3 (lista de turmas, detalhe da turma, lista de matrículas).
+export function resolverCursosDaTurma(vinculos: TurmaCursoVinculo[] | null | undefined): {
+  nomePrincipal: string;
+  outrosCursos: string[];
+} {
+  const ordenados = [...(vinculos ?? [])].sort((a, b) => a.ordem - b.ordem);
+  const nomes = ordenados.map((v) => v.cursos?.nome).filter((nome): nome is string => !!nome);
+  return { nomePrincipal: nomes[0] ?? "—", outrosCursos: nomes.slice(1) };
+}

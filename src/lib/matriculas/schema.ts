@@ -133,6 +133,11 @@ export const matriculaWizardSchema = z.object({
   // Curso gratuito BÔNUS (checkbox "Curso Gratuito" na Etapa 3) — adicional ao curso principal
   // (turma_id), nunca o substitui. Ver matricula-wizard.tsx.
   curso_bonus_id: z.uuid().nullable(),
+  // TAREFA múltiplos cursos por turma — qual dos cursos da turma este aluno vai fazer. A Etapa 2
+  // do wizard já pedia "escolha um curso" ANTES de filtrar as turmas (pra turmas com 1 curso só,
+  // é redundante com turmas.curso_id; pra turmas com 2+, é a resposta real) — só não gravava
+  // essa escolha em lugar nenhum até agora.
+  curso_id: z.uuid().nullable(),
 });
 
 export type MatriculaWizardInput = z.infer<typeof matriculaWizardSchema>;

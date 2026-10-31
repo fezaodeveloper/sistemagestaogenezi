@@ -9,7 +9,7 @@ import { enviarMensagemLeadRecontato } from "@/lib/mensagens/mensagens";
 import { regenerarCronogramaAoSalvarTurma } from "@/lib/cronograma/gerador";
 
 type TurmaFormValuesEcho = {
-  curso_id: string;
+  curso_ids: string[];
   nome: string;
   data_inicio: string;
   data_fim: string;
@@ -29,7 +29,7 @@ export type TurmaFormState =
   | {
       errors?: Partial<
         Record<
-          | "curso_id"
+          | "curso_ids"
           | "nome"
           | "data_inicio"
           | "data_fim"
@@ -50,7 +50,7 @@ export type TurmaFormState =
 
 function echoValues(formData: FormData): TurmaFormValuesEcho {
   return {
-    curso_id: String(formData.get("curso_id") ?? ""),
+    curso_ids: formData.getAll("curso_ids").map(String),
     nome: String(formData.get("nome") ?? ""),
     data_inicio: String(formData.get("data_inicio") ?? ""),
     data_fim: String(formData.get("data_fim") ?? ""),
@@ -69,7 +69,7 @@ function echoValues(formData: FormData): TurmaFormValuesEcho {
 
 function parseTurmaForm(formData: FormData) {
   return turmaFormSchema.safeParse({
-    curso_id: formData.get("curso_id"),
+    curso_ids: formData.getAll("curso_ids"),
     nome: formData.get("nome"),
     data_inicio: formData.get("data_inicio"),
     data_fim: formData.get("data_fim"),
@@ -114,6 +114,41 @@ async function resolverCadencia(
   return { ok: true, cadenciaDiasSemana: diasSelecionados };
 }
 
+// TAREFA múltiplos cursos por turma — sincroniza turma_cursos com a lista escolhida no form
+// (insere novos, remove os tirados, grava a ordem = índice na lista). Best-effort: nunca pode
+// impedir o salvamento da turma em si (já concluído antes desta chamada, igual ao cronograma).
+async function sincronizarTurmaCursos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  turmaId: string,
+  cursoIds: string[],
+): Promise<void> {
+  try {
+    await supabase.from("turma_cursos").delete().eq("turma_id", turmaId);
+    await supabase.from("turma_cursos").insert(cursoIds.map((cursoId, ordem) => ({ turma_id: turmaId, curso_id: cursoId, ordem })));
+  } catch (erro) {
+    console.error("[turmas] falha ao sincronizar turma_cursos:", erro);
+  }
+}
+
+// Leads interessados em QUALQUER um dos cursos vinculados à turma (não só o principal) são
+// avisados — turma com múltiplos cursos é relevante pra quem demonstrou interesse em qualquer um
+// deles. Best-effort, nunca bloqueia a criação da turma.
+async function notificarLeadsInteressados(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  cursoIds: string[],
+  nomeTurma: string,
+  dataInicioTurma: string,
+  criadoPor: string,
+): Promise<void> {
+  const { data: leadsInteressados } = await supabase.from("leads").select("id").in("curso_id", cursoIds).in("status", ["novo", "contatado"]);
+
+  await Promise.all(
+    (leadsInteressados ?? []).map((lead) =>
+      enviarMensagemLeadRecontato(lead.id, criadoPor, { nomeTurma, dataInicioTurma }),
+    ),
+  );
+}
+
 export async function createTurma(
   _prevState: TurmaFormState,
   formData: FormData,
@@ -129,7 +164,7 @@ export async function createTurma(
 
   const cadencia = await resolverCadencia(
     supabase,
-    parsed.data.curso_id,
+    parsed.data.curso_ids[0],
     parsed.data.cadencia_dias_semana ?? [],
   );
   if (!cadencia.ok) {
@@ -143,7 +178,8 @@ export async function createTurma(
   const { data: novaTurma, error } = await supabase
     .from("turmas")
     .insert({
-      curso_id: parsed.data.curso_id,
+      // "Curso principal" (compatibilidade com o código legado) — ver resumo da tarefa.
+      curso_id: parsed.data.curso_ids[0],
       nome: parsed.data.nome,
       data_inicio: parsed.data.data_inicio,
       data_fim: parsed.data.data_fim,
@@ -172,24 +208,12 @@ export async function createTurma(
   if (cadencia.cadenciaDiasSemana) {
     await regenerarCronogramaAoSalvarTurma(novaTurma.id, supabase);
   }
+  await sincronizarTurmaCursos(supabase, novaTurma.id, parsed.data.curso_ids);
 
-  // Campanha automática de recontato: leads em aberto (novo/contatado)
-  // interessados nesse curso são avisados que uma turma nova abriu.
-  // Best-effort, nunca bloqueia a criação da turma (já concluída acima).
-  const { data: leadsInteressados } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("curso_id", parsed.data.curso_id)
-    .in("status", ["novo", "contatado"]);
-
-  await Promise.all(
-    (leadsInteressados ?? []).map((lead) =>
-      enviarMensagemLeadRecontato(lead.id, user.id, {
-        nomeTurma: parsed.data.nome,
-        dataInicioTurma: parsed.data.data_inicio,
-      }),
-    ),
-  );
+  // Campanha automática de recontato: leads em aberto (novo/contatado) interessados em QUALQUER
+  // um dos cursos vinculados são avisados que uma turma nova abriu. Best-effort, nunca bloqueia
+  // a criação da turma (já concluída acima).
+  await notificarLeadsInteressados(supabase, parsed.data.curso_ids, parsed.data.nome, parsed.data.data_inicio, user.id);
 
   revalidatePath("/admin/turmas");
   redirect("/admin/turmas");
@@ -211,7 +235,7 @@ export async function updateTurma(
 
   const cadencia = await resolverCadencia(
     supabase,
-    parsed.data.curso_id,
+    parsed.data.curso_ids[0],
     parsed.data.cadencia_dias_semana ?? [],
   );
   if (!cadencia.ok) {
@@ -225,7 +249,7 @@ export async function updateTurma(
   const { error } = await supabase
     .from("turmas")
     .update({
-      curso_id: parsed.data.curso_id,
+      curso_id: parsed.data.curso_ids[0],
       nome: parsed.data.nome,
       data_inicio: parsed.data.data_inicio,
       data_fim: parsed.data.data_fim,
@@ -253,6 +277,7 @@ export async function updateTurma(
   if (cadencia.cadenciaDiasSemana) {
     await regenerarCronogramaAoSalvarTurma(id, supabase);
   }
+  await sincronizarTurmaCursos(supabase, id, parsed.data.curso_ids);
 
   revalidatePath("/admin/turmas");
   redirect("/admin/turmas");
@@ -329,7 +354,7 @@ export async function duplicarTurma(turmaId: string): Promise<{ id: string } | {
   await requireRole("admin");
 
   const supabase = await createClient();
-  const { data: turma } = await supabase.from("turmas").select("*").eq("id", turmaId).single();
+  const { data: turma } = await supabase.from("turmas").select("*, turma_cursos(curso_id, ordem)").eq("id", turmaId).single();
 
   if (!turma) {
     return { error: "Turma não encontrada." };
@@ -359,6 +384,11 @@ export async function duplicarTurma(turmaId: string): Promise<{ id: string } | {
   if (error || !novaTurma) {
     return { error: "Não foi possível duplicar a turma." };
   }
+
+  const cursoIdsOrdenados = ((turma.turma_cursos ?? []) as { curso_id: string; ordem: number }[])
+    .sort((a, b) => a.ordem - b.ordem)
+    .map((v) => v.curso_id);
+  await sincronizarTurmaCursos(supabase, novaTurma.id, cursoIdsOrdenados.length > 0 ? cursoIdsOrdenados : [turma.curso_id]);
 
   revalidatePath("/admin/turmas");
   return { id: novaTurma.id };

@@ -11,16 +11,21 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
 
   const supabase = await createClient();
   const [{ data: turmaData }, { data: cursos }] = await Promise.all([
-    supabase.from("turmas").select("*").eq("id", id).single(),
+    supabase.from("turmas").select("*, turma_cursos(curso_id, ordem)").eq("id", id).single(),
     // Sem filtro de status: o curso já vinculado pode ter sido desativado
     // depois da turma criada, e ele precisa continuar aparecendo aqui.
     supabase.from("cursos").select("id, nome, tipo").order("nome"),
   ]);
-  const turma = turmaData as Turma | null;
+  const turma = turmaData as (Turma & { turma_cursos: { curso_id: string; ordem: number }[] }) | null;
 
   if (!turma) {
     notFound();
   }
+
+  const cursoIdsVinculados =
+    turma.turma_cursos.length > 0
+      ? [...turma.turma_cursos].sort((a, b) => a.ordem - b.ordem).map((v) => v.curso_id)
+      : [turma.curso_id];
 
   return (
     <div className="flex flex-col gap-6">
@@ -31,8 +36,8 @@ export default async function EditarTurmaPage({ params }: { params: Promise<{ id
       <TurmaForm
         action={updateTurma.bind(null, turma.id)}
         cursos={cursos ?? []}
+        cursoIdsVinculados={cursoIdsVinculados}
         defaultValues={{
-          curso_id: turma.curso_id,
           nome: turma.nome,
           data_inicio: turma.data_inicio,
           data_fim: turma.data_fim,

@@ -33,8 +33,10 @@ import {
   TURMA_STATUS_BADGE_CLASS,
   TURMA_STATUS_LABELS,
   TURNO_LABELS,
+  type TurmaCursoVinculo,
   type TurmaWithCurso,
 } from "@/lib/turmas/schema";
+import { TurmaCursosBadge } from "@/components/admin/turma-cursos-badge";
 
 export type TurmaMatriculaAluno = {
   id: string;
@@ -124,7 +126,7 @@ export function TurmaDetalhes({
   matriculas,
   presencas,
 }: {
-  turma: TurmaWithCurso;
+  turma: TurmaWithCurso & { turma_cursos: TurmaCursoVinculo[] };
   matriculas: TurmaMatriculaAluno[];
   presencas: TurmaPresencaRow[];
 }) {
@@ -197,7 +199,7 @@ export function TurmaDetalhes({
             </CardHeader>
             <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
               <p className="text-muted-foreground">
-                Curso: <span className="text-foreground">{turma.cursos?.nome ?? "—"}</span>
+                Curso: <span className="text-foreground"><TurmaCursosBadge vinculos={turma.turma_cursos} /></span>
               </p>
               <p className="text-muted-foreground">
                 Professor: <span className="text-foreground">{turma.professor ?? "—"}</span>
