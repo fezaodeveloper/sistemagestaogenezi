@@ -37,6 +37,46 @@ import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
 // Exportada pra ser reaproveitada fora dos eventos automáticos deste arquivo — ex.:
 // enviarSenhaAlunoWhatsApp (src/app/admin/alunos/actions.ts), disparada por um clique de botão
 // e sujeita ao mesmo delay anti-banimento de enviarWhatsApp().
+// TAREFA auditoria de notificações — log em mensagens_enviadas pros envios que passam por este
+// arquivo (GênZap/eventos.ts), que até esta tarefa não registravam nada em lugar nenhum
+// (diferente do outro caminho de envio, src/lib/mensagens/mensagens.ts, que sempre logou). Só
+// agendamento_lembrete/cobranca_atrasada/lead_followup (os 3 crons citados na tarefa) — os
+// demais disparos deste arquivo (contrato, comprovante, dados_acesso, agendamento_cancelado/
+// falta, cobrança gerada, matrícula assinada) continuam sem log, fora do escopo desta tarefa.
+// Best-effort: nunca pode interromper o envio em si, que já aconteceu com sucesso/falha antes
+// desta chamada. Respeita a constraint real de mensagens_enviadas (exatamente um entre
+// matricula_id/lead_id, nunca os dois, nunca nenhum) — chamadores garantem isso.
+type TipoNotificacaoAuditoria = "agendamento_lembrete" | "cobranca_atrasada" | "lead_followup";
+
+async function registrarEnvioWhatsapp(params: {
+  tipo: TipoNotificacaoAuditoria;
+  matriculaId: string | null;
+  leadId: string | null;
+  telefoneDestino: string;
+  mensagemTexto: string;
+  resultado: { ok: boolean; enviado: boolean; erro?: string };
+}): Promise<void> {
+  // "ok && !enviado" = GênZap desativado/desconectado (stub silencioso) — mesmo critério já
+  // usado em enviarMensagem() (src/lib/mensagens/mensagens.ts): não é uma tentativa de envio de
+  // verdade, não gera linha de log.
+  if (params.resultado.ok && !params.resultado.enviado) return;
+  if (!params.matriculaId && !params.leadId) return;
+
+  try {
+    await createAdminClient().from("mensagens_enviadas").insert({
+      tipo: params.tipo,
+      matricula_id: params.matriculaId,
+      lead_id: params.leadId,
+      telefone_destino: params.telefoneDestino,
+      mensagem_texto: params.mensagemTexto,
+      status: params.resultado.ok ? "enviado" : "falha",
+      erro_detalhe: params.resultado.ok ? null : params.resultado.erro ?? "Falha ao enviar.",
+    });
+  } catch (erro) {
+    console.error(`[whatsapp] falha ao registrar auditoria de "${params.tipo}"`, erro);
+  }
+}
+
 export function emSegundoPlano(tarefa: () => Promise<void>): void {
   const executar = async () => {
     try {
@@ -93,10 +133,12 @@ export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Pro
       const admin = createAdminClient();
       const { data } = await admin
         .from("agendamentos")
-        .select("nome, whatsapp, data_agendada, horario, pagina_id")
+        .select("nome, whatsapp, data_agendada, horario, pagina_id, lead_id")
         .eq("id", agendamentoId)
         .maybeSingle();
-      const agendamento = data as { nome: string; whatsapp: string; data_agendada: string; horario: string; pagina_id: string } | null;
+      const agendamento = data as
+        | { nome: string; whatsapp: string; data_agendada: string; horario: string; pagina_id: string; lead_id: string | null }
+        | null;
       if (!agendamento?.whatsapp) return;
 
       // Consulta separada e best-effort: local_atendimento/slug (migration 20261030500000) são
@@ -124,7 +166,18 @@ export function notificarWhatsappAgendamentoLembrete(agendamentoId: string): Pro
         local: local || "A confirmar",
         link_gerenciar: slug ? `${urlPortal()}/agendar/${slug}/meu-agendamento/${agendamentoId}` : "",
       });
-      await enviarWhatsApp(agendamento.whatsapp, mensagem);
+      const resultado = await enviarWhatsApp(agendamento.whatsapp, mensagem);
+      // Agendamento sem lead vinculado (best-effort de criação de lead pode ter falhado, ver
+      // agendar/[slug]/actions.ts) não tem matricula_id nem lead_id — registrarEnvioWhatsapp
+      // pula o log nesse caso (constraint de mensagens_enviadas exige um dos dois).
+      await registrarEnvioWhatsapp({
+        tipo: "agendamento_lembrete",
+        matriculaId: null,
+        leadId: agendamento.lead_id,
+        telefoneDestino: agendamento.whatsapp,
+        mensagemTexto: mensagem,
+        resultado,
+      });
     } catch (erro) {
       console.error("[whatsapp] falha no lembrete de agendamento", erro);
     }
@@ -186,6 +239,9 @@ type LinhaParcelaCobranca = {
   data_pagamento: string | null;
   asaas_invoice_url: string | null;
   asaas_bank_slip_url: string | null;
+  // TAREFA auditoria de notificações — precisa pra logar o envio em mensagens_enviadas
+  // (notificarWhatsappCobrancaAtrasada); não existia no select original, só matriculas(...).
+  matricula_id: string | null;
   alunos: { id: string; full_name: string | null; telefone: string | null } | null;
   matriculas: { num_parcelas: number | null; turmas: { cursos: { nome: string } | null } | null } | null;
 };
@@ -194,7 +250,7 @@ async function carregarParcelaParaCobranca(parcelaId: string): Promise<LinhaParc
   const { data } = await createAdminClient()
     .from("parcelas")
     .select(
-      "valor, numero_parcela, data_vencimento, data_pagamento, asaas_invoice_url, asaas_bank_slip_url, alunos(id, full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
+      "valor, numero_parcela, data_vencimento, data_pagamento, asaas_invoice_url, asaas_bank_slip_url, matricula_id, alunos(id, full_name, telefone), matriculas(num_parcelas, turmas(cursos(nome)))",
     )
     .eq("id", parcelaId)
     .maybeSingle();
@@ -561,7 +617,15 @@ export function notificarWhatsappCobrancaAtrasada(parcelaId: string, diasAtraso:
         dias_atraso: String(diasAtraso),
         link_boleto: link,
       });
-      await enviarWhatsApp(aluno.telefone, mensagem);
+      const resultado = await enviarWhatsApp(aluno.telefone, mensagem);
+      await registrarEnvioWhatsapp({
+        tipo: "cobranca_atrasada",
+        matriculaId: parcela.matricula_id,
+        leadId: null,
+        telefoneDestino: aluno.telefone,
+        mensagemTexto: mensagem,
+        resultado,
+      });
 
       // Fluxos personalizados (Fase 3) com gatilho "cobranca_atrasada", além do template acima.
       // curso: já vinha no join de carregarParcelaParaCobranca (matriculas.turmas.cursos.nome,
@@ -602,7 +666,15 @@ export function notificarWhatsappLeadFollowup(leadId: string, tentativa: number)
         nome_escola: await nomeEscolaParaSms(),
         tentativa: String(tentativa),
       });
-      await enviarWhatsApp(lead.telefone, mensagem);
+      const resultado = await enviarWhatsApp(lead.telefone, mensagem);
+      await registrarEnvioWhatsapp({
+        tipo: "lead_followup",
+        matriculaId: null,
+        leadId,
+        telefoneDestino: lead.telefone,
+        mensagemTexto: mensagem,
+        resultado,
+      });
     } catch (erro) {
       console.error("[whatsapp] falha no follow-up de lead", erro);
     }
