@@ -22,7 +22,7 @@ export default async function TurmaDetalhesPage({
       supabase.from("turmas").select("*, cursos(nome), turma_cursos(curso_id, ordem, cursos(nome))").eq("id", id).single(),
       supabase
         .from("matriculas")
-        .select("id, status, alunos(full_name, email, telefone)")
+        .select("id, status, curso_id, alunos(full_name, email, telefone)")
         .eq("turma_id", id)
         .eq("status", "ativa")
         .order("created_at", { ascending: false }),
@@ -41,11 +41,23 @@ export default async function TurmaDetalhesPage({
     notFound();
   }
 
+  const matriculas = (matriculasData as TurmaMatriculaAluno[] | null) ?? [];
+
+  // TAREFA fix cursos por turma (PARTE 4) — resolve em lote o nome do curso que cada aluno
+  // escolheu (matriculas.curso_id), só precisa quando a turma oferece 2+ cursos (ver
+  // agruparAlunosPorCurso em turma-detalhes.tsx). Consulta separada, não embed: mesmo motivo
+  // documentado em src/app/aluno/page.tsx (matriculas tem duas FKs pra cursos).
+  const idsCursosEscolhidos = [...new Set(matriculas.map((m) => m.curso_id).filter((cid): cid is string => !!cid))];
+  const { data: cursosEscolhidosData } =
+    idsCursosEscolhidos.length > 0 ? await supabase.from("cursos").select("id, nome").in("id", idsCursosEscolhidos) : { data: [] };
+  const nomesCursosEscolhidos = Object.fromEntries((cursosEscolhidosData ?? []).map((c) => [c.id as string, c.nome as string]));
+
   return (
     <TurmaDetalhes
       turma={turma}
-      matriculas={(matriculasData as TurmaMatriculaAluno[] | null) ?? []}
+      matriculas={matriculas}
       presencas={(presencasData as unknown as TurmaPresencaRow[] | null) ?? []}
+      nomesCursosEscolhidos={nomesCursosEscolhidos}
     />
   );
 }

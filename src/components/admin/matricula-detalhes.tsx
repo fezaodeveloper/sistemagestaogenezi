@@ -238,10 +238,12 @@ export function MatriculaDetalhes({
               telefone: matriculaAtual.alunos?.telefone ?? "",
             },
             curso: {
-              nome: matriculaAtual.turmas?.cursos?.nome ?? "—",
-              tipo: matriculaAtual.turmas?.cursos?.tipo ?? "presencial",
-              carga_horaria_horas: matriculaAtual.turmas?.cursos?.carga_horaria_horas ?? null,
-              descricao: matriculaAtual.turmas?.cursos?.descricao ?? null,
+              // TAREFA fix cursos por turma — mesma resolução de renderSecaoCursoTurma: curso
+              // escolhido pelo aluno (matriculas.curso_id) tem prioridade sobre o curso da turma.
+              nome: (matriculaAtual.cursoEscolhido ?? matriculaAtual.turmas?.cursos)?.nome ?? "—",
+              tipo: (matriculaAtual.cursoEscolhido ?? matriculaAtual.turmas?.cursos)?.tipo ?? "presencial",
+              carga_horaria_horas: (matriculaAtual.cursoEscolhido ?? matriculaAtual.turmas?.cursos)?.carga_horaria_horas ?? null,
+              descricao: (matriculaAtual.cursoEscolhido ?? matriculaAtual.turmas?.cursos)?.descricao ?? null,
               totalModulos: cursoModulosAulas?.totalModulos,
               totalAulas: cursoModulosAulas?.totalAulas,
             },
@@ -310,7 +312,9 @@ export function MatriculaDetalhes({
   }
 
   function renderSecaoCursoTurma() {
-    const curso = matriculaAtual.turmas?.cursos ?? null;
+    // TAREFA fix cursos por turma — cursoEscolhido (matriculas.curso_id) é a fonte de verdade;
+    // turmas.cursos só entra como fallback de compatibilidade legada (ver schema.ts).
+    const curso = matriculaAtual.cursoEscolhido ?? matriculaAtual.turmas?.cursos ?? null;
     return (
       <Card>
         <CardHeader>

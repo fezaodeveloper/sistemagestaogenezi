@@ -25,6 +25,22 @@ function formatarHorario(time: string): string {
   return time.slice(0, 5);
 }
 
+// TAREFA fix cursos por turma — matriculas.curso_id é a fonte de verdade de qual curso ESTE
+// aluno escolheu (turmas.curso_id, no nome passado como fallback, é só compatibilidade legada:
+// matrícula anterior a esta coluna existir, ou turma de 1 curso só). O texto do lembrete/
+// confirmação ("Curso de Informática Básica") precisa vir do curso do aluno, nunca do curso
+// "principal" da turma. Consulta separada (não embed): matriculas tem duas FKs pra cursos
+// (curso_id e curso_bonus_id), mesmo motivo já documentado em src/app/aluno/page.tsx.
+async function resolverNomeCursoDaMatricula(
+  admin: ReturnType<typeof createAdminClient>,
+  cursoId: string | null | undefined,
+  nomeCursoDaTurma: string | null | undefined,
+): Promise<string> {
+  if (!cursoId) return nomeCursoDaTurma ?? "";
+  const { data } = await admin.from("cursos").select("nome").eq("id", cursoId).maybeSingle();
+  return (data?.nome as string | undefined) ?? nomeCursoDaTurma ?? "";
+}
+
 type ContextoAluno = {
   alunos: { id: string; telefone: string; profiles: { full_name: string | null } | null } | null;
 };
@@ -199,7 +215,7 @@ export async function enviarMensagemMatriculaCriada(
     const { data } = await admin
       .from("matriculas")
       .select(
-        "turma_id, alunos(id, telefone, email, senha_portal, participa_conecta, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))",
+        "turma_id, curso_id, alunos(id, telefone, email, senha_portal, participa_conecta, profiles!alunos_id_fkey(full_name)), turmas(nome, horario_aula, cursos(nome))",
       )
       .eq("id", matriculaId)
       .single();
@@ -207,6 +223,7 @@ export async function enviarMensagemMatriculaCriada(
     const matricula = data as unknown as
       | {
           turma_id: string;
+          curso_id: string | null;
           alunos: {
             id: string;
             telefone: string;
@@ -220,6 +237,8 @@ export async function enviarMensagemMatriculaCriada(
       | null;
 
     if (!matricula?.alunos || !matricula.turmas) return;
+
+    const nomeCurso = await resolverNomeCursoDaMatricula(admin, matricula.curso_id, matricula.turmas.cursos?.nome);
 
     const { data: calendario } = await admin.rpc("calendario_aulas_turma", {
       p_turma_id: matricula.turma_id,
@@ -269,7 +288,7 @@ export async function enviarMensagemMatriculaCriada(
       criadoPor,
       variaveis: {
         nome_aluno: matricula.alunos.profiles?.full_name ?? "aluno(a)",
-        nome_curso: matricula.turmas.cursos?.nome ?? "",
+        nome_curso: nomeCurso,
         nome_turma: matricula.turmas.nome,
         data_aula: primeiraAula ? formatarDataBR(primeiraAula.data_liberacao) : "a definir",
         horario_aula: matricula.turmas.horario_aula ? formatarHorario(matricula.turmas.horario_aula) : "a definir",
@@ -288,7 +307,7 @@ export async function enviarMensagemMatriculaCriada(
       {
         telefone: matricula.alunos.telefone,
         nome: matricula.alunos.profiles?.full_name ?? "aluno(a)",
-        curso: matricula.turmas.cursos?.nome ?? "",
+        curso: nomeCurso,
         turma: matricula.turmas.nome,
         // Já vinha no join (turmas(nome, horario_aula, cursos(nome))) — só não entrava no
         // objeto de variáveis até agora.
@@ -319,15 +338,17 @@ export async function enviarMensagemFalta(
 
     const { data } = await admin
       .from("matriculas")
-      .select("alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
+      .select("curso_id, alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
       .eq("id", matriculaId)
       .single();
 
     const matricula = data as unknown as
-      | (ContextoAluno & { turmas: { cursos: { nome: string } | null } | null })
+      | (ContextoAluno & { curso_id: string | null; turmas: { cursos: { nome: string } | null } | null })
       | null;
 
     if (!matricula?.alunos) return { ok: false, erro: "Aluno não encontrado para esta matrícula." };
+
+    const nomeCurso = await resolverNomeCursoDaMatricula(admin, matricula.curso_id, matricula.turmas?.cursos?.nome);
 
     return await enviarMensagem({
       tipo: "falta",
@@ -339,7 +360,7 @@ export async function enviarMensagemFalta(
       criadoPor,
       variaveis: {
         nome_aluno: matricula.alunos.profiles?.full_name ?? "aluno(a)",
-        nome_curso: matricula.turmas?.cursos?.nome ?? "",
+        nome_curso: nomeCurso,
         data_aula: formatarDataBR(dataAula),
       },
     });
@@ -387,15 +408,17 @@ export async function enviarMensagemLembreteAula(
 
     const { data } = await admin
       .from("matriculas")
-      .select("alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
+      .select("curso_id, alunos(id, telefone, profiles!alunos_id_fkey(full_name)), turmas(cursos(nome))")
       .eq("id", matriculaId)
       .single();
 
     const matricula = data as unknown as
-      | (ContextoAluno & { turmas: { cursos: { nome: string } | null } | null })
+      | (ContextoAluno & { curso_id: string | null; turmas: { cursos: { nome: string } | null } | null })
       | null;
 
     if (!matricula?.alunos) return { ok: false, erro: "Aluno não encontrado para esta matrícula." };
+
+    const nomeCurso = await resolverNomeCursoDaMatricula(admin, matricula.curso_id, matricula.turmas?.cursos?.nome);
 
     return await enviarMensagem({
       tipo: "lembrete_aula",
@@ -407,7 +430,7 @@ export async function enviarMensagemLembreteAula(
       criadoPor,
       variaveis: {
         nome_aluno: matricula.alunos.profiles?.full_name ?? "aluno(a)",
-        nome_curso: matricula.turmas?.cursos?.nome ?? "",
+        nome_curso: nomeCurso,
         data_aula: formatarDataBR(dataAula),
         horario_aula: horarioAula ? formatarHorario(horarioAula) : "horário a confirmar",
       },

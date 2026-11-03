@@ -218,6 +218,11 @@ export type Matricula = {
   taxa_matricula_forma_pagamento: TaxaMatriculaFormaPagamento | null;
   taxa_matricula_paga: boolean;
   curso_bonus_id: string | null;
+  // TAREFA fix cursos por turma — fonte de verdade de qual curso ESTE aluno escolheu (quando a
+  // turma tem 2+ cursos via turma_cursos). null = matrícula antiga (criada antes desta coluna
+  // existir) ou turma de 1 curso só — nesses casos o curso é turmas.curso_id (compatibilidade
+  // legada, NUNCA usar turmas.curso_id como "o curso do aluno" quando curso_id está preenchido).
+  curso_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;

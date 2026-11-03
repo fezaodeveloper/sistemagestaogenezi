@@ -24,20 +24,30 @@ import { cn } from "@/lib/utils";
 
 type CursoTipo = (typeof CURSO_TIPOS)[number];
 
+type CursoInfo = {
+  id: string;
+  nome: string;
+  tipo: CursoTipo;
+  capa_url: string | null;
+  gratuito: boolean;
+  url_plataforma_externa: string | null;
+};
+
+// TAREFA fix cursos por turma — matriculas.curso_id é a fonte de verdade de qual curso ESTE
+// aluno escolheu (turmas.curso_id é só compatibilidade legada: matrícula anterior a esta coluna
+// existir, ou turma de 1 curso só). curso_id vem como coluna solta (não embed): matriculas tem
+// DUAS FKs pra cursos (curso_id e curso_bonus_id), um embed "cursos(...)" direto seria ambíguo
+// sem hint — mesmo motivo já documentado em getCursosGratuitosAluno, abaixo.
 type MatriculaCursoRow = {
   status: (typeof MATRICULA_STATUSES)[number];
   data_expiracao: string;
-  turmas: {
-    cursos: {
-      id: string;
-      nome: string;
-      tipo: CursoTipo;
-      capa_url: string | null;
-      gratuito: boolean;
-      url_plataforma_externa: string | null;
-    } | null;
-  } | null;
+  curso_id: string | null;
+  turmas: { curso_id: string | null } | null;
 };
+
+function cursoIdEfetivo(row: MatriculaCursoRow): string | null {
+  return row.curso_id ?? row.turmas?.curso_id ?? null;
+}
 
 type CursoAluno = {
   id: string;
@@ -205,12 +215,13 @@ function badgeStatusCurso(curso: { expirada: boolean; emAndamento: boolean }) {
 // curso mostra ao clicar. Comparação de data em JS, não via RPC
 // (matricula_expirada): é só um badge informativo, não fronteira de
 // acesso — a página do curso, essa sim, usa a function SQL.
-function agruparPorCurso(rows: MatriculaCursoRow[]): CursoAluno[] {
+function agruparPorCurso(rows: MatriculaCursoRow[], cursosPorId: Map<string, CursoInfo>): CursoAluno[] {
   const hoje = new Date().toISOString().slice(0, 10);
   const mapa = new Map<string, CursoAluno>();
 
   for (const row of rows) {
-    const curso = row.turmas?.cursos;
+    const cursoId = cursoIdEfetivo(row);
+    const curso = cursoId ? cursosPorId.get(cursoId) : undefined;
     if (!curso) continue;
 
     const emAndamento = row.status === "ativa";
@@ -244,7 +255,7 @@ export default async function AlunoDashboardPage() {
   const [{ data, error }, meusPontos, statusInadimplencia, saldoCreditos, { data: configData }] = await Promise.all([
     supabase
       .from("matriculas")
-      .select("status, data_expiracao, turmas(cursos(id, nome, tipo, capa_url, gratuito, url_plataforma_externa))")
+      .select("status, data_expiracao, curso_id, turmas(curso_id)")
       .eq("aluno_id", user.id)
       .in("status", ["ativa", "concluida"])
       .order("created_at", { ascending: false }),
@@ -257,7 +268,21 @@ export default async function AlunoDashboardPage() {
     supabase.from("configuracoes").select("push_vapid_public_key").eq("id", true).maybeSingle(),
   ]);
 
-  const cursosBrutos = data ? agruparPorCurso(data as unknown as MatriculaCursoRow[]) : null;
+  const matriculaRows = (data ?? []) as unknown as MatriculaCursoRow[];
+  // IDs efetivos (curso_id da matrícula, com fallback pro curso da turma) desta página — uma
+  // segunda consulta em lote, mesmo padrão de getCursosGratuitosAluno, evita um embed ambíguo
+  // (matriculas tem duas FKs pra cursos).
+  const idsCursosEfetivos = Array.from(new Set(matriculaRows.map(cursoIdEfetivo).filter((id): id is string => !!id)));
+  const { data: cursosData } =
+    idsCursosEfetivos.length > 0
+      ? await supabase
+          .from("cursos")
+          .select("id, nome, tipo, capa_url, gratuito, url_plataforma_externa")
+          .in("id", idsCursosEfetivos)
+      : { data: [] as CursoInfo[] };
+  const cursosPorId = new Map((cursosData ?? []).map((c) => [c.id as string, c as CursoInfo]));
+
+  const cursosBrutos = data ? agruparPorCurso(matriculaRows, cursosPorId) : null;
   const cursosGratuitos = await getCursosGratuitosAluno(supabase, user.id);
   const documentosPendentes = await getDocumentosPendentesAluno(supabase, user.id);
 

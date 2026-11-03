@@ -19,7 +19,9 @@ export default async function MatriculaDetalhesPage({
     notFound();
   }
 
-  const cursoId = matricula.turmas?.cursos?.id;
+  // TAREFA fix cursos por turma — cursoEscolhido (matriculas.curso_id) é a fonte de verdade;
+  // turmas.cursos só entra como fallback de compatibilidade legada (ver schema.ts).
+  const cursoId = matricula.cursoEscolhido?.id ?? matricula.turmas?.cursos?.id;
   const supabase = await createClient();
   const [{ data: configuracoes }, modulosAulas] = await Promise.all([
     supabase

@@ -108,6 +108,10 @@ export type TurmaFormValues = z.infer<typeof turmaFormSchema>;
 
 export type Turma = {
   id: string;
+  // turmas.curso_id = compatibilidade legada (dezenas de JOINs turmas->cursos espalhados pelo
+  // projeto, fora do escopo da TAREFA fix cursos por turma). Nunca o use como "o curso que o
+  // aluno vai fazer" — isso é matriculas.curso_id. Pra "quais cursos esta turma oferece", use
+  // turma_cursos (ver TurmaCursoVinculo mais abaixo).
   curso_id: string;
   nome: string;
   data_inicio: string;
@@ -134,14 +138,22 @@ export type TurmaWithCurso = Turma & { cursos: { nome: string } | null };
 // ===== Múltiplos cursos por turma (TAREFA) =====
 //
 // turma_cursos é a fonte de verdade pra "quais cursos esta turma tem" — turmas.curso_id (NOT
-// NULL removido na mesma migration) continua existindo só como o "curso principal"
-// (compatibilidade com o código legado que faz JOIN turmas->cursos direto, fora do escopo desta
-// tarefa: dezenas de lugares, ver AUDITORIA/resumo da tarefa).
+// NULL removido na mesma migration) continua existindo só como compatibilidade com o código
+// legado que faz JOIN turmas->cursos direto, fora do escopo desta tarefa (dezenas de lugares,
+// ver AUDITORIA/resumo da tarefa).
+//
+// TAREFA fix cursos por turma — `ordem` é SÓ estabilidade de exibição ("Nome do curso" sozinho
+// quando a turma tem 1, + badge "+N cursos" quando tem mais — ver resolverCursosDaTurma/
+// TurmaCursosBadge, usados pra mostrar o que a TURMA oferece, nunca pra uma matrícula
+// específica). NUNCA use `ordem` (ou o "curso de ordem 0") pra inferir qual curso um aluno
+// matriculado vai fazer — isso é sempre matriculas.curso_id, nunca inferido da turma.
 export type TurmaCursoVinculo = { curso_id: string; ordem: number; cursos: { nome: string } | null };
 
-// Nome do curso principal (ordem 0) + quantos cursos a mais, pra exibir "Nome do curso" sozinho
-// quando só tem 1, ou "Nome do curso" + badge "+N cursos" quando tem mais — mesmo cálculo nos 3
-// lugares da PARTE 3 (lista de turmas, detalhe da turma, lista de matrículas).
+// Nome do primeiro curso da lista (ordem 0, só por estabilidade visual) + quantos a mais, pra
+// exibir "Nome do curso" sozinho quando só tem 1, ou "Nome do curso" + badge "+N cursos" quando
+// tem mais — mesmo cálculo nos 3 lugares que mostram o que uma TURMA oferece (lista de turmas,
+// detalhe da turma, fallback legado na lista de matrículas). Não decide qual curso um aluno
+// específico está fazendo — ver comentário de TurmaCursoVinculo acima.
 export function resolverCursosDaTurma(vinculos: TurmaCursoVinculo[] | null | undefined): {
   nomePrincipal: string;
   outrosCursos: string[];

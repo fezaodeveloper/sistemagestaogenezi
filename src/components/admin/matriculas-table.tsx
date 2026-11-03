@@ -471,6 +471,7 @@ export function MatriculasTable({
   turmas,
   cursoIdFiltro,
   turmaIdFiltro,
+  nomesCursosEscolhidos,
 }: {
   matriculas: MatriculaListItem[];
   paginaAtual: number;
@@ -489,6 +490,10 @@ export function MatriculasTable({
   turmas: { id: string; nome: string }[];
   cursoIdFiltro: string;
   turmaIdFiltro: string;
+  // TAREFA fix cursos por turma — nome do curso que CADA aluno desta página escolheu
+  // (matriculas.curso_id), por id. Sem entrada aqui (matrícula antiga, ou turma de 1 curso só) =
+  // cai no fallback de turmas.turma_cursos (TurmaCursosBadge), compatibilidade legada.
+  nomesCursosEscolhidos: Record<string, string>;
 }) {
   const router = useRouter();
   const paramsFiltros = {
@@ -739,7 +744,14 @@ export function MatriculasTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <TurmaCursosBadge vinculos={matricula.turmas?.turma_cursos} />
+                  {/* TAREFA fix cursos por turma — matriculas.curso_id (o curso que ESTE aluno
+                      escolheu) é a fonte de verdade; TurmaCursosBadge (curso "principal" da
+                      turma) só entra como fallback legado quando curso_id é null. */}
+                  {matricula.curso_id && nomesCursosEscolhidos[matricula.curso_id] ? (
+                    <span>{nomesCursosEscolhidos[matricula.curso_id]}</span>
+                  ) : (
+                    <TurmaCursosBadge vinculos={matricula.turmas?.turma_cursos} />
+                  )}
                 </TableCell>
                 <TableCell>{matricula.turmas?.nome ?? "—"}</TableCell>
                 <TableCell>{formatValor(matricula.valor_final)}</TableCell>

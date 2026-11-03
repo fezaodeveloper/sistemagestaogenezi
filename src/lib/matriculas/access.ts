@@ -2,6 +2,19 @@ import type { createClient } from "@/lib/supabase/server";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
+// TAREFA fix cursos por turma — matriculas.curso_id é a fonte de verdade de "qual curso ESTE
+// aluno escolheu" (turma_cursos define só o que a turma OFERECE, não o que o aluno faz). Bug
+// real corrigido aqui: as 3 funções abaixo filtravam por turmas.curso_id (o "curso principal" da
+// turma) — um aluno matriculado numa turma de 2+ cursos, que escolheu o curso SECUNDÁRIO, ficava
+// SEM acesso ao próprio conteúdo (e com acesso indevido ao curso principal, que nunca escolheu).
+// curso_id null = matrícula antiga (antes desta coluna existir) ou turma de 1 curso só — nesses
+// casos cai no fallback de turmas.curso_id (compatibilidade legada, nunca o inverso).
+type MatriculaCursoRow = { curso_id: string | null; turmas: { curso_id: string | null } | null };
+
+function cursoEfetivoId(row: MatriculaCursoRow): string | null {
+  return row.curso_id ?? row.turmas?.curso_id ?? null;
+}
+
 // Mesma regra de negócio usada na listagem "Meus Cursos": matrícula "ativa"
 // ou "concluida" dá acesso ao conteúdo do curso. RLS permite a leitura das
 // linhas independente do status (qualquer vínculo já dá visibilidade); esse
@@ -13,13 +26,11 @@ export async function alunoTemAcessoAoCurso(
 ): Promise<boolean> {
   const { data } = await supabase
     .from("matriculas")
-    .select("id, turmas!inner(curso_id)")
+    .select("curso_id, turmas(curso_id)")
     .eq("aluno_id", alunoId)
-    .eq("turmas.curso_id", cursoId)
-    .in("status", ["ativa", "concluida"])
-    .limit(1);
+    .in("status", ["ativa", "concluida"]);
 
-  return !!data && data.length > 0;
+  return ((data ?? []) as unknown as MatriculaCursoRow[]).some((row) => cursoEfetivoId(row) === cursoId);
 }
 
 // Usada ao MARCAR uma aula como concluída — precisa de uma matricula_id
@@ -34,15 +45,14 @@ export async function getMatriculaIdAtivaParaCurso(
 ): Promise<string | null> {
   const { data } = await supabase
     .from("matriculas")
-    .select("id, created_at, turmas!inner(curso_id)")
+    .select("id, created_at, curso_id, turmas(curso_id)")
     .eq("aluno_id", alunoId)
-    .eq("turmas.curso_id", cursoId)
     .in("status", ["ativa", "concluida"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  return data?.id ?? null;
+  type Row = MatriculaCursoRow & { id: string };
+  const encontrada = ((data ?? []) as unknown as Row[]).find((row) => cursoEfetivoId(row) === cursoId);
+  return encontrada?.id ?? null;
 }
 
 // Variante usada só onde o calendário de liberação (cronograma) precisa ser
@@ -57,15 +67,14 @@ export async function getMatriculaAtivaComTurma(
 ): Promise<{ id: string; turmaId: string } | null> {
   const { data } = await supabase
     .from("matriculas")
-    .select("id, created_at, turma_id, turmas!inner(curso_id)")
+    .select("id, created_at, turma_id, curso_id, turmas(curso_id)")
     .eq("aluno_id", alunoId)
-    .eq("turmas.curso_id", cursoId)
     .in("status", ["ativa", "concluida"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  return data ? { id: data.id, turmaId: data.turma_id } : null;
+  type Row = MatriculaCursoRow & { id: string; turma_id: string };
+  const encontrada = ((data ?? []) as unknown as Row[]).find((row) => cursoEfetivoId(row) === cursoId);
+  return encontrada ? { id: encontrada.id, turmaId: encontrada.turma_id } : null;
 }
 
 // Presencial/híbrido = tipo <> 'ead' — mesmo critério usado pro streak de

@@ -139,6 +139,8 @@ export async function getCursosGratuitos(): Promise<CursoParaMatricula[]> {
 // que filtra esse mesmo array no client, sem nova ida ao servidor.
 // TAREFA múltiplos cursos por turma — via turma_cursos (não mais turmas.curso_id direto), pra
 // uma turma vinculada a 2+ cursos aparecer na busca de QUALQUER um deles.
+// Ainda usada por matricula-edit-form.tsx (reatribuir turma a partir de um curso escolhido) —
+// NÃO é mais usada pelo wizard de nova matrícula, ver buscarTurmasAtivasParaWizard abaixo.
 export async function buscarTurmasParaWizard(cursoId: string): Promise<TurmaParaMatricula[]> {
   await requireRole("admin");
 
@@ -151,6 +153,45 @@ export async function buscarTurmasParaWizard(cursoId: string): Promise<TurmaPara
     .order("nome");
 
   return (data as TurmaParaMatricula[] | null) ?? [];
+}
+
+// TAREFA fix cursos por turma (PARTE 1) — fluxo correto do wizard de NOVA matrícula: o admin
+// escolhe a TURMA primeiro (busca por nome, igual buscarAlunosParaWizard), depois escolhe QUAL
+// dos cursos que ESSA turma oferece (turma_cursos) o aluno vai fazer. `cursos` vem ordenado por
+// turma_cursos.ordem só por estabilidade visual (sempre a mesma ordem a cada busca) — nunca use
+// essa ordem pra inferir automaticamente qual curso o aluno vai fazer; ver PARTE 3 da tarefa.
+export type TurmaComCursosParaWizard = TurmaParaMatricula & { cursos: CursoParaMatricula[] };
+
+export async function buscarTurmasAtivasParaWizard(query: string): Promise<TurmaComCursosParaWizard[]> {
+  await requireRole("admin");
+
+  const termo = query.trim();
+  if (termo.length < 2) return [];
+  const termoSeguro = termo.replace(/[,()]/g, "").trim();
+  if (!termoSeguro) return [];
+  const termoLike = `%${termoSeguro}%`;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("turmas")
+    .select(
+      "id, nome, vagas_total, vagas_ocupadas, cadencia_dias_semana, horario_aula, data_inicio, data_fim, turma_cursos(ordem, cursos(id, nome, tipo, carga_horaria_horas, valor, descricao))",
+    )
+    .eq("status", "ativa")
+    .ilike("nome", termoLike)
+    .order("nome")
+    .limit(10);
+
+  type LinhaBruta = TurmaParaMatricula & { turma_cursos: { ordem: number; cursos: CursoParaMatricula | null }[] };
+
+  return ((data as unknown as LinhaBruta[] | null) ?? []).map((turma) => {
+    const { turma_cursos, ...resto } = turma;
+    const cursos = [...turma_cursos]
+      .sort((a, b) => a.ordem - b.ordem)
+      .map((vinculo) => vinculo.cursos)
+      .filter((c): c is CursoParaMatricula => !!c);
+    return { ...resto, cursos };
+  });
 }
 
 export type ModulosAulasCurso = { totalModulos: number; totalAulas: number };
@@ -399,6 +440,12 @@ export type MatriculaDetalhada = Matricula & {
   // turmas->cursos acima, mais simples de buscar à parte do que arriscar um hint de FK errado
   // num select dinâmico.
   cursoBonus: { nome: string } | null;
+  // TAREFA fix cursos por turma — matriculas.curso_id é a fonte de verdade de qual curso ESTE
+  // aluno escolheu (ver schema.ts). Resolvido por uma segunda consulta, mesmo motivo do
+  // cursoBonus acima (duas FKs pra cursos, embed direto seria ambíguo). null = matrícula antiga
+  // (antes desta coluna existir) ou turma de 1 curso só — nesses casos o curso vem de
+  // turmas.cursos (compatibilidade legada), nunca o contrário.
+  cursoEscolhido: { id: string; nome: string; tipo: (typeof CURSO_TIPOS)[number]; carga_horaria_horas: number | null; descricao: string | null } | null;
 };
 
 export async function getMatricula(id: string): Promise<MatriculaDetalhada | null> {
@@ -415,13 +462,16 @@ export async function getMatricula(id: string): Promise<MatriculaDetalhada | nul
 
   if (!data) return null;
 
-  let cursoBonus: { nome: string } | null = null;
-  if (data.curso_bonus_id) {
-    const { data: bonus } = await supabase.from("cursos").select("nome").eq("id", data.curso_bonus_id).maybeSingle();
-    cursoBonus = bonus ?? null;
-  }
+  const [{ data: bonus }, { data: cursoEscolhido }] = await Promise.all([
+    data.curso_bonus_id
+      ? supabase.from("cursos").select("nome").eq("id", data.curso_bonus_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    data.curso_id
+      ? supabase.from("cursos").select("id, nome, tipo, carga_horaria_horas, descricao").eq("id", data.curso_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
-  return { ...(data as MatriculaDetalhada), cursoBonus };
+  return { ...(data as MatriculaDetalhada), cursoBonus: bonus ?? null, cursoEscolhido: cursoEscolhido ?? null };
 }
 
 export type UpdateMatriculaDetalhesResult = { success: true } | { error: string };

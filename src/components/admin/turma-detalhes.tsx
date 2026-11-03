@@ -30,6 +30,7 @@ import {
   type MatriculaStatus,
 } from "@/lib/matriculas/schema";
 import {
+  resolverCursosDaTurma,
   TURMA_STATUS_BADGE_CLASS,
   TURMA_STATUS_LABELS,
   TURNO_LABELS,
@@ -41,8 +42,37 @@ import { TurmaCursosBadge } from "@/components/admin/turma-cursos-badge";
 export type TurmaMatriculaAluno = {
   id: string;
   status: MatriculaStatus;
+  // TAREFA fix cursos por turma (PARTE 4) — qual curso ESTE aluno escolheu, quando a turma
+  // oferece 2+ (turma_cursos). null = matrícula antiga ou turma de 1 curso só.
+  curso_id: string | null;
   alunos: { full_name: string | null; email: string; telefone: string } | null;
 };
+
+// Agrupa os alunos por curso escolhido SÓ quando a turma oferece 2+ cursos (REGRA da tarefa: com
+// 1 curso só, mantém a listagem simples de sempre, sem agrupamento). curso_id null (matrícula
+// antiga) cai no curso "principal" da turma (resolverCursosDaTurma) — mesmo fallback legado
+// usado em toda a tarefa.
+type GrupoCursoAlunos = { nomeCurso: string; matriculas: TurmaMatriculaAluno[] };
+
+function agruparAlunosPorCurso(
+  matriculas: TurmaMatriculaAluno[],
+  turmaCursos: TurmaCursoVinculo[],
+  nomesCursosEscolhidos: Record<string, string>,
+): GrupoCursoAlunos[] | null {
+  if (turmaCursos.length <= 1) return null;
+
+  const { nomePrincipal } = resolverCursosDaTurma(turmaCursos);
+  const porCurso = new Map<string, GrupoCursoAlunos>();
+
+  for (const matricula of matriculas) {
+    const nomeCurso = (matricula.curso_id && nomesCursosEscolhidos[matricula.curso_id]) || nomePrincipal;
+    const grupo = porCurso.get(nomeCurso);
+    if (grupo) grupo.matriculas.push(matricula);
+    else porCurso.set(nomeCurso, { nomeCurso, matriculas: [matricula] });
+  }
+
+  return Array.from(porCurso.values()).sort((a, b) => a.nomeCurso.localeCompare(b.nomeCurso));
+}
 
 type PresencaStatus = (typeof PRESENCA_STATUSES)[number];
 
@@ -121,19 +151,69 @@ function formatHorario(inicio: string | null, fim: string | null): string {
   return inicioFmt ?? fimFmt ?? "—";
 }
 
+// Extraída de dentro da aba "Alunos matriculados" pra ser reaproveitada tanto na listagem simples
+// (turma de 1 curso só) quanto, repetida por grupo, quando a turma oferece 2+ cursos.
+function TabelaAlunosMatriculados({ turmaId, matriculas }: { turmaId: string; matriculas: TurmaMatriculaAluno[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nome</TableHead>
+          <TableHead>E-mail</TableHead>
+          <TableHead>Telefone</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Ações</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {matriculas.map((matricula) => (
+          <TableRow key={matricula.id}>
+            <TableCell className="font-medium">{matricula.alunos?.full_name ?? "—"}</TableCell>
+            <TableCell>{matricula.alunos?.email ?? "—"}</TableCell>
+            <TableCell>{matricula.alunos ? formatTelefone(matricula.alunos.telefone) : "—"}</TableCell>
+            <TableCell>
+              <Badge className={MATRICULA_STATUS_BADGE_CLASS[matricula.status]}>
+                {MATRICULA_STATUS_LABELS[matricula.status]}
+              </Badge>
+            </TableCell>
+            <TableCell className="flex justify-end gap-1 text-right">
+              <Button
+                render={<Link href={`/admin/turmas/${turmaId}/alunos/${matricula.id}`} />}
+                nativeButton={false}
+                variant="ghost"
+                size="sm"
+              >
+                Histórico
+              </Button>
+              <Button render={<Link href={`/admin/matriculas/${matricula.id}`} />} nativeButton={false} variant="ghost" size="sm">
+                Ver matrícula
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 export function TurmaDetalhes({
   turma,
   matriculas,
   presencas,
+  nomesCursosEscolhidos,
 }: {
   turma: TurmaWithCurso & { turma_cursos: TurmaCursoVinculo[] };
   matriculas: TurmaMatriculaAluno[];
   presencas: TurmaPresencaRow[];
+  // TAREFA fix cursos por turma (PARTE 4) — nome do curso que CADA aluno escolheu, por id
+  // (matriculas.curso_id); usado só pra agrupar a lista quando a turma oferece 2+ cursos.
+  nomesCursosEscolhidos: Record<string, string>;
 }) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
 
   const frequencias = calcularFrequencias(matriculas, presencas);
   const temPresencas = presencas.length > 0;
+  const gruposPorCurso = agruparAlunosPorCurso(matriculas, turma.turma_cursos, nomesCursosEscolhidos);
 
   async function handleExportarRelatorio() {
     // Abre a aba em branco já dentro do handler de clique (síncrono), antes
@@ -248,59 +328,24 @@ export function TurmaDetalhes({
                 {matriculas.length} aluno(s) matriculado(s)
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-6">
               {matriculas.length === 0 ? (
                 <p className="text-muted-foreground py-6 text-center text-sm">
                   Nenhum aluno matriculado nesta turma
                 </p>
+              ) : gruposPorCurso ? (
+                // TAREFA fix cursos por turma (PARTE 4) — turma com 2+ cursos: agrupa por curso
+                // escolhido em vez de uma lista única.
+                gruposPorCurso.map((grupo) => (
+                  <div key={grupo.nomeCurso} className="flex flex-col gap-2">
+                    <p className="text-muted-foreground text-sm font-medium">
+                      ─── {grupo.nomeCurso} ({grupo.matriculas.length} aluno{grupo.matriculas.length === 1 ? "" : "s"}) ───
+                    </p>
+                    <TabelaAlunosMatriculados turmaId={turma.id} matriculas={grupo.matriculas} />
+                  </div>
+                ))
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>E-mail</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {matriculas.map((matricula) => (
-                      <TableRow key={matricula.id}>
-                        <TableCell className="font-medium">
-                          {matricula.alunos?.full_name ?? "—"}
-                        </TableCell>
-                        <TableCell>{matricula.alunos?.email ?? "—"}</TableCell>
-                        <TableCell>
-                          {matricula.alunos ? formatTelefone(matricula.alunos.telefone) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={MATRICULA_STATUS_BADGE_CLASS[matricula.status]}>
-                            {MATRICULA_STATUS_LABELS[matricula.status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="flex justify-end gap-1 text-right">
-                          <Button
-                            render={<Link href={`/admin/turmas/${turma.id}/alunos/${matricula.id}`} />}
-                            nativeButton={false}
-                            variant="ghost"
-                            size="sm"
-                          >
-                            Histórico
-                          </Button>
-                          <Button
-                            render={<Link href={`/admin/matriculas/${matricula.id}`} />}
-                            nativeButton={false}
-                            variant="ghost"
-                            size="sm"
-                          >
-                            Ver matrícula
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <TabelaAlunosMatriculados turmaId={turma.id} matriculas={matriculas} />
               )}
             </CardContent>
           </Card>

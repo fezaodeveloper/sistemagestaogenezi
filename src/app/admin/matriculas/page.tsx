@@ -30,14 +30,25 @@ export default async function MatriculasPage({
   const supabase = await createClient();
 
   // Opções dos dois selects (PARTE 1). Turma em cascata: com curso selecionado, mostra TODAS as
-  // turmas desse curso (qualquer status — uma matrícula pode estar numa turma já encerrada);
-  // sem curso, só as turmas ativas (mesmo critério do resto do admin, ex. dashboard comercial).
-  const [{ data: cursosOpcoes }, { data: turmasOpcoes }] = await Promise.all([
+  // turmas QUE OFERECEM esse curso (via turma_cursos — uma turma pode oferecer 2+ cursos, não só
+  // o "principal" de turmas.curso_id), qualquer status (uma matrícula pode estar numa turma já
+  // encerrada); sem curso, só as turmas ativas (mesmo critério do resto do admin).
+  const [{ data: cursosOpcoes }, { data: turmasOpcoesRaw }] = await Promise.all([
     supabase.from("cursos").select("id, nome").eq("status", "ativo").order("nome"),
     cursoIdFiltro
-      ? supabase.from("turmas").select("id, nome").eq("curso_id", cursoIdFiltro).order("nome")
+      ? supabase.from("turma_cursos").select("turmas(id, nome)").eq("curso_id", cursoIdFiltro)
       : supabase.from("turmas").select("id, nome").eq("status", "ativa").order("nome"),
   ]);
+  // turma_cursos!inner embed devolve { turmas: {id,nome} }[] — achata pro mesmo formato do outro
+  // branch ({id,nome}[]), e ordena no client (poucas linhas, não vale outra query ordenada).
+  const turmasOpcoes = (
+    cursoIdFiltro
+      ? ((turmasOpcoesRaw ?? []) as unknown as { turmas: { id: string; nome: string } | null }[])
+          .map((v) => v.turmas)
+          .filter((t): t is { id: string; nome: string } => !!t)
+          .sort((a, b) => a.nome.localeCompare(b.nome))
+      : (turmasOpcoesRaw ?? [])
+  ) as { id: string; nome: string }[];
 
   let query = supabase
     .from("matriculas")
@@ -47,16 +58,22 @@ export default async function MatriculasPage({
     )
     .order("created_at", { ascending: false });
 
-  // matriculas não tem curso_id próprio (só turma_id) — o curso só existe via turmas.curso_id,
-  // por isso o filtro por curso precisa achar as turmas desse curso primeiro (mesmo padrão já
-  // usado abaixo pra busca por nome de curso). turma_id, quando presente, já é mais específico
+  // TAREFA fix cursos por turma — o filtro por curso precisa achar as matrículas desse curso por
+  // DOIS caminhos: (a) matriculas.curso_id = cursoIdFiltro (o aluno escolheu esse curso
+  // explicitamente — fonte de verdade) OU (b) a matrícula está numa turma que oferece esse curso
+  // (turma_cursos, não turmas.curso_id — uma turma pode oferecer 2+ cursos) E curso_id é null
+  // (matrícula antiga, compatibilidade legada). turma_id, quando presente, já é mais específico
   // que curso_id e dispensa essa segunda consulta.
   if (turmaIdFiltro) {
     query = query.eq("turma_id", turmaIdFiltro);
   } else if (cursoIdFiltro) {
-    const { data: turmasDoCurso } = await supabase.from("turmas").select("id").eq("curso_id", cursoIdFiltro);
-    const idsTurmasDoCurso = (turmasDoCurso ?? []).map((turma) => turma.id as string);
-    query = idsTurmasDoCurso.length > 0 ? query.in("turma_id", idsTurmasDoCurso) : query.eq("id", ID_INEXISTENTE);
+    const { data: turmasDoCurso } = await supabase.from("turma_cursos").select("turma_id").eq("curso_id", cursoIdFiltro);
+    const idsTurmasDoCurso = (turmasDoCurso ?? []).map((v) => v.turma_id as string);
+    const condicoes: string[] = [`curso_id.eq.${cursoIdFiltro}`];
+    if (idsTurmasDoCurso.length > 0) {
+      condicoes.push(`and(curso_id.is.null,turma_id.in.(${idsTurmasDoCurso.join(",")}))`);
+    }
+    query = query.or(condicoes.join(","));
   }
 
   // Busca por aluno OU curso, sobre todas as matrículas (não só a página).
@@ -77,12 +94,14 @@ export default async function MatriculasPage({
 
     let idsTurmas: string[] = [];
     if (idsCursos.length > 0) {
+      // TAREFA fix cursos por turma — turma_cursos (não turmas.curso_id), pra achar TODAS as
+      // turmas que oferecem algum dos cursos encontrados, não só onde é o "principal".
       const { data: turmasEncontradas } = await supabase
-        .from("turmas")
-        .select("id")
+        .from("turma_cursos")
+        .select("turma_id")
         .in("curso_id", idsCursos)
         .limit(LIMITE_IDS_BUSCA);
-      idsTurmas = (turmasEncontradas ?? []).map((turma) => turma.id as string);
+      idsTurmas = [...new Set((turmasEncontradas ?? []).map((v) => v.turma_id as string))];
       if (idsTurmas.length >= LIMITE_IDS_BUSCA) buscaTruncada = true;
     }
     if (idsAlunos.length >= LIMITE_IDS_BUSCA || idsCursos.length >= LIMITE_IDS_BUSCA) buscaTruncada = true;
@@ -90,12 +109,24 @@ export default async function MatriculasPage({
     const condicoes: string[] = [];
     if (idsAlunos.length > 0) condicoes.push(`aluno_id.in.(${idsAlunos.join(",")})`);
     if (idsTurmas.length > 0) condicoes.push(`turma_id.in.(${idsTurmas.join(",")})`);
+    if (idsCursos.length > 0) condicoes.push(`curso_id.in.(${idsCursos.join(",")})`);
     // Nenhum aluno/curso bate com o termo: força resultado vazio.
     query = condicoes.length > 0 ? query.or(condicoes.join(",")) : query.eq("id", ID_INEXISTENTE);
   }
 
   const { data, error, count } = await query.range(offset, offset + limite - 1);
   const matriculas = data as MatriculaListItem[] | null;
+
+  // TAREFA fix cursos por turma — resolve em lote o NOME do curso que cada aluno desta página
+  // escolheu (matriculas.curso_id). Consulta separada, não embed: matriculas tem duas FKs pra
+  // cursos (curso_id e curso_bonus_id), mesmo motivo documentado em src/app/aluno/page.tsx.
+  const idsCursosEscolhidos = [...new Set((matriculas ?? []).map((m) => m.curso_id).filter((id): id is string => !!id))];
+  const { data: cursosEscolhidosData } =
+    idsCursosEscolhidos.length > 0
+      ? await supabase.from("cursos").select("id, nome").in("id", idsCursosEscolhidos)
+      : { data: [] };
+  const nomesCursosEscolhidos = Object.fromEntries((cursosEscolhidosData ?? []).map((c) => [c.id as string, c.nome as string]));
+
   const totalRegistros = count ?? 0;
   const totalPaginas = calcularTotalPaginas(totalRegistros, limite);
 
@@ -140,6 +171,7 @@ export default async function MatriculasPage({
             turmas={turmasOpcoes ?? []}
             cursoIdFiltro={cursoIdFiltro}
             turmaIdFiltro={turmaIdFiltro}
+            nomesCursosEscolhidos={nomesCursosEscolhidos}
           />
         </Card>
       )}
