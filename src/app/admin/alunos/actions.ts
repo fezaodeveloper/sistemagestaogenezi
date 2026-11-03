@@ -270,7 +270,7 @@ export async function createAluno(
   const userId = created.user.id;
   const supabase = await createClient();
 
-  const { error: alunoError } = await supabase.from("alunos").insert({
+  const dadosAlunoBase = {
     id: userId,
     email: data.email,
     cpf: data.cpf,
@@ -286,19 +286,40 @@ export async function createAluno(
     estado: data.estado ?? null,
     observacoes: data.observacoes ?? null,
     status_aluno: data.status_aluno,
-    participa_conecta: data.participa_conecta,
     // user_id é redundante com o próprio id (ambos apontam pro mesmo usuário
     // Auth recém-criado) — a coluna existe pra permitir, futuramente, um
     // aluno cujo cadastro não tenha (ainda) uma conta vinculada.
     user_id: userId,
-  });
+  };
+
+  let { error: alunoError } = await supabase
+    .from("alunos")
+    .insert({ ...dadosAlunoBase, participa_conecta: data.participa_conecta });
+
+  // participa_conecta (migration 20261028900000) pode ainda não existir no banco (marcada "NÃO
+  // APLICADA" — aguardando o admin rodar manualmente) — mesmo padrão defensivo usado em todo o
+  // projeto pra coluna nova: nunca pode impedir a criação do aluno por causa disso. BUG REAL
+  // encontrado aqui: sem este retry, TODO cadastro de aluno falhava com "Não foi possível salvar
+  // os dados do aluno" enquanto a migration não fosse aplicada, porque o INSERT sempre incluía
+  // esta coluna, sem fallback.
+  if (alunoError && (alunoError.code === "42703" || alunoError.code === "PGRST204")) {
+    ({ error: alunoError } = await supabase.from("alunos").insert(dadosAlunoBase));
+  }
 
   if (alunoError) {
+    // Loga o erro completo do Supabase — a mensagem genérica que voltava pro admin escondia a
+    // causa real (mesmo ajuste já feito em updateAluno, abaixo).
+    console.error("[createAluno] erro Supabase (alunos):", {
+      code: alunoError.code,
+      message: alunoError.message,
+      details: alunoError.details,
+      hint: alunoError.hint,
+    });
     await admin.auth.admin.deleteUser(userId);
     const message =
       alunoError.code === "23505"
         ? "Já existe um aluno cadastrado com esse CPF."
-        : "Não foi possível salvar os dados do aluno. Tente novamente.";
+        : `Não foi possível salvar os dados do aluno: ${alunoError.message} (${alunoError.code})`;
     return { error: message, values: echoValues(formData) };
   }
 
@@ -438,7 +459,7 @@ export async function updateAluno(
     };
   }
 
-  const dadosAluno = {
+  const dadosAlunoBase = {
     cpf: data.cpf,
     telefone: data.telefone,
     endereco: data.endereco ?? null,
@@ -452,8 +473,8 @@ export async function updateAluno(
     estado: data.estado ?? null,
     observacoes: data.observacoes ?? null,
     status_aluno: data.status_aluno,
-    participa_conecta: data.participa_conecta,
   };
+  const dadosAluno = { ...dadosAlunoBase, participa_conecta: data.participa_conecta };
   // Debug temporário — investigar "salva sem erro mas não persiste". id vai junto: se o filtro
   // .eq("id", id) estiver com o valor errado, o UPDATE não erra, só não afeta linha nenhuma (RLS
   // funciona do mesmo jeito: se a policy não bater pra aquela linha, ela é excluída do UPDATE em
@@ -462,11 +483,13 @@ export async function updateAluno(
 
   // .select() é necessário pra saber quantas linhas o UPDATE realmente afetou — sem ele o
   // Supabase JS não devolve as linhas atualizadas (data viria sempre null, mesmo com sucesso).
-  const { error: alunoError, data: alunoUpdateData } = await supabase
-    .from("alunos")
-    .update(dadosAluno)
-    .eq("id", id)
-    .select();
+  let { error: alunoError, data: alunoUpdateData } = await supabase.from("alunos").update(dadosAluno).eq("id", id).select();
+
+  // participa_conecta (migration 20261028900000) pode ainda não existir no banco — mesmo fix
+  // aplicado em createAluno acima, mesmo motivo (coluna nova marcada "NÃO APLICADA").
+  if (alunoError && (alunoError.code === "42703" || alunoError.code === "PGRST204")) {
+    ({ error: alunoError, data: alunoUpdateData } = await supabase.from("alunos").update(dadosAlunoBase).eq("id", id).select());
+  }
 
   console.log("[updateAluno] resultado:", {
     error: alunoError,
