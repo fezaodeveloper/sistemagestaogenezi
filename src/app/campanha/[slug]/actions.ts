@@ -10,15 +10,33 @@ import {
 import { MUNICIPIOS_POR_UF } from "@/lib/ibge/municipios";
 import { normalizarBusca } from "@/lib/busca";
 import { notificarEmailLeadCampanha } from "@/lib/email/eventos";
+import { notificarWhatsappCampanhaConfirmacao } from "@/lib/whatsapp/eventos";
 import { getCampanhaPaginaPublica, contarRespostasAdmin } from "@/lib/campanha-paginas/campanha-paginas";
 import {
+  calcularPontuacaoPercentual,
+  calcularPontuacaoTotal,
   campanhaRespostaPublicaSchema,
+  IDADE_MINIMA_RESPONSAVEL,
   RESPOSTA_CHAVE_DECLARACAO,
   RESPOSTA_CHAVE_LGPD,
+  RESPOSTA_CHAVE_RESPONSAVEL_CPF,
+  RESPOSTA_CHAVE_RESPONSAVEL_NOME,
+  RESPOSTA_CHAVE_RESPONSAVEL_WHATSAPP,
   type RespostaValor,
 } from "@/lib/campanha-paginas/schema";
 
-export type EnviarRespostaResultado = { success: true } | { error: string };
+export type EnviarRespostaResultado =
+  | {
+      success: true;
+      respostaId: string;
+      // Só preenchidos quando a campanha tem pontuação habilitada — a tela de resultado e o
+      // botão de imprimir (TAREFA campanha, PARTES 2 e 3) usam isso pra decidir o que mostrar.
+      pontuacaoTotal?: number;
+      pontuacaoMaxima?: number;
+      pontuacaoPercentual?: number;
+      aprovado?: boolean;
+    }
+  | { error: string };
 
 // Sem requireRole de propósito — é a única Server Action deste módulo
 // genuinamente alcançável por um visitante sem conta (mesmo espírito de
@@ -39,6 +57,10 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     estado: formData.get("estado") || undefined,
     cidade: formData.get("cidade") || undefined,
     respostas: respostasRaw ? JSON.parse(String(respostasRaw)) : {},
+    // TAREFA campanha (PARTE 8) — só exigidos pelo schema quando idade < IDADE_MINIMA_RESPONSAVEL.
+    responsavel_nome: formData.get("responsavel_nome") || undefined,
+    responsavel_whatsapp: formData.get("responsavel_whatsapp") || undefined,
+    responsavel_cpf: formData.get("responsavel_cpf") || undefined,
   });
 
   if (!parsed.success) {
@@ -103,6 +125,21 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     [RESPOSTA_CHAVE_LGPD]: aceiteLgpd,
     [RESPOSTA_CHAVE_DECLARACAO]: aceiteDeclaracao,
   };
+  // TAREFA campanha (PARTE 8) — dados do responsável só entram no jsonb quando o participante é
+  // menor (o schema já garante que vêm preenchidos nesse caso — ver superRefine).
+  if (parsed.data.idade < IDADE_MINIMA_RESPONSAVEL) {
+    respostasCompletas[RESPOSTA_CHAVE_RESPONSAVEL_NOME] = parsed.data.responsavel_nome ?? "";
+    respostasCompletas[RESPOSTA_CHAVE_RESPONSAVEL_WHATSAPP] = parsed.data.responsavel_whatsapp ?? "";
+    respostasCompletas[RESPOSTA_CHAVE_RESPONSAVEL_CPF] = parsed.data.responsavel_cpf ?? "";
+  }
+
+  // TAREFA campanha (PARTE 2) — pontuação calculada no SERVIDOR a partir das opções configuradas
+  // em pagina.etapas, nunca confiando num total que o client pudesse enviar junto com o resto do
+  // FormData (o formulário é alcançável por POST direto).
+  const pontuacaoTotal = pagina.habilitar_pontuacao ? calcularPontuacaoTotal(pagina.etapas, respostasCompletas) : null;
+  const pontuacaoPercentual = pagina.habilitar_pontuacao
+    ? calcularPontuacaoPercentual(pontuacaoTotal ?? 0, pagina.pontuacao_maxima)
+    : null;
 
   // UTM (TAREFA CRM 2.2, PARTE 3) — vêm como hidden fields do form (lidos de searchParams em
   // page.tsx), não como parâmetro próprio da Server Action: formData é a única via de dados do
@@ -174,32 +211,38 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     // Best-effort — ver comentário acima.
   }
 
-  const { error } = await admin.from("campanha_respostas").insert({
-    pagina_id: pagina.id,
-    nome: parsed.data.nome,
-    whatsapp: parsed.data.whatsapp,
-    idade: parsed.data.idade,
-    email: parsed.data.email ?? null,
-    estado: parsed.data.estado ?? null,
-    cidade: parsed.data.cidade ?? null,
-    respostas: respostasCompletas,
-    lead_id: leadId,
-    utm_source: utmSource,
-    utm_medium: utmMedium,
-    utm_campaign: utmCampaign,
-  });
+  const { data: respostaCriada, error } = await admin
+    .from("campanha_respostas")
+    .insert({
+      pagina_id: pagina.id,
+      nome: parsed.data.nome,
+      whatsapp: parsed.data.whatsapp,
+      idade: parsed.data.idade,
+      email: parsed.data.email ?? null,
+      estado: parsed.data.estado ?? null,
+      cidade: parsed.data.cidade ?? null,
+      respostas: respostasCompletas,
+      pontuacao_total: pontuacaoTotal,
+      pontuacao_percentual: pontuacaoPercentual,
+      lead_id: leadId,
+      utm_source: utmSource,
+      utm_medium: utmMedium,
+      utm_campaign: utmCampaign,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !respostaCriada) {
     return { error: "Não foi possível enviar sua inscrição. Tente novamente." };
   }
 
   // E-mail de confirmação da inscrição (só sai se o visitante informou e-mail).
   notificarEmailLeadCampanha({ nome: parsed.data.nome, email: parsed.data.email, nomeCampanha: pagina.titulo });
 
-  // Stub — Evolution API virá depois.
-  console.log(
-    `[campanha] Enviaria confirmação por WhatsApp para ${parsed.data.nome} (${parsed.data.whatsapp}): inscrição recebida em "${pagina.titulo}"`,
-  );
+  // TAREFA campanha (PARTE 7) — substitui o console.log stub que existia desde sempre (ver
+  // src/lib/whatsapp/eventos.ts::notificarWhatsappCampanhaConfirmacao). Fire-and-forget: nunca
+  // pode atrasar a resposta "inscrição enviada" pro visitante.
+  notificarWhatsappCampanhaConfirmacao(respostaCriada.id);
 
   if (pagina.notificar_telegram) {
     try {
@@ -218,5 +261,16 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     }
   }
 
-  return { success: true };
+  return {
+    success: true,
+    respostaId: respostaCriada.id,
+    ...(pagina.habilitar_pontuacao
+      ? {
+          pontuacaoTotal: pontuacaoTotal ?? 0,
+          pontuacaoMaxima: pagina.pontuacao_maxima,
+          pontuacaoPercentual: pontuacaoPercentual ?? 0,
+          aprovado: (pontuacaoPercentual ?? 0) >= pagina.pontuacao_minima_bolsa,
+        }
+      : {}),
+  };
 }

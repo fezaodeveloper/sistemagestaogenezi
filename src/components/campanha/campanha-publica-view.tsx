@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties } from "react";
 import { enviarRespostaCampanha } from "@/app/campanha/[slug]/actions";
 import {
   CONFIRMACAO_TEXTO_DECLARACAO_PADRAO,
   CONFIRMACAO_TEXTO_LGPD,
   CONFIRMACAO_TEXTO_RESUMO_PADRAO,
   CONFIRMACAO_TITULO_PADRAO,
+  IDADE_MINIMA_RESPONSAVEL,
   PESO_TITULO_CSS,
   UFS_BRASIL,
   resolverTipografia,
@@ -117,6 +118,7 @@ function SelectNativo({
   corCampo,
   corFundo,
   corFonte,
+  corBorda,
   disabled = false,
   onChange,
 }: {
@@ -128,6 +130,9 @@ function SelectNativo({
   corCampo: string;
   corFundo: string;
   corFonte: string;
+  // TAREFA campanha (PARTE 5) — cor da borda customizável; sem valor mantém o cálculo automático
+  // de contraste já existente (estiloCampoPublicoHex).
+  corBorda?: string | null;
   onChange: (valor: string) => void;
 }) {
   const estilo = estiloCampoPublicoHex(corCampo);
@@ -138,7 +143,7 @@ function SelectNativo({
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}
       className="h-auto w-full rounded-lg border-2 px-4 py-3 text-[0.875em] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--cor-primaria)] disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ color: estilo.texto, backgroundColor: estilo.fundo, borderColor: estilo.borda }}
+      style={{ color: estilo.texto, backgroundColor: estilo.fundo, borderColor: corBorda || estilo.borda }}
     >
       <option value="" style={{ color: corFonte, backgroundColor: corFundo }}>
         {placeholder}
@@ -159,6 +164,7 @@ function QuestaoCampo({
   corCampo,
   corFundo,
   corFonte,
+  corBorda,
   onResponder,
 }: {
   questao: Questao;
@@ -167,6 +173,7 @@ function QuestaoCampo({
   corCampo: string;
   corFundo: string;
   corFonte: string;
+  corBorda?: string | null;
   onResponder: (valor: RespostaValor) => void;
 }) {
   const tipo = tipoQuestaoEfetivo(questao);
@@ -274,6 +281,7 @@ function QuestaoCampo({
         corCampo={corCampo}
         corFundo={corFundo}
         corFonte={corFonte}
+        corBorda={corBorda}
         onChange={onResponder}
       />
     );
@@ -285,6 +293,7 @@ function QuestaoCampo({
       value={typeof valor === "string" ? valor : ""}
       onChange={(event) => onResponder(event.target.value)}
       className={cn("text-[1em] md:text-[1em]", classesCampoPublico(corCampo))}
+      style={corBorda ? { borderColor: corBorda } : undefined}
     />
   );
 }
@@ -344,12 +353,31 @@ export function CampanhaPublicaView({
   // No preview as etapas mudam enquanto o admin edita — mantém a tela dentro do intervalo.
   const tela = Math.min(telaBruta, totalTelas - 1);
 
+  // TAREFA campanha (PARTE 1) — rola suavemente pro topo do card a cada troca de etapa (não roda
+  // no mount inicial, já está no topo). scrollIntoView com block "start" em vez de
+  // window.scrollTo(0,0): a página pode ter conteúdo acima do card (banner/cards de destaque/
+  // contador), então "topo da PÁGINA" não é "topo do card" quando o visitante já rolou.
+  const primeiraRenderRef = useRef(true);
+  useEffect(() => {
+    if (primeiraRenderRef.current) {
+      primeiraRenderRef.current = false;
+      return;
+    }
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [tela]);
+
   const [nome, setNome] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [idade, setIdade] = useState("");
   const [email, setEmail] = useState("");
   const [estado, setEstado] = useState("");
   const [cidade, setCidade] = useState("");
+  // TAREFA campanha (PARTE 8) — dados do responsável, só exigidos quando idade < 18.
+  const [responsavelNome, setResponsavelNome] = useState("");
+  const [responsavelWhatsapp, setResponsavelWhatsapp] = useState("");
+  const [responsavelCpf, setResponsavelCpf] = useState("");
+  const idadeNumero = Number(idade);
+  const menorDeIdade = idade.trim() !== "" && Number.isFinite(idadeNumero) && idadeNumero < IDADE_MINIMA_RESPONSAVEL;
   // Lista de municípios do estado escolhido. A lista estática (~90 KB) só é
   // baixada quando o visitante escolhe (ou o rascunho restaura) um estado.
   const [municipiosCarregados, setMunicipiosCarregados] = useState<{ uf: string; lista: readonly string[] } | null>(null);
@@ -358,8 +386,21 @@ export function CampanhaPublicaView({
   const [aceiteDeclaracao, setAceiteDeclaracao] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  // TAREFA campanha (PARTES 2 e 3) — resultado devolvido pela Server Action (pontuação só vem
+  // preenchida quando a campanha tem pontuação habilitada) + id da resposta pro botão de
+  // imprimir PDF.
+  const [resultado, setResultado] = useState<{
+    respostaId: string;
+    pontuacaoTotal?: number;
+    pontuacaoMaxima?: number;
+    pontuacaoPercentual?: number;
+    aprovado?: boolean;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [contagem, setContagem] = useState<Contagem | null>(null);
+  // TAREFA campanha (PARTE 1) — rola pro topo do card ao mudar de etapa (comportamento suave,
+  // melhor com header fixo/banner acima do card).
+  const cardRef = useRef<HTMLDivElement>(null);
 
   // Rascunho: localStorage só existe no client, então a restauração roda em
   // efeito (nunca no render inicial — senão o HTML do server diverge do
@@ -451,7 +492,12 @@ export function CampanhaPublicaView({
       whatsapp.trim().length > 0 &&
       idade.trim().length > 0 &&
       (!pagina.coletar_email || email.trim().length > 0) &&
-      (!pagina.coletar_cidade || (estado.length > 0 && cidadeValida))
+      (!pagina.coletar_cidade || (estado.length > 0 && cidadeValida)) &&
+      // TAREFA campanha (PARTE 8) — não avança sem os dados do responsável quando menor.
+      (!menorDeIdade ||
+        (responsavelNome.trim().length > 0 &&
+          responsavelWhatsapp.trim().length > 0 &&
+          responsavelCpf.replace(/\D/g, "").length === 11))
     );
   }
 
@@ -487,11 +533,17 @@ export function CampanhaPublicaView({
     if (utm?.source) formData.set("utm_source", utm.source);
     if (utm?.medium) formData.set("utm_medium", utm.medium);
     if (utm?.campaign) formData.set("utm_campaign", utm.campaign);
+    // TAREFA campanha (PARTE 8) — só preenchidos quando o participante é menor de idade.
+    if (menorDeIdade) {
+      formData.set("responsavel_nome", responsavelNome);
+      formData.set("responsavel_whatsapp", responsavelWhatsapp);
+      formData.set("responsavel_cpf", responsavelCpf);
+    }
 
     startTransition(async () => {
-      const resultado = await enviarRespostaCampanha(pagina.slug, formData);
-      if ("error" in resultado) {
-        setError(resultado.error);
+      const resposta = await enviarRespostaCampanha(pagina.slug, formData);
+      if ("error" in resposta) {
+        setError(resposta.error);
         return;
       }
       try {
@@ -501,11 +553,15 @@ export function CampanhaPublicaView({
       }
       // Inscrição enviada com sucesso = lead pros pixels (no preview do editor não passa por aqui).
       dispararEventoPixels("lead");
+      setResultado(resposta);
       setSucesso(true);
     });
   }
 
   if (sucesso) {
+    // TAREFA campanha (PARTE 2) — resultado da pontuação só existe quando a campanha tem
+    // pontuação habilitada (resultado?.pontuacaoPercentual vem undefined senão).
+    const temResultado = resultado?.pontuacaoPercentual !== undefined;
     return (
       <div style={{ ...style, gap: tipografia.espacamento / 2 }} className="flex flex-col items-center py-16 text-center">
         <span className="flex size-16 items-center justify-center rounded-full text-3xl" style={{ backgroundColor: "var(--cor-primaria)" }}>
@@ -515,6 +571,29 @@ export function CampanhaPublicaView({
           {pagina.titulo_sucesso}
         </h2>
         {pagina.mensagem_sucesso && <p style={{ color: pagina.cor_fonte }}>{pagina.mensagem_sucesso}</p>}
+        {temResultado && (
+          <div className="flex flex-col items-center gap-1 pt-2" style={{ color: pagina.cor_fonte }}>
+            <p className="text-lg font-semibold">
+              🎯 Sua pontuação: {resultado?.pontuacaoTotal}/{resultado?.pontuacaoMaxima} ({resultado?.pontuacaoPercentual}%)
+            </p>
+            {resultado?.aprovado ? (
+              <p className="font-medium text-green-500">✅ Parabéns! Você atingiu a pontuação mínima para a bolsa!</p>
+            ) : (
+              <p className="text-[0.875em] opacity-80">Continue estudando! A pontuação mínima é {pagina.pontuacao_minima_bolsa}%.</p>
+            )}
+          </div>
+        )}
+        {!preview && resultado?.respostaId && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<a href={`/api/campanha-respostas/${resultado.respostaId}/pdf`} target="_blank" rel="noreferrer" />}
+          >
+            🖨️ Imprimir resultado
+          </Button>
+        )}
         {preview && (
           <Button
             type="button"
@@ -620,6 +699,9 @@ export function CampanhaPublicaView({
       )}
 
       {!encerrada && (
+      // div wrapper com o ref (não direto no Card do shadcn) — evita depender de o componente
+      // repassar `ref` corretamente pro elemento raiz.
+      <div ref={cardRef}>
       <Card style={{ backgroundColor: corCard, borderColor: "transparent" }}>
         <CardContent className="flex flex-col gap-4">
           {tela === 0 && (
@@ -633,6 +715,7 @@ export function CampanhaPublicaView({
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
                   className={cn(escalaTexto, classesCampoPublico(corCard))}
+                  style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
                   required
                 />
               </div>
@@ -647,6 +730,7 @@ export function CampanhaPublicaView({
                   value={whatsapp}
                   onChange={(event) => setWhatsapp(event.target.value)}
                   className={cn(escalaTexto, classesCampoPublico(corCard))}
+                  style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
                   required
                 />
               </div>
@@ -661,9 +745,60 @@ export function CampanhaPublicaView({
                   value={idade}
                   onChange={(event) => setIdade(event.target.value)}
                   className={cn(escalaTexto, classesCampoPublico(corCard))}
+                  style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
                   required
                 />
               </div>
+              {/* TAREFA campanha (PARTE 8) — menor de idade: bloco obrigatório dos dados do
+                  responsável, logo abaixo da idade (onde o visitante acabou de informá-la). */}
+              {menorDeIdade && (
+                <div className="flex flex-col gap-3 rounded-md border p-3" style={{ borderColor: pagina.cor_primaria }}>
+                  <p className="text-[0.875em] font-medium" style={{ color: pagina.cor_fonte }}>
+                    Como você é menor de idade, precisamos dos dados do responsável:
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-[1em] font-semibold" htmlFor="responsavel_nome" style={{ color: pagina.cor_fonte }}>
+                      Nome do responsável
+                    </Label>
+                    <Input
+                      id="responsavel_nome"
+                      value={responsavelNome}
+                      onChange={(event) => setResponsavelNome(event.target.value)}
+                      className={cn(escalaTexto, classesCampoPublico(corCard))}
+                      style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-[1em] font-semibold" htmlFor="responsavel_whatsapp" style={{ color: pagina.cor_fonte }}>
+                      WhatsApp do responsável
+                    </Label>
+                    <Input
+                      id="responsavel_whatsapp"
+                      type="tel"
+                      placeholder="(11) 99999-9999"
+                      value={responsavelWhatsapp}
+                      onChange={(event) => setResponsavelWhatsapp(event.target.value)}
+                      className={cn(escalaTexto, classesCampoPublico(corCard))}
+                      style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-[1em] font-semibold" htmlFor="responsavel_cpf" style={{ color: pagina.cor_fonte }}>
+                      CPF do responsável
+                    </Label>
+                    <Input
+                      id="responsavel_cpf"
+                      value={responsavelCpf}
+                      onChange={(event) => setResponsavelCpf(event.target.value)}
+                      className={cn(escalaTexto, classesCampoPublico(corCard))}
+                      style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
               {pagina.coletar_email && (
                 <div className="flex flex-col gap-2">
                   <Label className="text-[1em] font-semibold" htmlFor="email" style={{ color: pagina.cor_fonte }}>
@@ -675,6 +810,7 @@ export function CampanhaPublicaView({
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     className={cn(escalaTexto, classesCampoPublico(corCard))}
+                    style={pagina.cor_borda ? { borderColor: pagina.cor_borda } : undefined}
                     required
                   />
                 </div>
@@ -691,6 +827,7 @@ export function CampanhaPublicaView({
                   corCampo={corCard}
                   corFundo={pagina.cor_fundo}
                   corFonte={pagina.cor_fonte}
+                  corBorda={pagina.cor_borda}
                   onChange={escolherEstado}
                 />
               </div>
@@ -706,6 +843,7 @@ export function CampanhaPublicaView({
                   corCampo={corCard}
                   corFundo={pagina.cor_fundo}
                   corFonte={pagina.cor_fonte}
+                  corBorda={pagina.cor_borda}
                   disabled={!estado}
                   onChange={setCidade}
                 />
@@ -739,6 +877,7 @@ export function CampanhaPublicaView({
                     corCampo={corCard}
                     corFundo={pagina.cor_fundo}
                     corFonte={pagina.cor_fonte}
+                    corBorda={pagina.cor_borda}
                     onResponder={(valor) => {
                       responderQuestao(questao.id, valor);
                       // Múltipla escolha com uma única pergunta na etapa
@@ -866,6 +1005,7 @@ export function CampanhaPublicaView({
           </div>
         </CardContent>
       </Card>
+      </div>
       )}
 
       {(escolaTelefone || escolaEndereco) && (

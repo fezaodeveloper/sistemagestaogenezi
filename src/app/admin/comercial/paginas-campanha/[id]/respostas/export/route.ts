@@ -56,6 +56,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       linha[pergunta] = formatarRespostaCampanha(resposta.respostas?.[questaoId]);
     }
 
+    // TAREFA campanha (PARTE 4) — pontuação só entra na planilha quando a campanha a tem habilitada.
+    if (pagina.habilitar_pontuacao) {
+      linha["Pontuação"] = resposta.pontuacao_total ?? "";
+      linha["Pontuação (%)"] = resposta.pontuacao_percentual ?? "";
+      linha["Aprovado"] = (resposta.pontuacao_percentual ?? 0) >= pagina.pontuacao_minima_bolsa ? "Sim" : "Não";
+    }
+
     if (pagina.mostrar_lgpd || temConfirmacao) linha["Aceite LGPD"] = resposta.respostas?.[RESPOSTA_CHAVE_LGPD] ? "Sim" : "Não";
     if (pagina.mostrar_declaracao || temConfirmacao) linha["Aceite Declaração"] = resposta.respostas?.[RESPOSTA_CHAVE_DECLARACAO] ? "Sim" : "Não";
 

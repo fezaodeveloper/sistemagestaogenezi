@@ -68,6 +68,10 @@ function parseCampanhaPaginaForm(formData: FormData) {
     contador_data_fim: formData.get("contador_data_fim") || undefined,
     coletar_email: formData.get("coletar_email") === "true",
     coletar_cidade: formData.get("coletar_cidade") === "true",
+    habilitar_pontuacao: formData.get("habilitar_pontuacao") === "true",
+    pontuacao_maxima: formData.get("pontuacao_maxima") || undefined,
+    pontuacao_minima_bolsa: formData.get("pontuacao_minima_bolsa") || undefined,
+    cor_borda: formData.get("cor_borda") || undefined,
     cards_destaque: cardsRaw ? JSON.parse(String(cardsRaw)) : [],
     tipografia: tipografiaRaw ? JSON.parse(String(tipografiaRaw)) : undefined,
     etapas: etapasRaw ? JSON.parse(String(etapasRaw)) : [],
@@ -112,6 +116,10 @@ export async function criarCampanhaPagina(formData: FormData): Promise<{ error?:
       contador_data_fim: parsed.data.contador_data_fim ?? null,
       coletar_email: parsed.data.coletar_email,
       coletar_cidade: parsed.data.coletar_cidade,
+      habilitar_pontuacao: parsed.data.habilitar_pontuacao,
+      pontuacao_maxima: parsed.data.pontuacao_maxima,
+      pontuacao_minima_bolsa: parsed.data.pontuacao_minima_bolsa,
+      cor_borda: parsed.data.cor_borda ?? null,
       cards_destaque: parsed.data.cards_destaque,
       tipografia: parsed.data.tipografia,
       etapas: parsed.data.etapas,
@@ -264,6 +272,10 @@ export async function atualizarCampanhaPagina(id: string, formData: FormData): P
       contador_data_fim: parsed.data.contador_data_fim ?? null,
       coletar_email: parsed.data.coletar_email,
       coletar_cidade: parsed.data.coletar_cidade,
+      habilitar_pontuacao: parsed.data.habilitar_pontuacao,
+      pontuacao_maxima: parsed.data.pontuacao_maxima,
+      pontuacao_minima_bolsa: parsed.data.pontuacao_minima_bolsa,
+      cor_borda: parsed.data.cor_borda ?? null,
       cards_destaque: parsed.data.cards_destaque,
       tipografia: parsed.data.tipografia,
       etapas: parsed.data.etapas,
@@ -320,6 +332,10 @@ export async function duplicarCampanhaPagina(id: string): Promise<{ error?: stri
       contador_data_fim: original.contador_data_fim,
       coletar_email: original.coletar_email,
       coletar_cidade: original.coletar_cidade,
+      habilitar_pontuacao: original.habilitar_pontuacao,
+      pontuacao_maxima: original.pontuacao_maxima,
+      pontuacao_minima_bolsa: original.pontuacao_minima_bolsa,
+      cor_borda: original.cor_borda,
       cards_destaque: original.cards_destaque,
       tipografia: original.tipografia ?? {},
       etapas: original.etapas,
@@ -380,10 +396,20 @@ export async function getCampanhaRespostas(
   paginaId: string,
   page: number,
   data?: string,
+  // TAREFA campanha (PARTE 4) — filtro por aprovados/não aprovados; minimaBolsa é
+  // pagina.pontuacao_minima_bolsa, lido pela page.tsx (que já carrega a página) e repassado aqui.
+  statusPontuacao?: "aprovado" | "reprovado",
+  minimaBolsa?: number,
 ): Promise<CampanhaRespostasResultado> {
   await requireRole("admin");
   const supabase = await createClient();
   const offset = calcularOffset(page, LIMITE_PADRAO);
-  const { itens, total } = await getCampanhaRespostasLib(supabase, paginaId, { data, offset, limite: LIMITE_PADRAO });
+  const { itens, total } = await getCampanhaRespostasLib(supabase, paginaId, {
+    data,
+    offset,
+    limite: LIMITE_PADRAO,
+    statusPontuacao,
+    minimaBolsa,
+  });
   return { itens, total, totalPaginas: calcularTotalPaginas(total, LIMITE_PADRAO) };
 }

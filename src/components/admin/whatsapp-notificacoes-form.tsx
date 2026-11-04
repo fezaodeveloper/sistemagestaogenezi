@@ -125,6 +125,17 @@ const CATEGORIAS: Categoria[] = [
       },
     ],
   },
+  {
+    titulo: "Campanhas",
+    emoji: "📢",
+    itens: [
+      {
+        chave: "wz_campanha_confirmacao",
+        label: "Confirmação de inscrição em campanha",
+        descricao: "Enviada imediatamente após o visitante enviar o formulário de uma página de campanha.",
+      },
+    ],
+  },
 ];
 
 export function WhatsappNotificacoesForm({ defaultValues }: Props) {

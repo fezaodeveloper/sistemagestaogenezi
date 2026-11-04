@@ -23,6 +23,7 @@ export const WHATSAPP_TEMPLATE_IDS = [
   "cobranca_atrasada_d7",
   "cobranca_atrasada_d15",
   "lead_followup",
+  "campanha_confirmacao",
 ] as const;
 export type WhatsappTemplateId = (typeof WHATSAPP_TEMPLATE_IDS)[number];
 
@@ -199,6 +200,28 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
       { chave: "curso_interesse", descricao: "Curso de interesse do lead", exemplo: "Informática Básica" },
       P_NOME_ESCOLA,
       { chave: "tentativa", descricao: "Número da tentativa de contato", exemplo: "2" },
+    ],
+  },
+  campanha_confirmacao: {
+    id: "campanha_confirmacao",
+    nome: "Confirmação de inscrição em campanha",
+    gatilho: "Imediatamente após o visitante enviar o formulário de uma página de campanha.",
+    padrao:
+      "Olá {nome}! ✅ Recebemos sua inscrição na campanha *{campanha}*!\n\nEm breve entraremos em contato. 😊\n\n*Gênezi Educação Profissional*",
+    // pontuacao/pontuacao_max/percentual só chegam preenchidos quando a campanha tem pontuação
+    // habilitada (src/lib/whatsapp/eventos.ts::notificarWhatsappCampanhaConfirmacao) — ficam ""
+    // (somem do texto) nas demais. O bloco de resultado (🎯 pontuação + aprovado/reprovado) é
+    // SEMPRE anexado em código depois deste template quando a pontuação está habilitada, mesmo
+    // que o admin não use essas 3 variáveis no texto — mesmo padrão de blocos condicionais
+    // anexados em código já usado em enviarMensagemMatriculaCriada (credenciaisTexto/
+    // blocoConectaTexto, src/lib/mensagens/mensagens.ts). Elas ficam disponíveis aqui pra quem
+    // quiser personalizar o texto principal também.
+    placeholders: [
+      P_NOME,
+      { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Bolsa de Estudos Março" },
+      { chave: "pontuacao", descricao: "Pontuação obtida (só com pontuação habilitada)", exemplo: "78" },
+      { chave: "pontuacao_max", descricao: "Pontuação máxima (só com pontuação habilitada)", exemplo: "100" },
+      { chave: "percentual", descricao: "Percentual da pontuação (só com pontuação habilitada)", exemplo: "78" },
     ],
   },
 };

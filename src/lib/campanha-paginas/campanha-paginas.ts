@@ -76,7 +76,15 @@ export async function getCampanhaPaginaPublica(
 export async function getCampanhaRespostas(
   supabase: SupabaseServerClient,
   paginaId: string,
-  filtros: { data?: string; offset: number; limite: number },
+  filtros: {
+    data?: string;
+    offset: number;
+    limite: number;
+    // TAREFA campanha (PARTE 4) — filtro por aprovados/não aprovados; minimaBolsa vem de
+    // pagina.pontuacao_minima_bolsa (o lib não lê a página, quem chama já tem o valor).
+    statusPontuacao?: "aprovado" | "reprovado";
+    minimaBolsa?: number;
+  },
 ): Promise<{ itens: CampanhaResposta[]; total: number }> {
   let query = supabase
     .from("campanha_respostas")
@@ -86,6 +94,12 @@ export async function getCampanhaRespostas(
 
   if (filtros.data) {
     query = query.gte("created_at", `${filtros.data}T00:00:00`).lte("created_at", `${filtros.data}T23:59:59`);
+  }
+  if (filtros.statusPontuacao && filtros.minimaBolsa !== undefined) {
+    query =
+      filtros.statusPontuacao === "aprovado"
+        ? query.gte("pontuacao_percentual", filtros.minimaBolsa)
+        : query.lt("pontuacao_percentual", filtros.minimaBolsa);
   }
 
   query = query.range(filtros.offset, filtros.offset + filtros.limite - 1);

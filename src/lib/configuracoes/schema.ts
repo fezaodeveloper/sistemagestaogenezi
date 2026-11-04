@@ -133,6 +133,8 @@ export const WHATSAPP_NOTIF_CHAVES = [
   "wz_lembrete_agendamento",
   "wz_agendamento_cancelado",
   "wz_agendamento_falta",
+  // Campanhas
+  "wz_campanha_confirmacao",
 ] as const;
 
 export type WhatsappNotifChave = (typeof WHATSAPP_NOTIF_CHAVES)[number];

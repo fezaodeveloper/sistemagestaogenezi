@@ -26,6 +26,7 @@ import {
   PESO_TITULO_LABELS,
   QUESTAO_TIPOS,
   QUESTAO_TIPO_LABELS,
+  QUESTAO_TIPOS_COM_PONTUACAO,
   TIPOGRAFIA_LIMITES,
   resolverTipografia,
   tipoQuestaoEfetivo,
@@ -111,25 +112,34 @@ function toDatetimeLocal(iso: string | null): string {
 
 function QuestaoEditor({
   questao,
+  habilitarPontuacao,
   onChange,
   onRemover,
   onMoverCima,
   onMoverBaixo,
 }: {
   questao: Questao;
+  // TAREFA campanha (PARTE 2) — só mostra o campo "Pontos" por opção quando a pontuação está
+  // habilitada na página (configuração geral) E o tipo da questão aceita pontuação.
+  habilitarPontuacao: boolean;
   onChange: (dados: Partial<Questao>) => void;
   onRemover: () => void;
   onMoverCima?: () => void;
   onMoverBaixo?: () => void;
 }) {
   const opcoes = questao.opcoes ?? [];
+  const mostraPontos = habilitarPontuacao && QUESTAO_TIPOS_COM_PONTUACAO.includes(questao.tipo);
 
   function adicionarOpcao() {
-    onChange({ opcoes: [...opcoes, { letra: proximaLetra(opcoes.length), texto: "" }] });
+    onChange({ opcoes: [...opcoes, { letra: proximaLetra(opcoes.length), texto: "", pontos: 0 }] });
   }
 
   function atualizarOpcao(index: number, texto: string) {
     onChange({ opcoes: opcoes.map((o, i) => (i === index ? { ...o, texto } : o)) });
+  }
+
+  function atualizarPontos(index: number, pontos: number) {
+    onChange({ opcoes: opcoes.map((o, i) => (i === index ? { ...o, pontos } : o)) });
   }
 
   function removerOpcao(index: number) {
@@ -198,6 +208,17 @@ function QuestaoEditor({
                 placeholder="Texto da opção"
                 className="flex-1"
               />
+              {mostraPontos && (
+                <Input
+                  type="number"
+                  min={0}
+                  value={opcao.pontos ?? 0}
+                  onChange={(event) => atualizarPontos(index, Math.max(0, Number(event.target.value) || 0))}
+                  placeholder="Pontos"
+                  className="w-20"
+                  aria-label={`Pontos da opção ${opcao.letra}`}
+                />
+              )}
               <button type="button" onClick={() => removerOpcao(index)} aria-label="Remover opção" className="text-muted-foreground hover:text-destructive">
                 <X className="size-3.5" />
               </button>
@@ -215,12 +236,14 @@ function QuestaoEditor({
 
 function EtapaEditor({
   etapa,
+  habilitarPontuacao,
   onChange,
   onRemover,
   onMoverCima,
   onMoverBaixo,
 }: {
   etapa: Etapa;
+  habilitarPontuacao: boolean;
   onChange: (dados: Partial<Etapa>) => void;
   onRemover: () => void;
   onMoverCima?: () => void;
@@ -334,6 +357,7 @@ function EtapaEditor({
             <QuestaoEditor
               key={questao.id}
               questao={questao}
+              habilitarPontuacao={habilitarPontuacao}
               onChange={(dados) => atualizarQuestao(index, dados)}
               onRemover={() => removerQuestao(index)}
               onMoverCima={index > 0 ? () => moverQuestao(index, -1) : undefined}
@@ -380,11 +404,18 @@ export function CampanhaEditor({
   const [coletarCidade, setColetarCidade] = useState(pagina?.coletar_cidade ?? true);
   const [mostrarContador, setMostrarContador] = useState(pagina?.mostrar_contador ?? false);
   const [contadorDataFim, setContadorDataFim] = useState(toDatetimeLocal(pagina?.contador_data_fim ?? null));
+  // TAREFA campanha (PARTE 2) — pontuação.
+  const [habilitarPontuacao, setHabilitarPontuacao] = useState(pagina?.habilitar_pontuacao ?? false);
+  const [pontuacaoMaxima, setPontuacaoMaxima] = useState(pagina?.pontuacao_maxima?.toString() ?? "100");
+  const [pontuacaoMinimaBolsa, setPontuacaoMinimaBolsa] = useState(pagina?.pontuacao_minima_bolsa?.toString() ?? "70");
 
   const [tema, setTema] = useState<CampanhaTema>(pagina?.tema ?? "escuro");
   const [corPrimaria, setCorPrimaria] = useState(pagina?.cor_primaria ?? "#06b6d4");
   const [corFundo, setCorFundo] = useState(pagina?.cor_fundo ?? "#0f172a");
   const [corFonte, setCorFonte] = useState(pagina?.cor_fonte ?? "#ffffff");
+  // TAREFA campanha (PARTE 5) — cor da borda dos campos; "" = mantém o cálculo automático por
+  // contraste (classesCampoPublico/estiloCampoPublicoHex), nunca manda cor nenhuma pro form.
+  const [corBorda, setCorBorda] = useState(pagina?.cor_borda ?? "");
   const [logoUrl, setLogoUrl] = useState(pagina?.logo_url ?? "");
   const [imagemTopoUrl, setImagemTopoUrl] = useState(pagina?.imagem_topo_url ?? "");
   const [enviandoLogo, setEnviandoLogo] = useState(false);
@@ -566,6 +597,10 @@ export function CampanhaEditor({
     formData.set("contador_data_fim", contadorDataFim);
     formData.set("coletar_email", String(coletarEmail));
     formData.set("coletar_cidade", String(coletarCidade));
+    formData.set("habilitar_pontuacao", String(habilitarPontuacao));
+    formData.set("pontuacao_maxima", pontuacaoMaxima);
+    formData.set("pontuacao_minima_bolsa", pontuacaoMinimaBolsa);
+    if (corBorda) formData.set("cor_borda", corBorda);
     formData.set("cards_destaque", JSON.stringify(cardsDestaque));
     formData.set("tipografia", JSON.stringify(tipografia));
     formData.set("etapas", JSON.stringify(etapas));
@@ -622,6 +657,10 @@ export function CampanhaEditor({
       contador_data_fim: contadorData && !Number.isNaN(contadorData.getTime()) ? contadorData.toISOString() : null,
       coletar_email: coletarEmail,
       coletar_cidade: coletarCidade,
+      habilitar_pontuacao: habilitarPontuacao,
+      pontuacao_maxima: Number(pontuacaoMaxima) || 100,
+      pontuacao_minima_bolsa: Number(pontuacaoMinimaBolsa) || 0,
+      cor_borda: corBorda || null,
       cards_destaque: cardsDestaque.filter((card) => card.valor.trim() && card.label.trim()),
       tipografia,
       etapas,
@@ -657,6 +696,10 @@ export function CampanhaEditor({
     contadorDataFim,
     coletarEmail,
     coletarCidade,
+    habilitarPontuacao,
+    pontuacaoMaxima,
+    pontuacaoMinimaBolsa,
+    corBorda,
     cardsDestaque,
     tipografia,
     etapas,
@@ -812,6 +855,41 @@ export function CampanhaEditor({
                         />
                       </div>
                     )}
+                    <div className="flex items-center justify-between gap-4 border-t pt-4">
+                      <div>
+                        <Label className="font-normal">Habilitar pontuação</Label>
+                        <p className="text-muted-foreground text-xs">
+                          Cada opção de resposta das etapas de múltipla/escolha única/select ganha um campo
+                          &quot;Pontos&quot; — a soma aparece pro participante no final.
+                        </p>
+                      </div>
+                      <Switch checked={habilitarPontuacao} onCheckedChange={setHabilitarPontuacao} />
+                    </div>
+                    {habilitarPontuacao && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="pontuacao_maxima">Pontuação máxima</Label>
+                          <Input
+                            id="pontuacao_maxima"
+                            type="number"
+                            min={1}
+                            value={pontuacaoMaxima}
+                            onChange={(e) => setPontuacaoMaxima(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="pontuacao_minima_bolsa">% mínimo para a bolsa</Label>
+                          <Input
+                            id="pontuacao_minima_bolsa"
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={pontuacaoMinimaBolsa}
+                            onChange={(e) => setPontuacaoMinimaBolsa(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -859,6 +937,25 @@ export function CampanhaEditor({
                           <input type="color" value={corFonte} onChange={(e) => setCorFonte(e.target.value)} className="border-input h-8 w-14 cursor-pointer rounded-md border bg-transparent p-0.5" />
                           <span className="text-muted-foreground text-sm">{corFonte}</span>
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label>Cor da borda dos campos (opcional)</Label>
+                      <p className="text-muted-foreground text-xs">Sem cor escolhida, a borda é calculada automaticamente por contraste com a cor de fundo.</p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={corBorda || "#000000"}
+                          onChange={(e) => setCorBorda(e.target.value)}
+                          className="border-input h-8 w-14 cursor-pointer rounded-md border bg-transparent p-0.5"
+                        />
+                        <span className="text-muted-foreground text-sm">{corBorda || "automática"}</span>
+                        {corBorda && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setCorBorda("")}>
+                            Limpar
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -1054,6 +1151,7 @@ export function CampanhaEditor({
                     <EtapaEditor
                       key={index}
                       etapa={etapa}
+                      habilitarPontuacao={habilitarPontuacao}
                       onChange={(dados) => atualizarEtapa(index, dados)}
                       onRemover={() => removerEtapa(index)}
                       onMoverCima={index > 0 && etapa.tipo !== "confirmacao" ? () => moverEtapa(index, -1) : undefined}

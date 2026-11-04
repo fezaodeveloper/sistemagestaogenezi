@@ -11,6 +11,12 @@ import { whatsappToggleHabilitado } from "@/lib/whatsapp/verificar-toggle";
 // de específico de SMS — evita duplicar essa mesma busca aqui.
 import { nomeEscolaParaSms } from "@/lib/integrax/modelos";
 import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
+import {
+  IDADE_MINIMA_RESPONSAVEL,
+  RESPOSTA_CHAVE_RESPONSAVEL_NOME,
+  RESPOSTA_CHAVE_RESPONSAVEL_WHATSAPP,
+  type RespostaValor,
+} from "@/lib/campanha-paginas/schema";
 
 // Eventos do sistema que disparam WhatsApp via GênZap. Cada função agenda o envio pra DEPOIS da
 // resposta (after) e engole qualquer erro — nunca atrasa nem quebra o fluxo que chamou (mesmo
@@ -46,7 +52,12 @@ import { DIA_SEMANA_LABELS } from "@/lib/agendamentos/schema";
 // Best-effort: nunca pode interromper o envio em si, que já aconteceu com sucesso/falha antes
 // desta chamada. Respeita a constraint real de mensagens_enviadas (exatamente um entre
 // matricula_id/lead_id, nunca os dois, nunca nenhum) — chamadores garantem isso.
-type TipoNotificacaoAuditoria = "agendamento_confirmacao" | "agendamento_lembrete" | "cobranca_atrasada" | "lead_followup";
+type TipoNotificacaoAuditoria =
+  | "agendamento_confirmacao"
+  | "agendamento_lembrete"
+  | "cobranca_atrasada"
+  | "lead_followup"
+  | "campanha_confirmacao";
 
 async function registrarEnvioWhatsapp(params: {
   tipo: TipoNotificacaoAuditoria;
@@ -763,5 +774,108 @@ export function notificarWhatsappDadosAcesso(matriculaId: string): void {
     const email = aluno.email ?? "o e-mail cadastrado";
     const mensagem = `Olá, ${nome}! 🎓 Aqui estão seus dados de acesso ao curso ${curso}. Acesse a plataforma em ${urlPortal()}/entrar com o e-mail ${email} e a senha cadastrada.`;
     await enviarWhatsApp(aluno.telefone, mensagem);
+  });
+}
+
+// ----- Campanha: confirmação imediata de inscrição (src/app/campanha/[slug]/actions.ts) -----
+// TAREFA campanha — PARTE 7: substitui o console.log stub que existia desde sempre ("Stub —
+// Evolution API virá depois"). Fire-and-forget, disparada pela Server Action pública depois do
+// INSERT em campanha_respostas — nunca pode atrasar nem quebrar a resposta "inscrição enviada"
+// pro visitante.
+
+type LinhaCampanhaRespostaWhatsapp = {
+  nome: string;
+  whatsapp: string;
+  idade: number | null;
+  respostas: Record<string, RespostaValor>;
+  pontuacao_total: number | null;
+  pontuacao_percentual: number | null;
+  lead_id: string | null;
+  pagina_id: string;
+};
+
+// Bloco de resultado (pontuação + aprovado/reprovado): SEMPRE anexado em código quando a
+// campanha tem pontuação habilitada, além do que o admin escreveu no template editável — mesmo
+// padrão de bloco condicional anexado em código já usado em enviarMensagemMatriculaCriada
+// (credenciaisTexto/blocoConectaTexto, src/lib/mensagens/mensagens.ts).
+function blocoResultadoCampanha(total: number, maxima: number, percentual: number, aprovado: boolean, minimaBolsa: number): string {
+  const linhaAprovado = aprovado
+    ? "✅ Você atingiu a pontuação mínima para a bolsa!"
+    : `Continue estudando! A pontuação mínima é ${minimaBolsa}%.`;
+  return `\n\n🎯 Sua pontuação: ${total}/${maxima} (${percentual}%)\n${linhaAprovado}`;
+}
+
+export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
+  emSegundoPlano(async () => {
+    if (!(await whatsappToggleHabilitado("wz_campanha_confirmacao"))) return;
+
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("campanha_respostas")
+      .select("nome, whatsapp, idade, respostas, pontuacao_total, pontuacao_percentual, lead_id, pagina_id")
+      .eq("id", respostaId)
+      .maybeSingle();
+    const resposta = data as LinhaCampanhaRespostaWhatsapp | null;
+    if (!resposta?.whatsapp) return;
+
+    const { data: paginaData } = await admin
+      .from("campanha_paginas")
+      .select("titulo, habilitar_pontuacao, pontuacao_maxima, pontuacao_minima_bolsa")
+      .eq("id", resposta.pagina_id)
+      .maybeSingle();
+    const pagina = paginaData as
+      | { titulo: string; habilitar_pontuacao: boolean; pontuacao_maxima: number; pontuacao_minima_bolsa: number }
+      | null;
+    const tituloCampanha = pagina?.titulo ?? "nossa campanha";
+    const habilitarPontuacao = !!pagina?.habilitar_pontuacao;
+
+    const total = resposta.pontuacao_total ?? 0;
+    const maxima = pagina?.pontuacao_maxima ?? 100;
+    const percentual = resposta.pontuacao_percentual ?? 0;
+    const minimaBolsa = pagina?.pontuacao_minima_bolsa ?? 0;
+    const aprovado = percentual >= minimaBolsa;
+
+    const nome = primeiroNome(resposta.nome) || resposta.nome;
+    let mensagem = await renderTemplate("campanha_confirmacao", {
+      nome,
+      campanha: tituloCampanha,
+      pontuacao: habilitarPontuacao ? String(total) : "",
+      pontuacao_max: habilitarPontuacao ? String(maxima) : "",
+      percentual: habilitarPontuacao ? String(percentual) : "",
+    });
+    if (habilitarPontuacao) {
+      mensagem += blocoResultadoCampanha(total, maxima, percentual, aprovado, minimaBolsa);
+    }
+
+    const resultado = await enviarWhatsApp(resposta.whatsapp, mensagem);
+    await registrarEnvioWhatsapp({
+      tipo: "campanha_confirmacao",
+      matriculaId: null,
+      leadId: resposta.lead_id,
+      telefoneDestino: resposta.whatsapp,
+      mensagemTexto: mensagem,
+      resultado,
+    });
+
+    // TAREFA campanha — PARTE 8: menor de idade, cópia (adaptada) pro responsável. Texto ad hoc
+    // (não passa pelo catálogo de templates editável) — mesmo critério de
+    // enviarCopiaComprovanteParaResponsavel acima: é uma cópia derivada, não um evento com
+    // template próprio, e não entra em mensagens_enviadas (grão da tabela é 1 linha por envio ao
+    // participante, não por cópia).
+    if (resposta.idade !== null && resposta.idade < IDADE_MINIMA_RESPONSAVEL) {
+      const nomeResponsavel = resposta.respostas[RESPOSTA_CHAVE_RESPONSAVEL_NOME];
+      const whatsappResponsavel = resposta.respostas[RESPOSTA_CHAVE_RESPONSAVEL_WHATSAPP];
+      if (typeof whatsappResponsavel === "string" && whatsappResponsavel) {
+        const saudacaoResponsavel = typeof nomeResponsavel === "string" && nomeResponsavel ? primeiroNome(nomeResponsavel) : "";
+        let mensagemResponsavel =
+          `Olá${saudacaoResponsavel ? ` ${saudacaoResponsavel}` : ""}! 👋\n${nome} acabou de se inscrever na campanha ` +
+          `*${tituloCampanha}* da Gênezi Educação.`;
+        if (habilitarPontuacao) {
+          mensagemResponsavel += `\n🎯 Pontuação obtida: ${total}/${maxima} (${percentual}%)`;
+        }
+        mensagemResponsavel += "\n\nEm caso de dúvidas, entre em contato conosco.";
+        await enviarWhatsApp(whatsappResponsavel, mensagemResponsavel);
+      }
+    }
   });
 }

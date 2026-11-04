@@ -129,7 +129,7 @@ function CampanhaPaginaCard({ pagina }: { pagina: CampanhaPaginaComContagem }) {
             render={<Link href={`/admin/comercial/paginas-campanha/${pagina.id}/respostas`} />}
           >
             <FileText className="size-3.5" />
-            Ver respostas
+            Ver respostas ({pagina.totalRespostas})
           </Button>
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={duplicar}>
             Duplicar

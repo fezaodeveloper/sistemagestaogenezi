@@ -11,18 +11,25 @@ export default async function CampanhaRespostasPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ data?: string; page?: string }>;
+  searchParams: Promise<{ data?: string; page?: string; status_pontuacao?: string }>;
 }) {
   await requireRole("admin");
   const { id } = await params;
-  const { data, page } = await searchParams;
+  const { data, page, status_pontuacao } = await searchParams;
 
   const supabase = await createClient();
   const pagina = await getCampanhaPagina(supabase, id);
   if (!pagina) notFound();
 
   const paginaAtual = parsePagina(page);
-  const resultado = await getCampanhaRespostas(id, paginaAtual, data || undefined);
+  const statusPontuacao = status_pontuacao === "aprovado" || status_pontuacao === "reprovado" ? status_pontuacao : undefined;
+  const resultado = await getCampanhaRespostas(
+    id,
+    paginaAtual,
+    data || undefined,
+    pagina.habilitar_pontuacao ? statusPontuacao : undefined,
+    pagina.pontuacao_minima_bolsa,
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,11 +43,14 @@ export default async function CampanhaRespostasPage({
         etapas={pagina.etapas}
         mostrarLgpd={pagina.mostrar_lgpd || pagina.etapas.some((etapa) => etapa.tipo === "confirmacao")}
         mostrarDeclaracao={pagina.mostrar_declaracao || pagina.etapas.some((etapa) => etapa.tipo === "confirmacao")}
+        habilitarPontuacao={pagina.habilitar_pontuacao}
+        pontuacaoMinimaBolsa={pagina.pontuacao_minima_bolsa}
         respostas={resultado.itens}
         totalRegistros={resultado.total}
         paginaAtual={paginaAtual}
         totalPaginas={resultado.totalPaginas}
         dataFiltro={data ?? ""}
+        statusPontuacaoFiltro={statusPontuacao ?? ""}
       />
     </div>
   );

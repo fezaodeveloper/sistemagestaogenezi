@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, Printer } from "lucide-react";
 import {
   RESPOSTA_CHAVE_DECLARACAO,
   RESPOSTA_CHAVE_LGPD,
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function formatDateHoraBR(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR");
@@ -27,12 +28,17 @@ function RespostaCompletaDialog({
   perguntaPorId,
   mostrarLgpd,
   mostrarDeclaracao,
+  habilitarPontuacao,
+  pontuacaoMinimaBolsa,
 }: {
   resposta: CampanhaResposta;
   perguntaPorId: Map<string, string>;
   mostrarLgpd: boolean;
   mostrarDeclaracao: boolean;
+  habilitarPontuacao: boolean;
+  pontuacaoMinimaBolsa: number;
 }) {
+  const aprovado = (resposta.pontuacao_percentual ?? 0) >= pontuacaoMinimaBolsa;
   return (
     <Dialog>
       <DialogTrigger
@@ -55,6 +61,13 @@ function RespostaCompletaDialog({
           )}
           <p className="text-muted-foreground text-xs">{formatDateHoraBR(resposta.created_at)}</p>
 
+          {habilitarPontuacao && (
+            <p className="font-medium">
+              🎯 {resposta.pontuacao_total ?? 0} pontos ({resposta.pontuacao_percentual ?? 0}%) —{" "}
+              {aprovado ? "Aprovado" : "Não aprovado"}
+            </p>
+          )}
+
           {perguntaPorId.size > 0 && (
             <div className="mt-2 flex flex-col gap-2 border-t pt-2">
               {Array.from(perguntaPorId.entries()).map(([id, pergunta]) => (
@@ -74,6 +87,18 @@ function RespostaCompletaDialog({
               )}
             </div>
           )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2 w-fit"
+            nativeButton={false}
+            render={<a href={`/api/campanha-respostas/${resposta.id}/pdf`} target="_blank" rel="noreferrer" />}
+          >
+            <Printer className="size-3.5" />
+            Imprimir
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -85,24 +110,31 @@ export function CampanhaRespostasView({
   etapas,
   mostrarLgpd,
   mostrarDeclaracao,
+  habilitarPontuacao,
+  pontuacaoMinimaBolsa,
   respostas,
   totalRegistros,
   paginaAtual,
   totalPaginas,
   dataFiltro,
+  statusPontuacaoFiltro,
 }: {
   paginaId: string;
   etapas: Etapa[];
   mostrarLgpd: boolean;
   mostrarDeclaracao: boolean;
+  habilitarPontuacao: boolean;
+  pontuacaoMinimaBolsa: number;
   respostas: CampanhaResposta[];
   totalRegistros: number;
   paginaAtual: number;
   totalPaginas: number;
   dataFiltro: string;
+  statusPontuacaoFiltro: string;
 }) {
   const router = useRouter();
   const [data, setData] = useState(dataFiltro);
+  const [statusPontuacao, setStatusPontuacao] = useState(statusPontuacaoFiltro);
 
   const perguntaPorId = new Map<string, string>();
   for (const etapa of etapas) {
@@ -111,10 +143,10 @@ export function CampanhaRespostasView({
     }
   }
 
-  function handleDataChange(valor: string) {
-    setData(valor);
+  function navegar(novaData: string, novoStatusPontuacao: string) {
     const params = new URLSearchParams();
-    if (valor) params.set("data", valor);
+    if (novaData) params.set("data", novaData);
+    if (novoStatusPontuacao) params.set("status_pontuacao", novoStatusPontuacao);
     const queryString = params.toString();
     router.push(
       queryString
@@ -123,15 +155,48 @@ export function CampanhaRespostasView({
     );
   }
 
+  function handleDataChange(valor: string) {
+    setData(valor);
+    navegar(valor, statusPontuacao);
+  }
+
+  function handleStatusPontuacaoChange(valor: string) {
+    setStatusPontuacao(valor);
+    navegar(data, valor);
+  }
+
   const paginacaoSearchParams: Record<string, string> = {};
   if (dataFiltro) paginacaoSearchParams.data = dataFiltro;
+  if (statusPontuacaoFiltro) paginacaoSearchParams.status_pontuacao = statusPontuacaoFiltro;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted-foreground text-xs">Data</span>
-          <Input type="date" value={data} onChange={(event) => handleDataChange(event.target.value)} className="w-40" />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-muted-foreground text-xs">Data</span>
+            <Input type="date" value={data} onChange={(event) => handleDataChange(event.target.value)} className="w-40" />
+          </div>
+          {habilitarPontuacao && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-muted-foreground text-xs">Pontuação</span>
+              <Select
+                items={{ "": "Todos", aprovado: "Aprovados", reprovado: "Não aprovados" }}
+                value={statusPontuacao}
+                onValueChange={(v) => handleStatusPontuacaoChange(v ?? "")}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="aprovado">Aprovados</SelectItem>
+                  <SelectItem value="reprovado">Não aprovados</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <p className="text-muted-foreground pb-2 text-sm">{totalRegistros} participante{totalRegistros === 1 ? "" : "s"}</p>
         </div>
         <Button type="button" variant="outline" nativeButton={false} render={<a href={`/admin/comercial/paginas-campanha/${paginaId}/respostas/export`} />}>
           <Download />
@@ -154,6 +219,7 @@ export function CampanhaRespostasView({
                 <TableHead>WhatsApp</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead>Data</TableHead>
+                {habilitarPontuacao && <TableHead>Pontuação</TableHead>}
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -173,13 +239,33 @@ export function CampanhaRespostasView({
                   </TableCell>
                   <TableCell>{[resposta.cidade, resposta.estado].filter(Boolean).join(" - ") || "—"}</TableCell>
                   <TableCell>{formatDateHoraBR(resposta.created_at)}</TableCell>
+                  {habilitarPontuacao && (
+                    <TableCell>
+                      {resposta.pontuacao_total ?? 0} ({resposta.pontuacao_percentual ?? 0}%){" "}
+                      {(resposta.pontuacao_percentual ?? 0) >= pontuacaoMinimaBolsa ? "✅" : ""}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right">
-                    <RespostaCompletaDialog
-                      resposta={resposta}
-                      perguntaPorId={perguntaPorId}
-                      mostrarLgpd={mostrarLgpd}
-                      mostrarDeclaracao={mostrarDeclaracao}
-                    />
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Imprimir resultado"
+                        nativeButton={false}
+                        render={<a href={`/api/campanha-respostas/${resposta.id}/pdf`} target="_blank" rel="noreferrer" />}
+                      >
+                        <Printer className="size-3.5" />
+                      </Button>
+                      <RespostaCompletaDialog
+                        resposta={resposta}
+                        perguntaPorId={perguntaPorId}
+                        mostrarLgpd={mostrarLgpd}
+                        mostrarDeclaracao={mostrarDeclaracao}
+                        habilitarPontuacao={habilitarPontuacao}
+                        pontuacaoMinimaBolsa={pontuacaoMinimaBolsa}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

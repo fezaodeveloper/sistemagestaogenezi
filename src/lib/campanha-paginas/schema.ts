@@ -22,15 +22,28 @@ export type CampanhaTema = (typeof CAMPANHA_TEMAS)[number];
 // = array das letras marcadas). O antigo checkbox de um "Sim" único virou
 // "checkbox_unico" (valor booleano) — ver 20260918700000_campanha_cards_destaque.sql,
 // que renomeia o tipo nas questões já cadastradas.
+//
+// TAREFA campanha (PARTE 6) — "escolha única" (rádio: só 1 opção marcável, desmarca a anterior
+// ao marcar outra) JÁ EXISTIA sob o nome "multipla_escolha" (ver QuestaoCampo em
+// campanha-publica-view.tsx: valor é a letra única escolhida, clicar outra opção substitui,
+// nunca acumula). O nome do tipo é confuso mas o VALOR em si ("multipla_escolha") não muda —
+// trocar quebraria toda campanha já cadastrada com esse tipo. Só o RÓTULO exibido no editor foi
+// corrigido abaixo pra refletir o comportamento real; "checkbox" (o tipo que de fato aceita
+// várias opções marcadas) passou a ser chamado de "Múltipla escolha" no editor, e
+// "checkbox_unico" já é o Sim/Não pedido.
 export const QUESTAO_TIPOS = ["multipla_escolha", "texto", "checkbox", "checkbox_unico", "select"] as const;
 export type QuestaoTipo = (typeof QUESTAO_TIPOS)[number];
 export const QUESTAO_TIPO_LABELS: Record<QuestaoTipo, string> = {
-  multipla_escolha: "Múltipla escolha",
+  multipla_escolha: "Escolha única (cards A/B/C/D)",
   texto: "Texto livre",
-  checkbox: "Checkbox (várias opções)",
-  checkbox_unico: "Checkbox único (Sim)",
+  checkbox: "Múltipla escolha (várias opções)",
+  checkbox_unico: "Sim/Não",
   select: "Select",
 };
+
+// Tipos de questão que aceitam pontuação por opção (TAREFA campanha, PARTE 2) — texto livre não
+// tem opção pra pontuar.
+export const QUESTAO_TIPOS_COM_PONTUACAO: readonly QuestaoTipo[] = ["multipla_escolha", "checkbox", "select"];
 
 // Valor de uma resposta: texto/letra escolhida, boolean (checkbox único e
 // consentimentos) ou array de letras (checkbox com várias opções).
@@ -75,10 +88,21 @@ export type UfBrasil = (typeof UFS_BRASIL)[number];
 // editor como "q1", "q2" etc. (sempre sem "_" na frente).
 export const RESPOSTA_CHAVE_LGPD = "_aceite_lgpd";
 export const RESPOSTA_CHAVE_DECLARACAO = "_aceite_declaracao";
+// TAREFA campanha (PARTE 8) — dados do responsável quando o participante é menor de idade. Mesmo
+// critério de reserva (prefixo "_", nunca colide com id de questão real).
+export const RESPOSTA_CHAVE_RESPONSAVEL_NOME = "_responsavel_nome";
+export const RESPOSTA_CHAVE_RESPONSAVEL_WHATSAPP = "_responsavel_whatsapp";
+export const RESPOSTA_CHAVE_RESPONSAVEL_CPF = "_responsavel_cpf";
+
+export const IDADE_MINIMA_RESPONSAVEL = 18;
 
 export const opcaoQuestaoSchema = z.object({
   letra: z.string().trim().min(1).max(5),
   texto: z.string().trim().min(1).max(200),
+  // TAREFA campanha (PARTE 2) — pontos desta opção quando a pontuação está habilitada na
+  // página; opcional pra não exigir valor em toda opção de toda campanha já cadastrada (default
+  // efetivo 0 — ver pontosDaOpcao abaixo).
+  pontos: z.coerce.number().int().min(0).max(1000).optional(),
 });
 export type OpcaoQuestao = z.infer<typeof opcaoQuestaoSchema>;
 
@@ -217,6 +241,17 @@ export const campanhaPaginaFormSchema = z
     contador_data_fim: z.string().trim().optional(),
     coletar_email: z.boolean(),
     coletar_cidade: z.boolean(),
+    // TAREFA campanha (PARTE 2) — pontuação.
+    habilitar_pontuacao: z.boolean(),
+    pontuacao_maxima: z.coerce.number().int().positive().max(100000).default(100),
+    pontuacao_minima_bolsa: z.coerce.number().int().min(0).max(100000).default(70),
+    // TAREFA campanha (PARTE 5) — cor da borda dos campos do formulário público; sem valor =
+    // mantém a borda calculada automaticamente por contraste (classesCampoPublico/estiloCampoPublicoHex).
+    cor_borda: z
+      .string()
+      .trim()
+      .regex(/^#[0-9a-fA-F]{6}$/, { error: "Cor inválida." })
+      .optional(),
     tipografia: tipografiaSchema.default(TIPOGRAFIA_PADRAO),
     cards_destaque: z.array(cardDestaqueSchema).max(CARDS_DESTAQUE_MAXIMO, { error: "No máximo 3 cards de destaque." }).default([]),
     etapas: z.array(etapaSchema).max(20).default([]),
@@ -268,6 +303,10 @@ export type CampanhaPagina = {
   contador_data_fim: string | null;
   coletar_email: boolean;
   coletar_cidade: boolean;
+  habilitar_pontuacao: boolean;
+  pontuacao_maxima: number;
+  pontuacao_minima_bolsa: number;
+  cor_borda: string | null;
   cards_destaque: CardDestaque[];
   // jsonb: pode ser {} (páginas antigas) — sempre passar por resolverTipografia().
   tipografia: Partial<Tipografia> | null;
@@ -294,27 +333,88 @@ export type CampanhaResposta = {
   estado: string | null;
   cidade: string | null;
   respostas: Record<string, RespostaValor>;
+  pontuacao_total: number | null;
+  pontuacao_percentual: number | null;
   ip: string | null;
   user_agent: string | null;
   created_at: string;
 };
 
+// TAREFA campanha (PARTE 8) — menor de idade: campos do responsável só exigidos quando
+// idade < IDADE_MINIMA_RESPONSAVEL. CPF validado só por quantidade de dígitos (mesmo critério já
+// usado pra responsavel_cpf em src/lib/alunos/schema.ts — sem checksum), não por algoritmo.
+function onlyDigitsLocal(valor: string): string {
+  return valor.replace(/\D/g, "");
+}
+
 // Schema do formulário público (/campanha/[slug]).
-export const campanhaRespostaPublicaSchema = z.object({
-  nome: z
-    .string({ error: "Informe seu nome." })
-    .trim()
-    .min(1, { error: "Informe seu nome." })
-    .max(200, { error: "Máximo de 200 caracteres." }),
-  whatsapp: z
-    .string({ error: "Informe seu WhatsApp." })
-    .trim()
-    .min(8, { error: "Informe um WhatsApp válido." })
-    .max(30),
-  idade: z.coerce.number({ error: "Informe sua idade." }).int().positive().max(120),
-  email: z.string().trim().max(200).optional(),
-  estado: z.enum(UFS_BRASIL, { error: "Selecione um estado válido." }).optional(),
-  cidade: z.string().trim().max(200).optional(),
-  respostas: z.record(z.string(), z.union([z.string(), z.boolean(), z.array(z.string())])).default({}),
-});
+export const campanhaRespostaPublicaSchema = z
+  .object({
+    nome: z
+      .string({ error: "Informe seu nome." })
+      .trim()
+      .min(1, { error: "Informe seu nome." })
+      .max(200, { error: "Máximo de 200 caracteres." }),
+    whatsapp: z
+      .string({ error: "Informe seu WhatsApp." })
+      .trim()
+      .min(8, { error: "Informe um WhatsApp válido." })
+      .max(30),
+    idade: z.coerce.number({ error: "Informe sua idade." }).int().positive().max(120),
+    email: z.string().trim().max(200).optional(),
+    estado: z.enum(UFS_BRASIL, { error: "Selecione um estado válido." }).optional(),
+    cidade: z.string().trim().max(200).optional(),
+    respostas: z.record(z.string(), z.union([z.string(), z.boolean(), z.array(z.string())])).default({}),
+    responsavel_nome: z.string().trim().max(200).optional(),
+    responsavel_whatsapp: z.string().trim().max(30).optional(),
+    responsavel_cpf: z.string().trim().max(20).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.idade >= IDADE_MINIMA_RESPONSAVEL) return;
+    if (!data.responsavel_nome) {
+      ctx.addIssue({ code: "custom", path: ["responsavel_nome"], message: "Informe o nome do responsável (menor de idade)." });
+    }
+    if (!data.responsavel_whatsapp || data.responsavel_whatsapp.trim().length < 8) {
+      ctx.addIssue({ code: "custom", path: ["responsavel_whatsapp"], message: "Informe o WhatsApp do responsável." });
+    }
+    if (!data.responsavel_cpf || onlyDigitsLocal(data.responsavel_cpf).length !== 11) {
+      ctx.addIssue({ code: "custom", path: ["responsavel_cpf"], message: "Informe um CPF válido do responsável." });
+    }
+  });
 export type CampanhaRespostaPublicaValues = z.infer<typeof campanhaRespostaPublicaSchema>;
+
+// ===== Pontuação (TAREFA campanha, PARTE 2) =====
+
+// Pontos de uma opção respondida. select guarda o TEXTO da opção como valor (não a letra, ver
+// SelectNativo em campanha-publica-view.tsx), as demais guardam a(s) letra(s).
+function pontosDaOpcaoSelecionada(questao: Questao, letraOuTexto: string): number {
+  const opcao =
+    questao.tipo === "select"
+      ? (questao.opcoes ?? []).find((o) => o.texto === letraOuTexto)
+      : (questao.opcoes ?? []).find((o) => o.letra === letraOuTexto);
+  return opcao?.pontos ?? 0;
+}
+
+// Soma os pontos de todas as respostas de uma etapa de perguntas, ignorando texto livre e
+// checkbox_unico (sem opção pra pontuar) e as chaves reservadas (_aceite_lgpd etc.). Nunca lança
+// — resposta fora do formato esperado (campanha antiga, sem pontos nas opções) conta 0.
+export function calcularPontuacaoTotal(etapas: Etapa[], respostas: Record<string, RespostaValor>): number {
+  let total = 0;
+  for (const etapa of etapas) {
+    for (const questao of etapa.questoes) {
+      if (!QUESTAO_TIPOS_COM_PONTUACAO.includes(questao.tipo)) continue;
+      const valor = respostas[questao.id];
+      if (Array.isArray(valor)) {
+        for (const item of valor) total += pontosDaOpcaoSelecionada(questao, item);
+      } else if (typeof valor === "string" && valor) {
+        total += pontosDaOpcaoSelecionada(questao, valor);
+      }
+    }
+  }
+  return total;
+}
+
+export function calcularPontuacaoPercentual(total: number, maxima: number): number {
+  if (!maxima || maxima <= 0) return 0;
+  return Math.round((total / maxima) * 100 * 100) / 100;
+}
