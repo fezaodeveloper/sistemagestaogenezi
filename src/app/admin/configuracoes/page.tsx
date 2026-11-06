@@ -25,6 +25,8 @@ import { TermoImagemMatriculaForm } from "@/components/admin/termo-imagem-matric
 import { AlterarEmailAdminForm } from "@/components/admin/alterar-email-admin-form";
 import { BackupSection } from "@/components/admin/backup-section";
 import { LogSistemaView } from "@/components/admin/log-sistema-view";
+import { UsuariosTab } from "@/components/admin/usuarios-tab";
+import { listarUsuarios } from "@/app/admin/configuracoes/actions-usuarios";
 import { CreditCard, GraduationCap, LayoutGrid, Mail, MessageCircle, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +40,7 @@ const TAB_IDS = [
   "notificacoes",
   "recursos",
   "banners",
+  "usuarios",
   "backup",
   "log",
 ] as const;
@@ -62,7 +65,7 @@ export default async function ConfiguracoesPage({
   // new_email só existe no usuário completo (getUser), não nos claims do JWT.
   const { data: usuarioAuth } = await supabase.auth.getUser();
   const emailPendente = usuarioAuth.user?.new_email ?? null;
-  const [{ data }, banners, regrasNotificacao] = await Promise.all([
+  const [{ data }, banners, regrasNotificacao, usuarios] = await Promise.all([
     supabase
       .from("configuracoes")
       // String literal de propósito (não .join() em runtime): o supabase-js só consegue inferir
@@ -76,6 +79,7 @@ export default async function ConfiguracoesPage({
       .single(),
     getBannersLoginAdmin(),
     listarRegras(),
+    listarUsuarios(),
   ]);
 
   const telegramDefaultValues = Object.fromEntries(
@@ -130,6 +134,7 @@ export default async function ConfiguracoesPage({
           <TabsTrigger value="notificacoes">Notificações</TabsTrigger>
           <TabsTrigger value="recursos">Recursos</TabsTrigger>
           <TabsTrigger value="banners">Banners do Login</TabsTrigger>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="backup">Backup</TabsTrigger>
           <TabsTrigger value="log">Log do sistema</TabsTrigger>
         </TabsList>
@@ -412,6 +417,14 @@ export default async function ConfiguracoesPage({
             </CardHeader>
             <CardContent>
               <BannersLoginForm banners={banners} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="usuarios">
+          <Card>
+            <CardContent>
+              <UsuariosTab usuariosIniciais={usuarios} currentUserId={admin.id} />
             </CardContent>
           </Card>
         </TabsContent>

@@ -7,6 +7,7 @@ import {
   templateBoasVindas,
   templateCadastroRecebidoEmpresa,
   templateCertificado,
+  templateConvitePainelAdmin,
   templateEmpresaAprovada,
   templateLembretePagamento,
   templatePagamentoConfirmadoEmpresa,
@@ -91,6 +92,21 @@ export async function enviarRecuperacaoSenha(
     if (renderizado) return await enviarEmail({ to: para, subject: renderizado.assunto, html: renderizado.html });
 
     const { subject, html } = templateRecuperacaoSenha(nome, recoveryLink, para);
+    return await enviarEmail({ to: para, subject, html });
+  } catch {
+    return false;
+  }
+}
+
+export async function enviarConvitePainelAdmin(
+  para: string,
+  nome: string,
+  link: string,
+  perfil: "admin" | "empresa",
+): Promise<boolean> {
+  if (!(await emailConfigurado())) return false;
+  try {
+    const { subject, html } = templateConvitePainelAdmin(nome, link, perfil, para);
     return await enviarEmail({ to: para, subject, html });
   } catch {
     return false;

@@ -120,6 +120,28 @@ export function templateRecuperacaoSenha(nome: string, recoveryLink: string, ema
   return { subject: "🔐 Redefinir sua senha — Gênezi", html: layoutBase(email, conteudo) };
 }
 
+// Convite de acesso ao painel admin (gestão de usuários em /admin/configuracoes, aba
+// "Usuários"). Mesmo padrão de templateAcessoConecta: link construído a partir de
+// generateLink(type: "recovery") + hashed_token (ver actions-usuarios.ts), nunca o
+// action_link cru do Supabase — mesmo motivo (bounce tracking protection do Chrome)
+// documentado em src/lib/conecta/acesso.ts.
+export function templateConvitePainelAdmin(
+  nome: string,
+  link: string,
+  perfil: "admin" | "empresa",
+  email: string,
+): EmailTemplate {
+  const perfilLabel = perfil === "admin" ? "Administrador" : "Empresa";
+  const conteudo = `
+    <p>Olá, ${nome}!</p>
+    <p>Você foi convidado(a) a acessar o painel administrativo da Gênezi como <strong>${perfilLabel}</strong>.</p>
+    <p>Clique no botão abaixo para criar sua senha de acesso:</p>
+    ${botaoCta("Criar minha senha →", link)}
+    <p>O link expira em 24 horas.</p>
+  `;
+  return { subject: "🔑 Convite para o painel Gênezi", html: layoutBase(email, conteudo) };
+}
+
 export function templatePremioDigital(
   nome: string,
   nomePremio: string,
