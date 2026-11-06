@@ -203,7 +203,8 @@ export async function removerUsuario(userId: string): Promise<{ ok: boolean; err
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) {
-    return { ok: false, erro: "Não foi possível remover o usuário. Tente novamente." };
+    console.error("[removerUsuario] erro real:", JSON.stringify(error));
+    return { ok: false, erro: error.message ?? "Não foi possível remover o usuário." };
   }
 
   revalidatePath("/admin/configuracoes");
