@@ -6,6 +6,12 @@ import { requireRole } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarConvitePainelAdmin } from "@/lib/resend/emails";
 import { solicitarRecuperacaoSenhaAction } from "@/app/recuperar-senha/actions";
+import {
+  getUserPermissions,
+  idsComPermissoesCustomizadas,
+  saveUserPermissions,
+  type PermissoesUsuario,
+} from "@/lib/auth/permissions";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://sistemagestaogenezi.vercel.app").replace(/\/+$/, "");
 
@@ -21,6 +27,8 @@ export type UsuarioAdmin = {
   created_at: string;
   last_sign_in_at: string | null;
   email_confirmed_at: string | null;
+  last_seen_at: string | null;
+  tem_permissoes_customizadas: boolean;
 };
 
 // profiles não guarda email/last_sign_in_at/email_confirmed_at (isso mora em auth.users) —
@@ -34,13 +42,14 @@ export async function listarUsuarios(): Promise<UsuarioAdmin[]> {
 
   const { data: perfis } = await admin
     .from("profiles")
-    .select("id, full_name, role, created_at")
+    .select("id, full_name, role, created_at, last_seen_at")
     .in("role", ROLES_GERENCIAVEIS)
     .order("created_at", { ascending: false });
 
   if (!perfis || perfis.length === 0) return [];
 
   const idsDesejados = new Set(perfis.map((perfil) => perfil.id));
+  const idsComPermissoes = await idsComPermissoesCustomizadas(Array.from(idsDesejados));
   const authPorId = new Map<string, { email: string; last_sign_in_at: string | null; email_confirmed_at: string | null }>();
 
   let page = 1;
@@ -71,6 +80,8 @@ export async function listarUsuarios(): Promise<UsuarioAdmin[]> {
       created_at: perfil.created_at,
       last_sign_in_at: dadosAuth?.last_sign_in_at ?? null,
       email_confirmed_at: dadosAuth?.email_confirmed_at ?? null,
+      last_seen_at: perfil.last_seen_at,
+      tem_permissoes_customizadas: idsComPermissoes.has(perfil.id),
     };
   });
 }
@@ -228,4 +239,28 @@ export async function resetarSenha(email: string): Promise<{ ok: boolean }> {
   await requireRole("admin");
   await solicitarRecuperacaoSenhaAction(email);
   return { ok: true };
+}
+
+// ===== Permissões granulares por módulo/ação (src/lib/auth/permissions.ts) =====
+
+export async function getPermissoesUsuario(userId: string): Promise<PermissoesUsuario> {
+  await requireRole("admin");
+  return getUserPermissions(userId);
+}
+
+export async function salvarPermissoesUsuario(
+  userId: string,
+  permissoes: PermissoesUsuario,
+): Promise<{ ok: boolean; erro?: string }> {
+  const usuarioAtual = await requireRole("admin");
+
+  if (userId === usuarioAtual.id) {
+    return { ok: false, erro: "Você não pode alterar as suas próprias permissões." };
+  }
+
+  const resultado = await saveUserPermissions(userId, permissoes);
+  if (resultado.ok) {
+    revalidatePath("/admin/configuracoes");
+  }
+  return resultado;
 }

@@ -48,6 +48,22 @@ export async function proxy(request: NextRequest) {
       .eq("id", userId)
       .single();
     role = profile?.role as Role | undefined;
+
+    // "Ativo agora" na aba Usuários (src/components/admin/usuarios-tab.tsx). Client admin
+    // (bypassa RLS) porque "authenticated" só tem grant de update em colunas específicas de
+    // profiles (full_name, avatar_url, must_change_password, avatar_id — ver CLAUDE.md),
+    // last_seen_at não está nessa lista. Condição no WHERE evita um write a cada request;
+    // best-effort (nunca bloqueia a navegação por causa disso).
+    try {
+      const admin = createAdminClient();
+      await admin
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", userId)
+        .or(`last_seen_at.is.null,last_seen_at.lt.${new Date(Date.now() - 5 * 60 * 1000).toISOString()}`);
+    } catch {
+      // melhor esforço — nunca impede a navegação.
+    }
   }
 
   // Rotas públicas nunca exigem autenticação — ficam completamente fora da
