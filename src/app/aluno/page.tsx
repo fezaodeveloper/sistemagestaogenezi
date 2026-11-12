@@ -434,11 +434,11 @@ export default async function AlunoDashboardPage() {
                       bordaStatusCurso(curso),
                     )}
                   >
-                    <div className="relative aspect-video w-full overflow-hidden">
+                    <div className="relative aspect-2/3 w-full overflow-hidden">
                       <Capa
                         capaUrl={curso.capaUrl}
                         nome={curso.nome}
-                        aspect="16/9"
+                        aspect="2/3"
                         className="h-full w-full rounded-none object-cover transition-transform duration-300 ease-out group-hover:scale-110"
                       />
                       <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/10 to-transparent" />

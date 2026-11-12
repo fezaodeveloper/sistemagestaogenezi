@@ -52,7 +52,7 @@ export function InteresseCursoModal({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <Capa capaUrl={curso.capaUrl} nome={curso.nome} aspect="16/9" className="w-full" />
+          <Capa capaUrl={curso.capaUrl} nome={curso.nome} aspect="2/3" className="mx-auto w-40" />
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="secondary">{CURSO_TIPO_LABELS[curso.tipo]}</Badge>
             <BadgeVagas vagasDisponiveis={curso.vagasDisponiveis} />

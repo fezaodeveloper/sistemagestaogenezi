@@ -41,11 +41,11 @@ export function CursoBloqueadoCard({ curso, alunoId }: { curso: CursoBloqueado; 
     <>
       <button type="button" onClick={() => setOpen(true)} className="group block w-full text-left">
         <Card className="gap-0 overflow-hidden py-0 transition-all duration-300 ease-in-out group-hover:scale-105 group-hover:shadow-[0_0_24px_4px_rgba(34,211,238,0.35)]">
-          <div className="relative aspect-video w-full overflow-hidden">
+          <div className="relative aspect-2/3 w-full overflow-hidden">
             <Capa
               capaUrl={curso.capaUrl}
               nome={curso.nome}
-              aspect="16/9"
+              aspect="2/3"
               className="h-full w-full rounded-none object-cover grayscale transition-all duration-300 ease-in-out group-hover:grayscale-0"
             />
             <div className="absolute inset-0 bg-black/60 transition-colors duration-300 ease-in-out group-hover:bg-black/30" />
