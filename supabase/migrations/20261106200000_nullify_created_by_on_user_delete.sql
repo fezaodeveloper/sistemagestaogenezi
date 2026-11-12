@@ -26,6 +26,11 @@
 -- 20261022150000_aluno_cursos_gratuitos.sql) também tem created_by not null sem cascade e
 -- não estava na lista da TAREFA — adicionada aqui para a função cobrir de fato todas as
 -- FKs sem cascade para profiles (ver levantamento completo na resposta anterior).
+--
+-- Terceiro DESVIO (correção de bug nesta própria migration): a tabela criada em
+-- 20261022130000_config_recorrencia_notificacoes.sql não se chama
+-- "config_recorrencia_notificacoes" (nome inferido do arquivo) — o nome real dentro da
+-- migration é "public.regras_notificacao" (confirmado via grep). Corrigido abaixo.
 
 -- ===== Remove NOT NULL das colunas de auditoria que serão nullificadas =====
 
@@ -73,7 +78,7 @@ alter table public.conquistas alter column created_by drop not null;
 alter table public.whatsapp_fluxos alter column created_by drop not null;
 alter table public.push_templates alter column created_by drop not null;
 alter table public.push_agendamentos alter column created_by drop not null;
-alter table public.config_recorrencia_notificacoes alter column created_by drop not null;
+alter table public.regras_notificacao alter column created_by drop not null;
 alter table public.user_permissions alter column created_by drop not null;
 alter table public.aluno_cursos_gratuitos alter column created_by drop not null;
 
@@ -142,7 +147,7 @@ begin
   update whatsapp_fluxos             set created_by = null where created_by = p_user_id;
   update push_templates              set created_by = null where created_by = p_user_id;
   update push_agendamentos           set created_by = null where created_by = p_user_id;
-  update config_recorrencia_notificacoes set created_by = null where created_by = p_user_id;
+  update regras_notificacao          set created_by = null where created_by = p_user_id;
   update user_permissions            set created_by = null where created_by = p_user_id;
   update aluno_cursos_gratuitos      set created_by = null where created_by = p_user_id;
 end;
