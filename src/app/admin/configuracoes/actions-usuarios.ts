@@ -206,16 +206,17 @@ export async function removerUsuario(userId: string): Promise<{ ok: boolean; err
   // usuário antes do delete — sem isso, o DELETE em auth.users fica bloqueado por FK em
   // qualquer uma das dezenas de tabelas que não têm "on delete cascade"/"on delete set
   // null" pra profiles.id (ver migration 20261106200000_nullify_created_by_on_user_delete).
-  console.log("[removerUsuario] step 1 - chamando RPC para userId:", userId);
   const { error: nullifyError } = await admin.rpc("nullify_user_references", { p_user_id: userId });
-  console.log("[removerUsuario] step 2 - RPC result:", JSON.stringify(nullifyError));
   if (nullifyError) {
-    console.error("[removerUsuario] erro ao nullificar referências:", JSON.stringify(nullifyError));
+    // nullify_user_references() lança RAISE EXCEPTION 'USUARIO_ATIVO: ...' quando o usuário
+    // está com sessão ativa — mensagem amigável nesse caso específico, em vez do genérico.
+    if (nullifyError.message?.startsWith("USUARIO_ATIVO:")) {
+      return { ok: false, erro: "Este usuário está ativo no momento e não pode ser removido." };
+    }
     return { ok: false, erro: "Erro ao preparar remoção: " + nullifyError.message };
   }
 
   const { error } = await admin.auth.admin.deleteUser(userId);
-  console.log("[removerUsuario] step 3 - deleteUser result:", JSON.stringify(error));
   if (error) {
     console.error("[removerUsuario] erro real:", JSON.stringify(error));
     return { ok: false, erro: error.message ?? "Não foi possível remover o usuário." };

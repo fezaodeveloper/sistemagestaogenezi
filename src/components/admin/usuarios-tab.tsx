@@ -358,7 +358,7 @@ function LinhaUsuario({
 }: {
   usuario: UsuarioAdmin;
   souEu: boolean;
-  onMudou: (mensagem: string) => void;
+  onMudou: (mensagem: string, isErro?: boolean) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [excluindoOpen, setExcluindoOpen] = useState(false);
@@ -370,14 +370,20 @@ function LinhaUsuario({
   function handleAlterarRole(novoRole: RoleGerenciavel) {
     startTransition(async () => {
       const resultado = await alterarRole(usuario.id, novoRole);
-      onMudou(resultado.ok ? `Perfil de ${nome} alterado para ${ROLE_LABELS[novoRole]}.` : resultado.erro ?? "Erro ao alterar perfil.");
+      onMudou(
+        resultado.ok ? `Perfil de ${nome} alterado para ${ROLE_LABELS[novoRole]}.` : resultado.erro ?? "Erro ao alterar perfil.",
+        !resultado.ok,
+      );
     });
   }
 
   function handleReenviarConvite() {
     startTransition(async () => {
       const resultado = await reenviarConvite(usuario.id);
-      onMudou(resultado.ok ? `Convite reenviado para ${usuario.email}.` : resultado.erro ?? "Erro ao reenviar convite.");
+      onMudou(
+        resultado.ok ? `Convite reenviado para ${usuario.email}.` : resultado.erro ?? "Erro ao reenviar convite.",
+        !resultado.ok,
+      );
     });
   }
 
@@ -392,7 +398,7 @@ function LinhaUsuario({
     startTransition(async () => {
       const resultado = await removerUsuario(usuario.id);
       setExcluindoOpen(false);
-      onMudou(resultado.ok ? `${nome} removido.` : resultado.erro ?? "Erro ao remover usuário.");
+      onMudou(resultado.ok ? `${nome} removido.` : resultado.erro ?? "Erro ao remover usuário.", !resultado.ok);
     });
   }
 
@@ -560,14 +566,14 @@ export function UsuariosTab({
   currentUserId: string;
 }) {
   const router = useRouter();
-  const [mensagem, setMensagem] = useState<string | null>(null);
+  const [mensagem, setMensagem] = useState<{ texto: string; isErro: boolean } | null>(null);
   const [busca, setBusca] = useState("");
   const [filtroRole, setFiltroRole] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [somenteAtivosAgora, setSomenteAtivosAgora] = useState(false);
 
-  function handleMudou(texto: string) {
-    setMensagem(texto);
+  function handleMudou(texto: string, isErro = false) {
+    setMensagem({ texto, isErro });
     router.refresh();
   }
 
@@ -632,7 +638,9 @@ export function UsuariosTab({
         </div>
       </div>
 
-      {mensagem && <p className="text-muted-foreground text-sm">{mensagem}</p>}
+      {mensagem && (
+        <p className={mensagem.isErro ? "text-destructive text-sm" : "text-muted-foreground text-sm"}>{mensagem.texto}</p>
+      )}
 
       {usuariosFiltrados.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
