@@ -133,16 +133,17 @@ export function CursoGratuitoForm({
         <div className="flex items-start gap-4">
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- prévia local (blob:) ou foto já enviada em bucket público
-            <img src={previewUrl} alt="Prévia da foto" className="aspect-square w-20 rounded-lg border object-cover" />
+            <img src={previewUrl} alt="Prévia da foto" className="aspect-video w-32 rounded-lg border object-cover" />
           ) : (
-            <div className="bg-muted text-muted-foreground flex aspect-square w-20 items-center justify-center rounded-lg border text-xs">
+            <div className="bg-muted text-muted-foreground flex aspect-video w-32 items-center justify-center rounded-lg border text-xs">
               Sem foto
             </div>
           )}
           <div className="flex flex-1 flex-col gap-2">
             <Input id="foto" name="foto" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFotoChange} />
             <p className="text-muted-foreground text-xs">
-              📐 Recomendado: 800×500px · Proporção 16:10 · JPEG, PNG ou WebP, até 5MB.
+              📐 Recomendado: 1280×720px · Proporção 16:9 · JPEG, PNG ou WebP, até 5MB. A imagem é
+              exibida em formato de banner, com o título do curso sobreposto na parte inferior.
               {fotoAtualUrl && " Envie um novo arquivo pra substituir a foto atual."}
             </p>
             {cursoId && fotoAtualUrl && previewUrl === fotoAtualUrl && (
