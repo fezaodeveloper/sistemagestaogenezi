@@ -200,6 +200,17 @@ export async function deleteLeadsEmLote(ids: string[]): Promise<ResultadoExclusa
   const validos = sanitizarIdsLote(ids);
   if (!validos) return { excluidos: 0, falhas: [], erro: ERRO_LOTE_INVALIDO };
 
+  // Mesma lacuna de deleteLead() (corrigida no commit b92a9be): campanha_respostas.lead_id tem
+  // "on delete set null", não cascade — sem isso, as respostas de campanha desses leads ficam
+  // órfãs (lead_id nulo) em vez de serem removidas. Best-effort, via client admin
+  // (service_role) pra garantir que RLS não bloqueie: uma falha aqui não impede a exclusão dos
+  // leads em si.
+  const admin = createAdminClient();
+  const { error: erroRespostas } = await admin.from("campanha_respostas").delete().in("lead_id", validos);
+  if (erroRespostas) {
+    console.error("[deleteLeadsEmLote] falha ao excluir respostas de campanha dos leads:", erroRespostas);
+  }
+
   const supabase = await createClient();
   let apagados = new Set<string>();
 
