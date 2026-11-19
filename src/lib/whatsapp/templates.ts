@@ -26,6 +26,8 @@ export const WHATSAPP_TEMPLATE_IDS = [
   "campanha_confirmacao",
   "campanha_resultado_aprovado",
   "campanha_resultado_reprovado",
+  "campanha_resultado_aprovado_gratuito",
+  "campanha_resultado_reprovado_gratuito",
 ] as const;
 export type WhatsappTemplateId = (typeof WHATSAPP_TEMPLATE_IDS)[number];
 
@@ -243,6 +245,34 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
     placeholders: [
       P_NOME,
       { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Bolsa de Estudos Março" },
+      { chave: "link_pdf", descricao: "Link público do PDF com o resultado", exemplo: "https://.../pdf" },
+    ],
+  },
+  // MELHORIA 3 (templates de resultado separados por tipo de curso) — campanha vinculada a um
+  // curso com cursos.gratuito = true usa estes em vez dos _aprovado/_reprovado "profissionalizante"
+  // acima (ver cursoGratuito em enviarResultadoCampanhaWhatsapp/EmMassa). Tom diferente: sem
+  // menção a bolsa (não existe bolsa em curso gratuito), foco em acesso ao conteúdo.
+  campanha_resultado_aprovado_gratuito: {
+    id: "campanha_resultado_aprovado_gratuito",
+    nome: "Resultado de campanha — aprovado (curso gratuito)",
+    gatilho: 'Clique do admin em "Enviar resultado" para um candidato aprovado numa campanha de curso gratuito.',
+    padrao:
+      "Olá {nome}! 🎓 Parabéns! Você foi *aprovado(a)* na campanha {campanha} e já pode acessar o curso gratuito.\n\nAcesse seu resultado: {link_pdf}\n\n*Gênezi Educação Profissional*",
+    placeholders: [
+      P_NOME,
+      { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Curso Gratuito de Informática" },
+      { chave: "link_pdf", descricao: "Link público do PDF com o resultado", exemplo: "https://.../pdf" },
+    ],
+  },
+  campanha_resultado_reprovado_gratuito: {
+    id: "campanha_resultado_reprovado_gratuito",
+    nome: "Resultado de campanha — não aprovado (curso gratuito)",
+    gatilho: 'Clique do admin em "Enviar resultado" para um candidato não aprovado numa campanha de curso gratuito.',
+    padrao:
+      "Olá {nome}! 🎓 Segue o resultado da sua participação na campanha {campanha}.\n\nAcesse seu resultado: {link_pdf}\n\nFique de olho nas próximas turmas do nosso curso gratuito! *Gênezi Educação Profissional*",
+    placeholders: [
+      P_NOME,
+      { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Curso Gratuito de Informática" },
       { chave: "link_pdf", descricao: "Link público do PDF com o resultado", exemplo: "https://.../pdf" },
     ],
   },

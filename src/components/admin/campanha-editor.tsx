@@ -6,6 +6,7 @@ import { Monitor, Plus, RotateCcw, Smartphone, Trash2, Upload, X } from "lucide-
 import { atualizarCampanhaPagina, criarCampanhaPagina } from "@/app/admin/comercial/paginas-campanha/actions";
 import { createClient } from "@/lib/supabase/client";
 import { UtmLinkGenerator } from "@/components/admin/utm-link-generator";
+import { EditorRico } from "@/components/admin/editor-rico";
 import {
   CAMPANHA_PAGINA_BUCKET,
   CAMPANHA_PAGINA_IMAGEM_MAXIMO_BYTES,
@@ -345,11 +346,11 @@ function EtapaEditor({
             </Button>
           </div>
         </div>
-        <Textarea
+        <EditorRico
           value={etapa.descricao ?? ""}
-          onChange={(event) => onChange({ descricao: event.target.value })}
+          onChange={(html) => onChange({ descricao: html })}
           placeholder="Descrição da etapa (opcional)"
-          rows={2}
+          linhas={2}
         />
 
         <div className="flex flex-col gap-2">
@@ -777,11 +778,11 @@ export function CampanhaEditor({
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="subtitulo">Subtítulo</Label>
-                      <Input id="subtitulo" name="subtitulo" value={subtitulo} onChange={(e) => setSubtitulo(e.target.value)} />
+                      <EditorRico id="subtitulo" value={subtitulo} onChange={setSubtitulo} linhas={1} />
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="descricao">Descrição</Label>
-                      <Textarea id="descricao" name="descricao" rows={3} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+                      <EditorRico id="descricao" value={descricao} onChange={setDescricao} linhas={3} />
                     </div>
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="curso_id">Curso vinculado (opcional)</Label>
@@ -1192,11 +1193,10 @@ export function CampanhaEditor({
                       <Switch checked={mostrarLgpd} onCheckedChange={setMostrarLgpd} />
                     </div>
                     {mostrarLgpd && (
-                      <Textarea
+                      <EditorRico
                         value={textoLgpd}
-                        onChange={(e) => setTextoLgpd(e.target.value)}
-                        name="texto_lgpd"
-                        rows={4}
+                        onChange={setTextoLgpd}
+                        linhas={4}
                         placeholder="Autorizo o tratamento dos meus dados pessoais conforme a LGPD..."
                       />
                     )}
@@ -1205,11 +1205,10 @@ export function CampanhaEditor({
                       <Switch checked={mostrarDeclaracao} onCheckedChange={setMostrarDeclaracao} />
                     </div>
                     {mostrarDeclaracao && (
-                      <Textarea
+                      <EditorRico
                         value={textoDeclaracao}
-                        onChange={(e) => setTextoDeclaracao(e.target.value)}
-                        name="texto_declaracao"
-                        rows={4}
+                        onChange={setTextoDeclaracao}
+                        linhas={4}
                         placeholder="Declaro ter interesse real na vaga/bolsa..."
                       />
                     )}

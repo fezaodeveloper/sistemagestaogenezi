@@ -21,6 +21,7 @@ import {
 import { FONTE_CSS } from "@/lib/campanha-paginas/fontes";
 import { dispararEventoPixels } from "@/lib/pixels/eventos-cliente";
 import { classesCampoPublico, estiloCampoPublicoHex } from "@/lib/cores/campo-publico";
+import { sanitizarHtml } from "@/lib/utils/sanitize";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -177,35 +178,50 @@ function QuestaoCampo({
   onResponder: (valor: RespostaValor) => void;
 }) {
   const tipo = tipoQuestaoEfetivo(questao);
+  // MELHORIA 2 (visual dos botões A/B/C/D) — hover rastreado por letra, compartilhado pelos dois
+  // tipos abaixo ("multipla_escolha" e "checkbox"): inline style não tem `:hover` de verdade, e
+  // as cores vêm de `pagina.cor_primaria` (dinâmica, não dá pra fixar numa classe Tailwind) — por
+  // isso o hover é simulado via estado + onMouseEnter/Leave, não CSS puro.
+  const [hoverLetra, setHoverLetra] = useState<string | null>(null);
 
   if (tipo === "multipla_escolha") {
     return (
       <div className="flex flex-col gap-2">
         {(questao.opcoes ?? []).map((opcao) => {
           const selecionada = valor === opcao.letra;
-          // Cores sempre passadas por valor direto (nunca via var(--...) CSS)
-          // — mais fácil de depurar e não depende de herança através da
-          // árvore do DOM. Selecionado: fundo sólido cor_primaria, texto
-          // cor_fundo (contraste garantido). Não selecionado: contorno
-          // cor_primaria, fundo cor_fundo bem translúcido, texto cor_fonte.
+          const hover = !selecionada && hoverLetra === opcao.letra;
+          // Cores sempre passadas por valor direto (nunca via var(--...) CSS) — mais fácil de
+          // depurar e não depende de herança através da árvore do DOM. Selecionado: fundo sólido
+          // cor_primaria + glow; texto cor_fundo (contraste garantido, mesmo critério de antes).
+          // Não selecionado: fundo translúcido em cor_primaria (sobe de opacidade no hover),
+          // borda sutil em cor_primaria (também sobe no hover), texto cor_fonte.
           const corTexto = selecionada ? corFundo : corFonte;
           return (
             <button
               key={opcao.letra}
               type="button"
               onClick={() => onResponder(opcao.letra)}
+              onMouseEnter={() => setHoverLetra(opcao.letra)}
+              onMouseLeave={() => setHoverLetra((atual) => (atual === opcao.letra ? null : atual))}
               style={{
-                borderWidth: 2,
+                borderWidth: 1,
                 borderStyle: "solid",
-                borderColor: corPrimaria,
-                backgroundColor: selecionada ? corPrimaria : hexParaRgba(corFundo, 0.3),
+                borderColor: hexParaRgba(corPrimaria, hover ? 0.7 : 0.4),
+                backgroundColor: selecionada ? corPrimaria : hexParaRgba(corPrimaria, hover ? 0.15 : 0.08),
+                backdropFilter: "blur(8px)",
+                boxShadow: selecionada ? `0 0 12px ${hexParaRgba(corPrimaria, 0.4)}` : "none",
                 color: corTexto,
+                transition: "all 0.2s ease",
               }}
-              className="flex items-center gap-3 rounded-md p-3 text-left text-[0.875em] transition-colors"
+              className="flex items-center gap-3 rounded-md p-3 text-left text-[0.875em]"
             >
               <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-[0.75em] font-semibold"
-                style={{ color: selecionada ? corFundo : corPrimaria, borderColor: selecionada ? corFundo : corPrimaria }}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-[0.75em] font-semibold"
+                style={{
+                  color: selecionada ? "#ffffff" : corPrimaria,
+                  backgroundColor: selecionada ? corPrimaria : hexParaRgba(corPrimaria, 0.2),
+                  transition: "all 0.2s ease",
+                }}
               >
                 {opcao.letra}
               </span>
@@ -226,6 +242,7 @@ function QuestaoCampo({
       <div className="flex flex-col gap-2">
         {opcoes.map((opcao) => {
           const marcada = marcadas.includes(opcao.letra);
+          const hover = !marcada && hoverLetra === opcao.letra;
           const corTexto = marcada ? corFundo : corFonte;
           return (
             <button
@@ -237,18 +254,27 @@ function QuestaoCampo({
                 const proximas = marcada ? marcadas.filter((l) => l !== opcao.letra) : [...marcadas, opcao.letra];
                 onResponder(opcoes.filter((o) => proximas.includes(o.letra)).map((o) => o.letra));
               }}
+              onMouseEnter={() => setHoverLetra(opcao.letra)}
+              onMouseLeave={() => setHoverLetra((atual) => (atual === opcao.letra ? null : atual))}
               style={{
-                borderWidth: 2,
+                borderWidth: 1,
                 borderStyle: "solid",
-                borderColor: corPrimaria,
-                backgroundColor: marcada ? corPrimaria : hexParaRgba(corFundo, 0.3),
+                borderColor: hexParaRgba(corPrimaria, hover ? 0.7 : 0.4),
+                backgroundColor: marcada ? corPrimaria : hexParaRgba(corPrimaria, hover ? 0.15 : 0.08),
+                backdropFilter: "blur(8px)",
+                boxShadow: marcada ? `0 0 12px ${hexParaRgba(corPrimaria, 0.4)}` : "none",
                 color: corTexto,
+                transition: "all 0.2s ease",
               }}
-              className="flex items-center gap-3 rounded-md p-3 text-left text-[0.875em] transition-colors"
+              className="flex items-center gap-3 rounded-md p-3 text-left text-[0.875em]"
             >
               <span
-                className="flex size-5 shrink-0 items-center justify-center rounded border-2 text-[0.75em] font-bold"
-                style={{ color: marcada ? corFundo : corPrimaria, borderColor: marcada ? corFundo : corPrimaria }}
+                className="flex size-5 shrink-0 items-center justify-center rounded text-[0.75em] font-bold"
+                style={{
+                  color: marcada ? "#ffffff" : corPrimaria,
+                  backgroundColor: marcada ? corPrimaria : hexParaRgba(corPrimaria, 0.2),
+                  transition: "all 0.2s ease",
+                }}
               >
                 {marcada ? "✓" : ""}
               </span>
@@ -614,11 +640,15 @@ export function CampanhaPublicaView({
         >
           {pagina.titulo}
         </h1>
-        {pagina.subtitulo && <p style={{ color: pagina.cor_fonte }}>{pagina.subtitulo}</p>}
+        {pagina.subtitulo && (
+          <p style={{ color: pagina.cor_fonte }} dangerouslySetInnerHTML={{ __html: sanitizarHtml(pagina.subtitulo) }} />
+        )}
         {pagina.descricao && (
-          <p className="text-[0.875em]" style={{ color: pagina.cor_fonte }}>
-            {pagina.descricao}
-          </p>
+          <p
+            className="text-[0.875em]"
+            style={{ color: pagina.cor_fonte }}
+            dangerouslySetInnerHTML={{ __html: sanitizarHtml(pagina.descricao) }}
+          />
         )}
       </div>
 
@@ -832,9 +862,11 @@ export function CampanhaPublicaView({
                   {etapaAtual.titulo}
                 </p>
                 {etapaAtual.descricao && (
-                  <p className="text-[0.875em]" style={{ color: pagina.cor_fonte }}>
-                    {etapaAtual.descricao}
-                  </p>
+                  <p
+                    className="text-[0.875em]"
+                    style={{ color: pagina.cor_fonte }}
+                    dangerouslySetInnerHTML={{ __html: sanitizarHtml(etapaAtual.descricao) }}
+                  />
                 )}
               </div>
 
@@ -925,13 +957,21 @@ export function CampanhaPublicaView({
                   {pagina.mostrar_lgpd && (
                     <label className="flex items-start gap-2 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                       <input type="checkbox" checked={aceiteLgpd} onChange={(event) => setAceiteLgpd(event.target.checked)} className="mt-0.5" />
-                      {pagina.texto_lgpd || "Autorizo o tratamento dos meus dados pessoais conforme a LGPD."}
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizarHtml(pagina.texto_lgpd || "Autorizo o tratamento dos meus dados pessoais conforme a LGPD."),
+                        }}
+                      />
                     </label>
                   )}
                   {pagina.mostrar_declaracao && (
                     <label className="flex items-start gap-2 text-[0.875em]" style={{ color: pagina.cor_fonte }}>
                       <input type="checkbox" checked={aceiteDeclaracao} onChange={(event) => setAceiteDeclaracao(event.target.checked)} className="mt-0.5" />
-                      {pagina.texto_declaracao || "Declaro ter interesse real nesta oportunidade."}
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizarHtml(pagina.texto_declaracao || "Declaro ter interesse real nesta oportunidade."),
+                        }}
+                      />
                     </label>
                   )}
                 </>

@@ -858,30 +858,47 @@ export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
 type CandidatoResultadoCampanha = { id: string; nome: string; whatsapp: string; lead_id: string | null };
 
 // ITEM 1 (templates WhatsApp resultado campanha) — mensagem agora vem do catálogo editável
-// (campanha_resultado_aprovado/campanha_resultado_reprovado em whatsapp_templates), não mais
-// hardcoded — admin pode personalizar em Configurações > WhatsApp > Templates.
+// (campanha_resultado_aprovado/reprovado[_gratuito] em whatsapp_templates), não mais hardcoded —
+// admin pode personalizar em Configurações > WhatsApp > Templates.
+// MELHORIA 3 — `cursoGratuito` escolhe entre o par de templates "profissionalizante" (padrão) e
+// o par "_gratuito" (campanha vinculada a um curso com cursos.gratuito = true — ver
+// buscarCursoGratuito abaixo), tom diferente (sem menção a bolsa, foco em acesso ao curso).
 async function montarMensagemResultadoCampanha(
   nome: string,
   tituloCampanha: string,
   linkPdf: string,
   aprovado: boolean,
+  cursoGratuito: boolean,
 ): Promise<string> {
   const primeiro = primeiroNome(nome) || nome;
-  return renderTemplate(aprovado ? "campanha_resultado_aprovado" : "campanha_resultado_reprovado", {
-    nome: primeiro,
-    campanha: tituloCampanha,
-    link_pdf: linkPdf,
-  });
+  const templateId = cursoGratuito
+    ? aprovado
+      ? "campanha_resultado_aprovado_gratuito"
+      : "campanha_resultado_reprovado_gratuito"
+    : aprovado
+      ? "campanha_resultado_aprovado"
+      : "campanha_resultado_reprovado";
+  return renderTemplate(templateId, { nome: primeiro, campanha: tituloCampanha, link_pdf: linkPdf });
+}
+
+// MELHORIA 3 — curso_id em campanha_paginas é nullable (campanha sem curso vinculado): nesse
+// caso, trata como "não gratuito" (mantém o par de templates profissionalizante, comportamento
+// já existente antes desta melhoria).
+async function buscarCursoGratuito(admin: ReturnType<typeof createAdminClient>, cursoId: string | null): Promise<boolean> {
+  if (!cursoId) return false;
+  const { data } = await admin.from("cursos").select("gratuito").eq("id", cursoId).maybeSingle();
+  return !!data?.gratuito;
 }
 
 async function enviarEDispararResultadoCampanha(
   candidato: CandidatoResultadoCampanha,
   tituloCampanha: string,
   aprovado: boolean,
+  cursoGratuito: boolean,
   opcoes?: { semDelayAntiBanimento?: boolean },
 ): Promise<{ ok: boolean; erro?: string }> {
   const linkPdf = `${urlPortal()}/api/campanha-respostas/${candidato.id}/pdf`;
-  const mensagem = await montarMensagemResultadoCampanha(candidato.nome, tituloCampanha, linkPdf, aprovado);
+  const mensagem = await montarMensagemResultadoCampanha(candidato.nome, tituloCampanha, linkPdf, aprovado, cursoGratuito);
   const resultado = await enviarWhatsApp(candidato.whatsapp, mensagem, opcoes);
   await registrarEnvioWhatsapp({
     tipo: "campanha_resultado_manual",
@@ -910,16 +927,17 @@ export async function enviarResultadoCampanhaWhatsapp(respostaId: string): Promi
 
   const { data: paginaData } = await admin
     .from("campanha_paginas")
-    .select("titulo, pontuacao_minima_bolsa")
+    .select("titulo, pontuacao_minima_bolsa, curso_id")
     .eq("id", resposta.pagina_id)
     .maybeSingle();
-  const pagina = paginaData as { titulo: string; pontuacao_minima_bolsa: number } | null;
+  const pagina = paginaData as { titulo: string; pontuacao_minima_bolsa: number; curso_id: string | null } | null;
   const tituloCampanha = pagina?.titulo ?? "nossa campanha";
   // Mesma fórmula já usada em toda a tela admin (RespostaCompletaDialog em
   // campanha-respostas-view.tsx) e no route.tsx do PDF — independe de habilitar_pontuacao.
   const aprovado = (resposta.pontuacao_percentual ?? 0) >= (pagina?.pontuacao_minima_bolsa ?? 0);
+  const cursoGratuito = await buscarCursoGratuito(admin, pagina?.curso_id ?? null);
 
-  return enviarEDispararResultadoCampanha(resposta, tituloCampanha, aprovado, { semDelayAntiBanimento: true });
+  return enviarEDispararResultadoCampanha(resposta, tituloCampanha, aprovado, cursoGratuito, { semDelayAntiBanimento: true });
 }
 
 // FUNCIONALIDADE 5 — envio em massa aos aprovados/reprovados de uma campanha.
@@ -942,11 +960,12 @@ export async function enviarResultadoCampanhaWhatsappEmMassa(
   const admin = createAdminClient();
   const { data: paginaData } = await admin
     .from("campanha_paginas")
-    .select("titulo, pontuacao_minima_bolsa")
+    .select("titulo, pontuacao_minima_bolsa, curso_id")
     .eq("id", paginaId)
     .maybeSingle();
-  const pagina = paginaData as { titulo: string; pontuacao_minima_bolsa: number } | null;
+  const pagina = paginaData as { titulo: string; pontuacao_minima_bolsa: number; curso_id: string | null } | null;
   if (!pagina) return 0;
+  const cursoGratuito = await buscarCursoGratuito(admin, pagina.curso_id);
 
   const { data } = await admin
     .from("campanha_respostas")
@@ -966,7 +985,7 @@ export async function enviarResultadoCampanhaWhatsappEmMassa(
   emSegundoPlano(async () => {
     for (const candidato of alvo) {
       if (!candidato.whatsapp) continue;
-      await enviarEDispararResultadoCampanha(candidato, pagina.titulo, aprovado);
+      await enviarEDispararResultadoCampanha(candidato, pagina.titulo, aprovado, cursoGratuito);
     }
   });
 
