@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { calcularOffset, calcularTotalPaginas, LIMITE_PADRAO } from "@/lib/paginacao";
 import {
   contarRespostasPorStatusPontuacao,
@@ -450,7 +451,11 @@ export async function enviarResultadoWhatsappEmMassa(
 // ITEM 2 — excluir um candidato (resposta) individual de uma campanha, pela tela de respostas.
 export async function excluirCandidatoCampanha(respostaId: string): Promise<{ ok: boolean; erro?: string }> {
   await requireRole("admin");
-  const supabase = await createClient();
+  // createAdminClient (service_role), não createClient: o grant de campanha_respostas para
+  // "authenticated" é só select/insert (sem delete) — RLS permitiria (policy "Admins gerenciam
+  // respostas"), mas o Postgres bloqueia o GRANT antes de avaliar a policy. Mesmo contorno já
+  // usado em deleteLead() (src/app/admin/leads/actions.ts).
+  const supabase = createAdminClient();
 
   const { data: resposta } = await supabase.from("campanha_respostas").select("pagina_id").eq("id", respostaId).maybeSingle();
 
