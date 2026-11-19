@@ -59,7 +59,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ res
     | null;
 
   const [{ data: configuracoes }, escolaLogo] = await Promise.all([
-    admin.from("configuracoes").select("escola_nome, escola_logo_url").eq("id", true).maybeSingle(),
+    admin
+      .from("configuracoes")
+      .select("escola_nome, escola_logo_url, escola_telefone, escola_endereco")
+      .eq("id", true)
+      .maybeSingle(),
     carregarLogoEscolaParaPdf(),
   ]);
 
@@ -105,6 +109,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ res
     respostasPorEtapa,
     escolaNome: configuracoes?.escola_nome ?? undefined,
     escolaLogoUrl: escolaLogo,
+    escolaTelefone: configuracoes?.escola_telefone ?? null,
+    escolaEndereco: configuracoes?.escola_endereco ?? null,
   };
 
   const geradoEm = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });

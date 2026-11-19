@@ -43,8 +43,13 @@ alter table public.whatsapp_templates add constraint whatsapp_templates_id_check
 insert into public.whatsapp_templates (id, nome, mensagem, variaveis) values
   (
     'campanha_confirmacao', 'Confirmação de inscrição em campanha',
-    'Olá {nome}! ✅ Recebemos sua inscrição na campanha *{campanha}*!\n\nEm breve entraremos em contato. 😊\n\n*Gênezi Educação Profissional*',
-    array['nome', 'campanha', 'pontuacao', 'pontuacao_max', 'percentual']
+    -- CORREÇÃO (achada ao implementar a tarefa de melhorias de campanha): string SQL comum
+    -- ('...') NÃO interpreta \n como quebra de linha — fica literal no texto salvo e aparece
+    -- como "\n" visível na mensagem do WhatsApp. Precisa do prefixo E (escape string) pra
+    -- processar os \n de verdade. Nenhum outro template deste catálogo tem quebra de linha
+    -- (só este), por isso o bug não apareceu antes.
+    E'Olá {nome}! ✅ Recebemos sua inscrição na campanha *{campanha}*!\n\nEm breve entraremos em contato. 😊\n\n*Gênezi Educação Profissional*',
+    array['nome', 'campanha']
   )
 on conflict (id) do nothing;
 

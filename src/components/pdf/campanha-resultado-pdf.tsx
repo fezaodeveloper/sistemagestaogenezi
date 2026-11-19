@@ -24,6 +24,9 @@ export type ResumoResultadoCampanha = {
   respostasPorEtapa: { tituloEtapa: string; respostas: RespostaEtapaPdf[] }[];
   escolaNome?: string;
   escolaLogoUrl?: string | null;
+  // FUNCIONALIDADE 6 (melhorias de campanha) — endereço/contato no cabeçalho.
+  escolaTelefone?: string | null;
+  escolaEndereco?: string | null;
 };
 
 const AZUL_ESCURO = "#1a3a6b";
@@ -38,6 +41,7 @@ const styles = StyleSheet.create({
   page: { fontSize: 9, fontFamily: "Helvetica", padding: 28 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   escolaNome: { fontSize: 12, fontFamily: "Helvetica-Bold", color: AZUL_ESCURO },
+  escolaContato: { fontSize: 8, color: "#555555", marginTop: 1 },
   dataEmissao: { fontSize: 8, color: "#555555" },
   divisoria: { height: 2, backgroundColor: AZUL_ESCURO, marginTop: 10, marginBottom: 10 },
   titulo: { fontSize: 16, fontFamily: "Helvetica-Bold", color: AZUL_MEDIO },
@@ -59,8 +63,14 @@ const styles = StyleSheet.create({
   resultadoStatus: { fontSize: 10, marginTop: 2, fontFamily: "Helvetica-Bold" },
   etapaBloco: { marginTop: 4 },
   etapaTitulo: { fontSize: 9, fontFamily: "Helvetica-Bold", paddingHorizontal: 6, paddingVertical: 3, color: AZUL_ESCURO },
-  perguntaTexto: { paddingHorizontal: 6, color: "#555555" },
-  respostaTexto: { paddingHorizontal: 6, paddingBottom: 3, fontFamily: "Helvetica-Bold" },
+  // FUNCIONALIDADE 6 — tabela de 2 colunas (Pergunta | Resposta escolhida), em vez do antigo
+  // layout empilhado (pergunta numa linha, resposta na linha de baixo) — além de pedido, ocupa
+  // menos altura por item, ajudando a caber tudo numa folha A4.
+  tabelaHeaderRow: { flexDirection: "row", backgroundColor: AZUL_ESCURO, paddingVertical: 2, paddingHorizontal: 6 },
+  tabelaHeaderTexto: { color: "#ffffff", fontFamily: "Helvetica-Bold", fontSize: 8 },
+  tabelaLinha: { flexDirection: "row", paddingVertical: 3, paddingHorizontal: 6 },
+  tabelaColPergunta: { width: "55%", color: "#333333" },
+  tabelaColResposta: { width: "45%", fontFamily: "Helvetica-Bold" },
   footer: { marginTop: 16, paddingTop: 8, borderTopWidth: 1, borderTopColor: AZUL_ESCURO, alignItems: "center" },
   footerEscola: { fontSize: 9, fontFamily: "Helvetica-Bold", color: AZUL_ESCURO, textAlign: "center" },
   footerContato: { fontSize: 8, color: "#555555", marginTop: 2, textAlign: "center" },
@@ -83,6 +93,11 @@ export function CampanhaResultadoPdf({ resumo, geradoEm }: { resumo: ResumoResul
           <View>
             <LogoEscolaPdf logoUrl={resumo.escolaLogoUrl} />
             <Text style={styles.escolaNome}>{resumo.escolaNome ?? "Gênezi Educação Profissional"}</Text>
+            {(resumo.escolaEndereco || resumo.escolaTelefone) && (
+              <Text style={styles.escolaContato}>
+                {[resumo.escolaEndereco, resumo.escolaTelefone].filter(Boolean).join(" · ")}
+              </Text>
+            )}
           </View>
           <Text style={styles.dataEmissao}>Impresso em {geradoEm}</Text>
         </View>
@@ -129,10 +144,17 @@ export function CampanhaResultadoPdf({ resumo, geradoEm }: { resumo: ResumoResul
             {resumo.respostasPorEtapa.map((etapa, indiceEtapa) => (
               <View key={indiceEtapa} style={styles.etapaBloco}>
                 <Text style={styles.etapaTitulo}>{etapa.tituloEtapa}</Text>
+                <View style={styles.tabelaHeaderRow}>
+                  <Text style={[styles.tabelaHeaderTexto, styles.tabelaColPergunta]}>Pergunta</Text>
+                  <Text style={[styles.tabelaHeaderTexto, styles.tabelaColResposta]}>Resposta escolhida</Text>
+                </View>
                 {etapa.respostas.map((item, indice) => (
-                  <View key={indice}>
-                    <Text style={styles.perguntaTexto}>{item.pergunta}</Text>
-                    <Text style={styles.respostaTexto}>{item.resposta}</Text>
+                  <View
+                    key={indice}
+                    style={[styles.tabelaLinha, { backgroundColor: indice % 2 === 0 ? "#ffffff" : LINHA_ALT }]}
+                  >
+                    <Text style={styles.tabelaColPergunta}>{item.pergunta}</Text>
+                    <Text style={styles.tabelaColResposta}>{item.resposta}</Text>
                   </View>
                 ))}
               </View>
@@ -141,8 +163,8 @@ export function CampanhaResultadoPdf({ resumo, geradoEm }: { resumo: ResumoResul
         )}
 
         <View style={styles.footer}>
+          <Text style={styles.footerContato}>Documento gerado em {geradoEm}</Text>
           <Text style={styles.footerEscola}>{resumo.escolaNome ?? "Gênezi Educação Profissional"}</Text>
-          <Text style={styles.footerContato}>Documento gerado automaticamente — {geradoEm}</Text>
         </View>
       </Page>
     </Document>

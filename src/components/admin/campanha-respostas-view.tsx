@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye, Printer } from "lucide-react";
+import { Download, Eye, Loader2, Printer, Send } from "lucide-react";
 import {
   RESPOSTA_CHAVE_DECLARACAO,
   RESPOSTA_CHAVE_LGPD,
@@ -10,6 +10,7 @@ import {
   type CampanhaResposta,
   type Etapa,
 } from "@/lib/campanha-paginas/schema";
+import { enviarResultadoWhatsapp, enviarResultadoWhatsappEmMassa } from "@/app/admin/comercial/paginas-campanha/actions";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,6 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Paginacao } from "@/components/ui/paginacao";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function formatDateHoraBR(iso: string): string {
@@ -105,6 +117,104 @@ function RespostaCompletaDialog({
   );
 }
 
+// FUNCIONALIDADE 4 — botão por candidato, substitui o antigo link manual wa.me.
+function BotaoEnviarResultado({
+  respostaId,
+  nome,
+  onResultado,
+}: {
+  respostaId: string;
+  nome: string;
+  onResultado: (texto: string, isErro: boolean) => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  function handleClick() {
+    startTransition(async () => {
+      const resultado = await enviarResultadoWhatsapp(respostaId);
+      onResultado(
+        resultado.ok ? `Resultado enviado para ${nome}.` : resultado.erro ?? "Erro ao enviar resultado.",
+        !resultado.ok,
+      );
+    });
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={`Enviar resultado para ${nome} via WhatsApp`}
+      title="Enviar resultado via WhatsApp"
+      disabled={isPending}
+      onClick={handleClick}
+    >
+      {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+    </Button>
+  );
+}
+
+// FUNCIONALIDADE 5 — envio em massa (aprovados ou reprovados), com confirmação mostrando a
+// quantidade exata de candidatos (totalAprovados/totalReprovados vêm da página inteira, não só
+// da página atual da tabela — ver contarRespostasPorStatusPontuacao).
+function BotaoEnviarEmMassa({
+  paginaId,
+  status,
+  quantidade,
+  onResultado,
+}: {
+  paginaId: string;
+  status: "aprovado" | "reprovado";
+  quantidade: number;
+  onResultado: (texto: string, isErro: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const label = status === "aprovado" ? "aprovados" : "reprovados";
+
+  function handleConfirmar() {
+    startTransition(async () => {
+      const resultado = await enviarResultadoWhatsappEmMassa(paginaId, status);
+      setOpen(false);
+      // Envio roda em segundo plano (anti-banimento) — não dá pra confirmar sucesso/falha de
+      // cada mensagem na hora, só quantos candidatos entraram na fila (ver comentário em
+      // enviarResultadoCampanhaWhatsappEmMassa). Resultado de cada envio fica em
+      // mensagens_enviadas (tipo "campanha_resultado_manual").
+      onResultado(`Envio iniciado para ${resultado.iniciados} candidato(s) ${label}.`, false);
+    });
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm" disabled={quantidade === 0}>
+            Enviar resultado aos {label}
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Enviar para {quantidade} candidato{quantidade === 1 ? "" : "s"} {label}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Cada um receberá uma mensagem de WhatsApp com o link do resultado em PDF. O envio é feito aos
+            poucos em segundo plano (evita banimento do número) — pode levar alguns minutos pra todos
+            receberem. A ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction disabled={isPending} onClick={handleConfirmar}>
+            {isPending ? "Enviando..." : "Enviar"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function CampanhaRespostasView({
   paginaId,
   etapas,
@@ -112,6 +222,8 @@ export function CampanhaRespostasView({
   mostrarDeclaracao,
   habilitarPontuacao,
   pontuacaoMinimaBolsa,
+  totalAprovados,
+  totalReprovados,
   respostas,
   totalRegistros,
   paginaAtual,
@@ -125,6 +237,8 @@ export function CampanhaRespostasView({
   mostrarDeclaracao: boolean;
   habilitarPontuacao: boolean;
   pontuacaoMinimaBolsa: number;
+  totalAprovados: number;
+  totalReprovados: number;
   respostas: CampanhaResposta[];
   totalRegistros: number;
   paginaAtual: number;
@@ -135,6 +249,12 @@ export function CampanhaRespostasView({
   const router = useRouter();
   const [data, setData] = useState(dataFiltro);
   const [statusPontuacao, setStatusPontuacao] = useState(statusPontuacaoFiltro);
+  const [mensagem, setMensagem] = useState<{ texto: string; isErro: boolean } | null>(null);
+
+  function handleResultado(texto: string, isErro: boolean) {
+    setMensagem({ texto, isErro });
+    router.refresh();
+  }
 
   const perguntaPorId = new Map<string, string>();
   for (const etapa of etapas) {
@@ -204,6 +324,17 @@ export function CampanhaRespostasView({
         </Button>
       </div>
 
+      {habilitarPontuacao && (
+        <div className="flex flex-wrap gap-2">
+          <BotaoEnviarEmMassa paginaId={paginaId} status="aprovado" quantidade={totalAprovados} onResultado={handleResultado} />
+          <BotaoEnviarEmMassa paginaId={paginaId} status="reprovado" quantidade={totalReprovados} onResultado={handleResultado} />
+        </div>
+      )}
+
+      {mensagem && (
+        <p className={mensagem.isErro ? "text-destructive text-sm" : "text-muted-foreground text-sm"}>{mensagem.texto}</p>
+      )}
+
       {respostas.length === 0 ? (
         <Card>
           <p className="text-muted-foreground py-10 text-center text-sm">
@@ -227,16 +358,7 @@ export function CampanhaRespostasView({
               {respostas.map((resposta) => (
                 <TableRow key={resposta.id}>
                   <TableCell className="font-medium">{resposta.nome}</TableCell>
-                  <TableCell>
-                    <a
-                      href={`https://wa.me/55${resposta.whatsapp.replace(/\D/g, "")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="hover:underline"
-                    >
-                      {resposta.whatsapp}
-                    </a>
-                  </TableCell>
+                  <TableCell>{resposta.whatsapp}</TableCell>
                   <TableCell>{[resposta.cidade, resposta.estado].filter(Boolean).join(" - ") || "—"}</TableCell>
                   <TableCell>{formatDateHoraBR(resposta.created_at)}</TableCell>
                   {habilitarPontuacao && (
@@ -247,6 +369,7 @@ export function CampanhaRespostasView({
                   )}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-0.5">
+                      <BotaoEnviarResultado respostaId={resposta.id} nome={resposta.nome} onResultado={handleResultado} />
                       <Button
                         type="button"
                         variant="ghost"

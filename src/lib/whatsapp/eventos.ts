@@ -57,7 +57,8 @@ type TipoNotificacaoAuditoria =
   | "agendamento_lembrete"
   | "cobranca_atrasada"
   | "lead_followup"
-  | "campanha_confirmacao";
+  | "campanha_confirmacao"
+  | "campanha_resultado_manual";
 
 async function registrarEnvioWhatsapp(params: {
   tipo: TipoNotificacaoAuditoria;
@@ -788,23 +789,14 @@ type LinhaCampanhaRespostaWhatsapp = {
   whatsapp: string;
   idade: number | null;
   respostas: Record<string, RespostaValor>;
-  pontuacao_total: number | null;
-  pontuacao_percentual: number | null;
   lead_id: string | null;
   pagina_id: string;
 };
 
-// Bloco de resultado (pontuação + aprovado/reprovado): SEMPRE anexado em código quando a
-// campanha tem pontuação habilitada, além do que o admin escreveu no template editável — mesmo
-// padrão de bloco condicional anexado em código já usado em enviarMensagemMatriculaCriada
-// (credenciaisTexto/blocoConectaTexto, src/lib/mensagens/mensagens.ts).
-function blocoResultadoCampanha(total: number, maxima: number, percentual: number, aprovado: boolean, minimaBolsa: number): string {
-  const linhaAprovado = aprovado
-    ? "✅ Você atingiu a pontuação mínima para a bolsa!"
-    : `Continue estudando! A pontuação mínima é ${minimaBolsa}%.`;
-  return `\n\n🎯 Sua pontuação: ${total}/${maxima} (${percentual}%)\n${linhaAprovado}`;
-}
-
+// CORREÇÃO (melhorias de campanha): a confirmação NUNCA revela pontuação/aprovação — por isso o
+// antigo blocoResultadoCampanha() (anexava "🎯 Sua pontuação..." ao texto) foi removido, e a
+// cópia pro responsável (abaixo) também não leva mais a pontuação. O candidato/responsável
+// aguarda o admin enviar o resultado manualmente (ver enviarResultadoCampanhaWhatsapp).
 export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
   emSegundoPlano(async () => {
     if (!(await whatsappToggleHabilitado("wz_campanha_confirmacao"))) return;
@@ -812,7 +804,7 @@ export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
     const admin = createAdminClient();
     const { data } = await admin
       .from("campanha_respostas")
-      .select("nome, whatsapp, idade, respostas, pontuacao_total, pontuacao_percentual, lead_id, pagina_id")
+      .select("nome, whatsapp, idade, respostas, lead_id, pagina_id")
       .eq("id", respostaId)
       .maybeSingle();
     const resposta = data as LinhaCampanhaRespostaWhatsapp | null;
@@ -820,32 +812,14 @@ export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
 
     const { data: paginaData } = await admin
       .from("campanha_paginas")
-      .select("titulo, habilitar_pontuacao, pontuacao_maxima, pontuacao_minima_bolsa")
+      .select("titulo")
       .eq("id", resposta.pagina_id)
       .maybeSingle();
-    const pagina = paginaData as
-      | { titulo: string; habilitar_pontuacao: boolean; pontuacao_maxima: number; pontuacao_minima_bolsa: number }
-      | null;
+    const pagina = paginaData as { titulo: string } | null;
     const tituloCampanha = pagina?.titulo ?? "nossa campanha";
-    const habilitarPontuacao = !!pagina?.habilitar_pontuacao;
-
-    const total = resposta.pontuacao_total ?? 0;
-    const maxima = pagina?.pontuacao_maxima ?? 100;
-    const percentual = resposta.pontuacao_percentual ?? 0;
-    const minimaBolsa = pagina?.pontuacao_minima_bolsa ?? 0;
-    const aprovado = percentual >= minimaBolsa;
 
     const nome = primeiroNome(resposta.nome) || resposta.nome;
-    let mensagem = await renderTemplate("campanha_confirmacao", {
-      nome,
-      campanha: tituloCampanha,
-      pontuacao: habilitarPontuacao ? String(total) : "",
-      pontuacao_max: habilitarPontuacao ? String(maxima) : "",
-      percentual: habilitarPontuacao ? String(percentual) : "",
-    });
-    if (habilitarPontuacao) {
-      mensagem += blocoResultadoCampanha(total, maxima, percentual, aprovado, minimaBolsa);
-    }
+    const mensagem = await renderTemplate("campanha_confirmacao", { nome, campanha: tituloCampanha });
 
     const resultado = await enviarWhatsApp(resposta.whatsapp, mensagem);
     await registrarEnvioWhatsapp({
@@ -867,15 +841,112 @@ export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
       const whatsappResponsavel = resposta.respostas[RESPOSTA_CHAVE_RESPONSAVEL_WHATSAPP];
       if (typeof whatsappResponsavel === "string" && whatsappResponsavel) {
         const saudacaoResponsavel = typeof nomeResponsavel === "string" && nomeResponsavel ? primeiroNome(nomeResponsavel) : "";
-        let mensagemResponsavel =
+        const mensagemResponsavel =
           `Olá${saudacaoResponsavel ? ` ${saudacaoResponsavel}` : ""}! 👋\n${nome} acabou de se inscrever na campanha ` +
-          `*${tituloCampanha}* da Gênezi Educação.`;
-        if (habilitarPontuacao) {
-          mensagemResponsavel += `\n🎯 Pontuação obtida: ${total}/${maxima} (${percentual}%)`;
-        }
-        mensagemResponsavel += "\n\nEm caso de dúvidas, entre em contato conosco.";
+          `*${tituloCampanha}* da Gênezi Educação.\n\nEm caso de dúvidas, entre em contato conosco.`;
         await enviarWhatsApp(whatsappResponsavel, mensagemResponsavel);
       }
     }
   });
+}
+
+// ----- Campanha: envio manual do resultado (clique do admin na tela de respostas) -----
+// FUNCIONALIDADE 4/5 (melhorias de campanha) — diferente dos eventos automáticos acima, estas
+// funções são AGUARDADAS de verdade pela Server Action que as chama (nunca emSegundoPlano/
+// after): o admin precisa do resultado (sucesso/erro) na hora pra mostrar feedback na tela.
+
+type CandidatoResultadoCampanha = { id: string; nome: string; whatsapp: string; lead_id: string | null };
+
+function montarMensagemResultadoCampanha(nome: string, tituloCampanha: string, linkPdf: string): string {
+  const primeiro = primeiroNome(nome) || nome;
+  return `Olá ${primeiro}! 🎓 Segue o resultado da sua participação na campanha ${tituloCampanha}.\n\nAcesse seu resultado: ${linkPdf}\n\n*Gênezi Educação Profissional*`;
+}
+
+async function enviarEDispararResultadoCampanha(
+  candidato: CandidatoResultadoCampanha,
+  tituloCampanha: string,
+  opcoes?: { semDelayAntiBanimento?: boolean },
+): Promise<{ ok: boolean; erro?: string }> {
+  const linkPdf = `${urlPortal()}/api/campanha-respostas/${candidato.id}/pdf`;
+  const mensagem = montarMensagemResultadoCampanha(candidato.nome, tituloCampanha, linkPdf);
+  const resultado = await enviarWhatsApp(candidato.whatsapp, mensagem, opcoes);
+  await registrarEnvioWhatsapp({
+    tipo: "campanha_resultado_manual",
+    matriculaId: null,
+    leadId: candidato.lead_id,
+    telefoneDestino: candidato.whatsapp,
+    mensagemTexto: mensagem,
+    resultado,
+  });
+  return resultado.ok ? { ok: true } : { ok: false, erro: resultado.erro ?? "Não foi possível enviar a mensagem." };
+}
+
+// FUNCIONALIDADE 4 — botão "Enviar resultado" por candidato. `semDelayAntiBanimento: true`: é um
+// clique síncrono e individual (não um loop em massa) — mesma correção já aplicada ao botão
+// "Enviar teste" de Configurações > WhatsApp (ver comentário em enviarWhatsApp/evolution.ts):
+// esperar até 30s de delay configurável só pra devolver sucesso/erro na hora pro admin.
+export async function enviarResultadoCampanhaWhatsapp(respostaId: string): Promise<{ ok: boolean; erro?: string }> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("campanha_respostas")
+    .select("id, nome, whatsapp, lead_id, pagina_id")
+    .eq("id", respostaId)
+    .maybeSingle();
+  const resposta = data as (CandidatoResultadoCampanha & { pagina_id: string }) | null;
+  if (!resposta?.whatsapp) return { ok: false, erro: "Candidato não encontrado ou sem WhatsApp cadastrado." };
+
+  const { data: paginaData } = await admin.from("campanha_paginas").select("titulo").eq("id", resposta.pagina_id).maybeSingle();
+  const tituloCampanha = (paginaData as { titulo: string } | null)?.titulo ?? "nossa campanha";
+
+  return enviarEDispararResultadoCampanha(resposta, tituloCampanha, { semDelayAntiBanimento: true });
+}
+
+// FUNCIONALIDADE 5 — envio em massa aos aprovados/reprovados de uma campanha.
+//
+// DESVIO consciente do texto literal da tarefa ("toast com 'X mensagens enviadas com sucesso'",
+// implicando contagem síncrona): aqui o delay anti-banimento é MANTIDO entre mensagens (ao
+// contrário do envio individual acima) — é exatamente o cenário de "rajada de mensagens" que
+// esse delay existe pra evitar, e pular ele numa campanha com muitos candidatos arriscaria o
+// número ser banido. Mas somar esse delay (até 30s cada, configurável) pelo total de candidatos
+// EM SÉRIE dentro de uma única Server Action reproduz o mesmo bug de timeout já corrigido no
+// botão "Enviar teste" (ver comentário em enviarWhatsApp) — só que pior, pois aqui multiplica por
+// N candidatos em vez de 1. Por isso o envio roda em segundo plano (emSegundoPlano/after()), e a
+// Server Action chamadora devolve de imediato só a contagem de candidatos alcançados — o
+// resultado real de cada envio fica registrado em mensagens_enviadas (tipo
+// "campanha_resultado_manual") pro admin conferir depois.
+export async function enviarResultadoCampanhaWhatsappEmMassa(
+  paginaId: string,
+  status: "aprovado" | "reprovado",
+): Promise<number> {
+  const admin = createAdminClient();
+  const { data: paginaData } = await admin
+    .from("campanha_paginas")
+    .select("titulo, pontuacao_minima_bolsa")
+    .eq("id", paginaId)
+    .maybeSingle();
+  const pagina = paginaData as { titulo: string; pontuacao_minima_bolsa: number } | null;
+  if (!pagina) return 0;
+
+  const { data } = await admin
+    .from("campanha_respostas")
+    .select("id, nome, whatsapp, lead_id, pontuacao_percentual")
+    .eq("pagina_id", paginaId);
+  const candidatos = (data ?? []) as Array<CandidatoResultadoCampanha & { pontuacao_percentual: number | null }>;
+  const alvo = candidatos.filter((candidato) => {
+    const aprovado = (candidato.pontuacao_percentual ?? 0) >= pagina.pontuacao_minima_bolsa;
+    return status === "aprovado" ? aprovado : !aprovado;
+  });
+
+  // Sequencial (nunca em paralelo): enviarWhatsApp() já embute o delay anti-banimento entre
+  // mensagens, mesmo padrão "EM SÉRIE" usado em src/lib/whatsapp/fluxos.ts. Roda depois da
+  // resposta (after()), então o avanço real não é observável por quem chamou — só pelo log em
+  // mensagens_enviadas.
+  emSegundoPlano(async () => {
+    for (const candidato of alvo) {
+      if (!candidato.whatsapp) continue;
+      await enviarEDispararResultadoCampanha(candidato, pagina.titulo);
+    }
+  });
+
+  return alvo.length;
 }

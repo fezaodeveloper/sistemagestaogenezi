@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getCampanhaPagina } from "@/lib/campanha-paginas/campanha-paginas";
-import { getCampanhaRespostas } from "@/app/admin/comercial/paginas-campanha/actions";
+import { getCampanhaRespostas, getContagemPontuacaoCampanha } from "@/app/admin/comercial/paginas-campanha/actions";
 import { parsePagina } from "@/lib/paginacao";
 import { CampanhaRespostasView } from "@/components/admin/campanha-respostas-view";
 
@@ -23,13 +23,18 @@ export default async function CampanhaRespostasPage({
 
   const paginaAtual = parsePagina(page);
   const statusPontuacao = status_pontuacao === "aprovado" || status_pontuacao === "reprovado" ? status_pontuacao : undefined;
-  const resultado = await getCampanhaRespostas(
-    id,
-    paginaAtual,
-    data || undefined,
-    pagina.habilitar_pontuacao ? statusPontuacao : undefined,
-    pagina.pontuacao_minima_bolsa,
-  );
+  const [resultado, contagemPontuacao] = await Promise.all([
+    getCampanhaRespostas(
+      id,
+      paginaAtual,
+      data || undefined,
+      pagina.habilitar_pontuacao ? statusPontuacao : undefined,
+      pagina.pontuacao_minima_bolsa,
+    ),
+    pagina.habilitar_pontuacao
+      ? getContagemPontuacaoCampanha(id, pagina.pontuacao_minima_bolsa)
+      : Promise.resolve({ aprovados: 0, reprovados: 0 }),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,6 +50,8 @@ export default async function CampanhaRespostasPage({
         mostrarDeclaracao={pagina.mostrar_declaracao || pagina.etapas.some((etapa) => etapa.tipo === "confirmacao")}
         habilitarPontuacao={pagina.habilitar_pontuacao}
         pontuacaoMinimaBolsa={pagina.pontuacao_minima_bolsa}
+        totalAprovados={contagemPontuacao.aprovados}
+        totalReprovados={contagemPontuacao.reprovados}
         respostas={resultado.itens}
         totalRegistros={resultado.total}
         paginaAtual={paginaAtual}

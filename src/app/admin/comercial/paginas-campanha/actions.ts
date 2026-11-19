@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { calcularOffset, calcularTotalPaginas, LIMITE_PADRAO } from "@/lib/paginacao";
 import {
+  contarRespostasPorStatusPontuacao,
   getCampanhaPagina as getCampanhaPaginaLib,
   getCampanhaPaginas as getCampanhaPaginasLib,
   getCampanhaRespostas as getCampanhaRespostasLib,
@@ -13,6 +14,10 @@ import {
 } from "@/lib/campanha-paginas/campanha-paginas";
 import { campanhaPaginaFormSchema, type CampanhaPagina, type CampanhaResposta } from "@/lib/campanha-paginas/schema";
 import { CAMPANHA_TEMPLATE_IDS, CAMPANHA_TEMPLATES, type CampanhaTemplateId } from "@/lib/campanha-paginas/templates";
+import {
+  enviarResultadoCampanhaWhatsapp,
+  enviarResultadoCampanhaWhatsappEmMassa,
+} from "@/lib/whatsapp/eventos";
 
 export type CampanhaPaginasResultado = {
   itens: CampanhaPaginaComContagem[];
@@ -412,4 +417,32 @@ export async function getCampanhaRespostas(
     minimaBolsa,
   });
   return { itens, total, totalPaginas: calcularTotalPaginas(total, LIMITE_PADRAO) };
+}
+
+// FUNCIONALIDADE 5 — contagem total (não paginada) pro texto de confirmação do envio em massa.
+export async function getContagemPontuacaoCampanha(
+  paginaId: string,
+  minimaBolsa: number,
+): Promise<{ aprovados: number; reprovados: number }> {
+  await requireRole("admin");
+  const supabase = await createClient();
+  return contarRespostasPorStatusPontuacao(supabase, paginaId, minimaBolsa);
+}
+
+// FUNCIONALIDADE 4 — "Enviar resultado" por candidato.
+export async function enviarResultadoWhatsapp(respostaId: string): Promise<{ ok: boolean; erro?: string }> {
+  await requireRole("admin");
+  return enviarResultadoCampanhaWhatsapp(respostaId);
+}
+
+// FUNCIONALIDADE 5 — envio em massa aos aprovados ou reprovados de uma campanha. Roda em segundo
+// plano (ver comentário em enviarResultadoCampanhaWhatsappEmMassa) — devolve só a quantidade de
+// candidatos alcançados, não um resultado de sucesso/falha síncrono.
+export async function enviarResultadoWhatsappEmMassa(
+  paginaId: string,
+  status: "aprovado" | "reprovado",
+): Promise<{ iniciados: number }> {
+  await requireRole("admin");
+  const iniciados = await enviarResultadoCampanhaWhatsappEmMassa(paginaId, status);
+  return { iniciados };
 }

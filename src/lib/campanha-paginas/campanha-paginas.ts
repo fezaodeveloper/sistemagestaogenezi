@@ -118,3 +118,26 @@ export async function contarRespostasAdmin(admin: SupabaseAdminClient, paginaId:
     .eq("pagina_id", paginaId);
   return count ?? 0;
 }
+
+// FUNCIONALIDADE 5 (melhorias de campanha) — total de aprovados/reprovados da campanha inteira
+// (não só da página atual da tabela), pro texto de confirmação do envio em massa ("Enviar para X
+// candidatos..."). Mesmos limiares de getCampanhaRespostas (gte/lt sobre pontuacao_percentual).
+export async function contarRespostasPorStatusPontuacao(
+  supabase: SupabaseServerClient,
+  paginaId: string,
+  minimaBolsa: number,
+): Promise<{ aprovados: number; reprovados: number }> {
+  const [{ count: aprovados }, { count: reprovados }] = await Promise.all([
+    supabase
+      .from("campanha_respostas")
+      .select("id", { count: "exact", head: true })
+      .eq("pagina_id", paginaId)
+      .gte("pontuacao_percentual", minimaBolsa),
+    supabase
+      .from("campanha_respostas")
+      .select("id", { count: "exact", head: true })
+      .eq("pagina_id", paginaId)
+      .lt("pontuacao_percentual", minimaBolsa),
+  ]);
+  return { aprovados: aprovados ?? 0, reprovados: reprovados ?? 0 };
+}

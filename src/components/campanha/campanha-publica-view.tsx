@@ -386,16 +386,6 @@ export function CampanhaPublicaView({
   const [aceiteDeclaracao, setAceiteDeclaracao] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
-  // TAREFA campanha (PARTES 2 e 3) — resultado devolvido pela Server Action (pontuação só vem
-  // preenchida quando a campanha tem pontuação habilitada) + id da resposta pro botão de
-  // imprimir PDF.
-  const [resultado, setResultado] = useState<{
-    respostaId: string;
-    pontuacaoTotal?: number;
-    pontuacaoMaxima?: number;
-    pontuacaoPercentual?: number;
-    aprovado?: boolean;
-  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [contagem, setContagem] = useState<Contagem | null>(null);
   // TAREFA campanha (PARTE 1) — rola pro topo do card ao mudar de etapa (comportamento suave,
@@ -553,15 +543,11 @@ export function CampanhaPublicaView({
       }
       // Inscrição enviada com sucesso = lead pros pixels (no preview do editor não passa por aqui).
       dispararEventoPixels("lead");
-      setResultado(resposta);
       setSucesso(true);
     });
   }
 
   if (sucesso) {
-    // TAREFA campanha (PARTE 2) — resultado da pontuação só existe quando a campanha tem
-    // pontuação habilitada (resultado?.pontuacaoPercentual vem undefined senão).
-    const temResultado = resultado?.pontuacaoPercentual !== undefined;
     return (
       <div style={{ ...style, gap: tipografia.espacamento / 2 }} className="flex flex-col items-center py-16 text-center">
         <span className="flex size-16 items-center justify-center rounded-full text-3xl" style={{ backgroundColor: "var(--cor-primaria)" }}>
@@ -571,28 +557,13 @@ export function CampanhaPublicaView({
           {pagina.titulo_sucesso}
         </h2>
         {pagina.mensagem_sucesso && <p style={{ color: pagina.cor_fonte }}>{pagina.mensagem_sucesso}</p>}
-        {temResultado && (
-          <div className="flex flex-col items-center gap-1 pt-2" style={{ color: pagina.cor_fonte }}>
-            <p className="text-lg font-semibold">
-              🎯 Sua pontuação: {resultado?.pontuacaoTotal}/{resultado?.pontuacaoMaxima} ({resultado?.pontuacaoPercentual}%)
-            </p>
-            {resultado?.aprovado ? (
-              <p className="font-medium text-green-500">✅ Parabéns! Você atingiu a pontuação mínima para a bolsa!</p>
-            ) : (
-              <p className="text-[0.875em] opacity-80">Continue estudando! A pontuação mínima é {pagina.pontuacao_minima_bolsa}%.</p>
-            )}
-          </div>
-        )}
-        {!preview && resultado?.respostaId && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<a href={`/api/campanha-respostas/${resultado.respostaId}/pdf`} target="_blank" rel="noreferrer" />}
-          >
-            🖨️ Imprimir resultado
-          </Button>
+        {/* CORREÇÃO (melhorias de campanha) — a pontuação/aprovação NUNCA aparece aqui, nem o
+            botão de baixar o PDF: o candidato só recebe o resultado quando o admin enviar
+            manualmente por WhatsApp (ver enviarResultadoCampanhaWhatsapp). */}
+        {!preview && pagina.habilitar_pontuacao && (
+          <p className="pt-2 text-[0.875em] opacity-80" style={{ color: pagina.cor_fonte }}>
+            Em breve entraremos em contato com o resultado da sua participação.
+          </p>
         )}
         {preview && (
           <Button

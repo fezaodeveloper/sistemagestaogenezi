@@ -25,18 +25,7 @@ import {
   type RespostaValor,
 } from "@/lib/campanha-paginas/schema";
 
-export type EnviarRespostaResultado =
-  | {
-      success: true;
-      respostaId: string;
-      // Só preenchidos quando a campanha tem pontuação habilitada — a tela de resultado e o
-      // botão de imprimir (TAREFA campanha, PARTES 2 e 3) usam isso pra decidir o que mostrar.
-      pontuacaoTotal?: number;
-      pontuacaoMaxima?: number;
-      pontuacaoPercentual?: number;
-      aprovado?: boolean;
-    }
-  | { error: string };
+export type EnviarRespostaResultado = { success: true; respostaId: string } | { error: string };
 
 // Sem requireRole de propósito — é a única Server Action deste módulo
 // genuinamente alcançável por um visitante sem conta (mesmo espírito de
@@ -261,16 +250,9 @@ export async function enviarRespostaCampanha(slug: string, formData: FormData): 
     }
   }
 
-  return {
-    success: true,
-    respostaId: respostaCriada.id,
-    ...(pagina.habilitar_pontuacao
-      ? {
-          pontuacaoTotal: pontuacaoTotal ?? 0,
-          pontuacaoMaxima: pagina.pontuacao_maxima,
-          pontuacaoPercentual: pontuacaoPercentual ?? 0,
-          aprovado: (pontuacaoPercentual ?? 0) >= pagina.pontuacao_minima_bolsa,
-        }
-      : {}),
-  };
+  // CORREÇÃO (melhorias de campanha) — a pontuação NUNCA é devolvida ao navegador do candidato
+  // (defesa em profundidade: antes a tela de sucesso já não exibia isso, mas o valor ainda viajava
+  // na resposta da Server Action, inspecionável via devtools). O candidato só sabe o resultado
+  // quando o admin envia manualmente via WhatsApp (ver enviarResultadoCampanhaWhatsapp).
+  return { success: true, respostaId: respostaCriada.id };
 }

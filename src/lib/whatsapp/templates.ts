@@ -208,20 +208,12 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
     gatilho: "Imediatamente após o visitante enviar o formulário de uma página de campanha.",
     padrao:
       "Olá {nome}! ✅ Recebemos sua inscrição na campanha *{campanha}*!\n\nEm breve entraremos em contato. 😊\n\n*Gênezi Educação Profissional*",
-    // pontuacao/pontuacao_max/percentual só chegam preenchidos quando a campanha tem pontuação
-    // habilitada (src/lib/whatsapp/eventos.ts::notificarWhatsappCampanhaConfirmacao) — ficam ""
-    // (somem do texto) nas demais. O bloco de resultado (🎯 pontuação + aprovado/reprovado) é
-    // SEMPRE anexado em código depois deste template quando a pontuação está habilitada, mesmo
-    // que o admin não use essas 3 variáveis no texto — mesmo padrão de blocos condicionais
-    // anexados em código já usado em enviarMensagemMatriculaCriada (credenciaisTexto/
-    // blocoConectaTexto, src/lib/mensagens/mensagens.ts). Elas ficam disponíveis aqui pra quem
-    // quiser personalizar o texto principal também.
+    // CORREÇÃO (melhorias de campanha): esta confirmação NUNCA revela pontuação/aprovação — o
+    // candidato aguarda o admin enviar o resultado manualmente (ver enviarResultadoCampanhaWhatsapp
+    // em src/lib/whatsapp/eventos.ts). Por isso só "nome"/"campanha" ficam disponíveis aqui.
     placeholders: [
       P_NOME,
       { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Bolsa de Estudos Março" },
-      { chave: "pontuacao", descricao: "Pontuação obtida (só com pontuação habilitada)", exemplo: "78" },
-      { chave: "pontuacao_max", descricao: "Pontuação máxima (só com pontuação habilitada)", exemplo: "100" },
-      { chave: "percentual", descricao: "Percentual da pontuação (só com pontuação habilitada)", exemplo: "78" },
     ],
   },
 };

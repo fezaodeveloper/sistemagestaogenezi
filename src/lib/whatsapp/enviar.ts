@@ -15,7 +15,19 @@ export type ResultadoWhatsapp = { ok: boolean; enviado: boolean; erro?: string }
 // uma ação do usuário (clique de botão) deve envolver a chamada em `after()` pra não travar a
 // resposta; os crons (que já processam item a item em loop) chamam direto, o delay entre
 // mensagens sendo justamente o comportamento anti-banimento desejado.
-export async function enviarWhatsApp(telefone: string, mensagem: string): Promise<ResultadoWhatsapp> {
+//
+// `semDelayAntiBanimento` (opcional): pula o delay (igual ao `delay: null` de enviarMensagemTexto)
+// — mesmo motivo do botão "Enviar teste" em src/app/admin/configuracoes/whatsapp/actions.ts (ver
+// comentário em src/lib/whatsapp/evolution.ts): um clique SÍNCRONO e individual (não um loop em
+// massa) não deve esperar até 30s de delay configurável só pra devolver sucesso/erro pro admin na
+// hora. Usado por enviarResultadoCampanhaWhatsapp (envio individual, FUNCIONALIDADE 4) — o envio
+// em massa (FUNCIONALIDADE 5) continua com o delay normal, porque ali o risco de banimento por
+// rajada de mensagens é real.
+export async function enviarWhatsApp(
+  telefone: string,
+  mensagem: string,
+  opcoes?: { semDelayAntiBanimento?: boolean },
+): Promise<ResultadoWhatsapp> {
   const numeroNormalizado = normalizarTelefone(telefone);
   if (!numeroNormalizado) {
     console.warn("[whatsapp] telefone inválido, envio ignorado:", telefone);
@@ -32,10 +44,12 @@ export async function enviarWhatsApp(telefone: string, mensagem: string): Promis
     return { ok: true, enviado: false };
   }
 
-  const resultado = await enviarMensagemTexto(config.evolution, numeroNormalizado, mensagem, {
-    min: config.delayMinSegundos,
-    max: config.delayMaxSegundos,
-  });
+  const resultado = await enviarMensagemTexto(
+    config.evolution,
+    numeroNormalizado,
+    mensagem,
+    opcoes?.semDelayAntiBanimento ? null : { min: config.delayMinSegundos, max: config.delayMaxSegundos },
+  );
 
   return resultado.ok ? { ok: true, enviado: true } : { ok: false, enviado: false, erro: resultado.erro };
 }
