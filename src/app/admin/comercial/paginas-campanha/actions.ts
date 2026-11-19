@@ -446,3 +446,17 @@ export async function enviarResultadoWhatsappEmMassa(
   const iniciados = await enviarResultadoCampanhaWhatsappEmMassa(paginaId, status);
   return { iniciados };
 }
+
+// ITEM 2 — excluir um candidato (resposta) individual de uma campanha, pela tela de respostas.
+export async function excluirCandidatoCampanha(respostaId: string): Promise<{ ok: boolean; erro?: string }> {
+  await requireRole("admin");
+  const supabase = await createClient();
+
+  const { data: resposta } = await supabase.from("campanha_respostas").select("pagina_id").eq("id", respostaId).maybeSingle();
+
+  const { error } = await supabase.from("campanha_respostas").delete().eq("id", respostaId);
+  if (error) return { ok: false, erro: "Não foi possível excluir o candidato. Tente novamente." };
+
+  if (resposta?.pagina_id) revalidatePath(`/admin/comercial/paginas-campanha/${resposta.pagina_id}/respostas`);
+  return { ok: true };
+}

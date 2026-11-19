@@ -24,6 +24,8 @@ export const WHATSAPP_TEMPLATE_IDS = [
   "cobranca_atrasada_d15",
   "lead_followup",
   "campanha_confirmacao",
+  "campanha_resultado_aprovado",
+  "campanha_resultado_reprovado",
 ] as const;
 export type WhatsappTemplateId = (typeof WHATSAPP_TEMPLATE_IDS)[number];
 
@@ -214,6 +216,34 @@ export const WHATSAPP_TEMPLATES: Record<WhatsappTemplateId, WhatsappTemplateDefi
     placeholders: [
       P_NOME,
       { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Bolsa de Estudos Março" },
+    ],
+  },
+  // ITEM 1 (melhorias de campanha) — enviados pelo admin via botão "Enviar resultado"
+  // (enviarResultadoCampanhaWhatsapp/EmMassa em src/lib/whatsapp/eventos.ts), nunca
+  // automaticamente. link_pdf é montado em código (URL da rota pública de PDF), não vem do
+  // formulário de edição do template.
+  campanha_resultado_aprovado: {
+    id: "campanha_resultado_aprovado",
+    nome: "Resultado de campanha — aprovado",
+    gatilho: 'Clique do admin em "Enviar resultado" (individual ou em massa) para um candidato aprovado.',
+    padrao:
+      "Olá {nome}! 🎓 Parabéns! Você foi *aprovado(a)* na campanha {campanha}.\n\nAcesse seu resultado: {link_pdf}\n\n*Gênezi Educação Profissional*",
+    placeholders: [
+      P_NOME,
+      { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Bolsa de Estudos Março" },
+      { chave: "link_pdf", descricao: "Link público do PDF com o resultado", exemplo: "https://.../pdf" },
+    ],
+  },
+  campanha_resultado_reprovado: {
+    id: "campanha_resultado_reprovado",
+    nome: "Resultado de campanha — não aprovado",
+    gatilho: 'Clique do admin em "Enviar resultado" (individual ou em massa) para um candidato não aprovado.',
+    padrao:
+      "Olá {nome}! 🎓 Segue o resultado da sua participação na campanha {campanha}.\n\nAcesse seu resultado: {link_pdf}\n\nContinue estudando! *Gênezi Educação Profissional*",
+    placeholders: [
+      P_NOME,
+      { chave: "campanha", descricao: "Título da página de campanha", exemplo: "Bolsa de Estudos Março" },
+      { chave: "link_pdf", descricao: "Link público do PDF com o resultado", exemplo: "https://.../pdf" },
     ],
   },
 };

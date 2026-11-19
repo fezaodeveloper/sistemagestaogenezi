@@ -857,18 +857,31 @@ export function notificarWhatsappCampanhaConfirmacao(respostaId: string): void {
 
 type CandidatoResultadoCampanha = { id: string; nome: string; whatsapp: string; lead_id: string | null };
 
-function montarMensagemResultadoCampanha(nome: string, tituloCampanha: string, linkPdf: string): string {
+// ITEM 1 (templates WhatsApp resultado campanha) — mensagem agora vem do catálogo editável
+// (campanha_resultado_aprovado/campanha_resultado_reprovado em whatsapp_templates), não mais
+// hardcoded — admin pode personalizar em Configurações > WhatsApp > Templates.
+async function montarMensagemResultadoCampanha(
+  nome: string,
+  tituloCampanha: string,
+  linkPdf: string,
+  aprovado: boolean,
+): Promise<string> {
   const primeiro = primeiroNome(nome) || nome;
-  return `Olá ${primeiro}! 🎓 Segue o resultado da sua participação na campanha ${tituloCampanha}.\n\nAcesse seu resultado: ${linkPdf}\n\n*Gênezi Educação Profissional*`;
+  return renderTemplate(aprovado ? "campanha_resultado_aprovado" : "campanha_resultado_reprovado", {
+    nome: primeiro,
+    campanha: tituloCampanha,
+    link_pdf: linkPdf,
+  });
 }
 
 async function enviarEDispararResultadoCampanha(
   candidato: CandidatoResultadoCampanha,
   tituloCampanha: string,
+  aprovado: boolean,
   opcoes?: { semDelayAntiBanimento?: boolean },
 ): Promise<{ ok: boolean; erro?: string }> {
   const linkPdf = `${urlPortal()}/api/campanha-respostas/${candidato.id}/pdf`;
-  const mensagem = montarMensagemResultadoCampanha(candidato.nome, tituloCampanha, linkPdf);
+  const mensagem = await montarMensagemResultadoCampanha(candidato.nome, tituloCampanha, linkPdf, aprovado);
   const resultado = await enviarWhatsApp(candidato.whatsapp, mensagem, opcoes);
   await registrarEnvioWhatsapp({
     tipo: "campanha_resultado_manual",
@@ -889,16 +902,24 @@ export async function enviarResultadoCampanhaWhatsapp(respostaId: string): Promi
   const admin = createAdminClient();
   const { data } = await admin
     .from("campanha_respostas")
-    .select("id, nome, whatsapp, lead_id, pagina_id")
+    .select("id, nome, whatsapp, lead_id, pagina_id, pontuacao_percentual")
     .eq("id", respostaId)
     .maybeSingle();
-  const resposta = data as (CandidatoResultadoCampanha & { pagina_id: string }) | null;
+  const resposta = data as (CandidatoResultadoCampanha & { pagina_id: string; pontuacao_percentual: number | null }) | null;
   if (!resposta?.whatsapp) return { ok: false, erro: "Candidato não encontrado ou sem WhatsApp cadastrado." };
 
-  const { data: paginaData } = await admin.from("campanha_paginas").select("titulo").eq("id", resposta.pagina_id).maybeSingle();
-  const tituloCampanha = (paginaData as { titulo: string } | null)?.titulo ?? "nossa campanha";
+  const { data: paginaData } = await admin
+    .from("campanha_paginas")
+    .select("titulo, pontuacao_minima_bolsa")
+    .eq("id", resposta.pagina_id)
+    .maybeSingle();
+  const pagina = paginaData as { titulo: string; pontuacao_minima_bolsa: number } | null;
+  const tituloCampanha = pagina?.titulo ?? "nossa campanha";
+  // Mesma fórmula já usada em toda a tela admin (RespostaCompletaDialog em
+  // campanha-respostas-view.tsx) e no route.tsx do PDF — independe de habilitar_pontuacao.
+  const aprovado = (resposta.pontuacao_percentual ?? 0) >= (pagina?.pontuacao_minima_bolsa ?? 0);
 
-  return enviarEDispararResultadoCampanha(resposta, tituloCampanha, { semDelayAntiBanimento: true });
+  return enviarEDispararResultadoCampanha(resposta, tituloCampanha, aprovado, { semDelayAntiBanimento: true });
 }
 
 // FUNCIONALIDADE 5 — envio em massa aos aprovados/reprovados de uma campanha.
@@ -941,10 +962,11 @@ export async function enviarResultadoCampanhaWhatsappEmMassa(
   // mensagens, mesmo padrão "EM SÉRIE" usado em src/lib/whatsapp/fluxos.ts. Roda depois da
   // resposta (after()), então o avanço real não é observável por quem chamou — só pelo log em
   // mensagens_enviadas.
+  const aprovado = status === "aprovado";
   emSegundoPlano(async () => {
     for (const candidato of alvo) {
       if (!candidato.whatsapp) continue;
-      await enviarEDispararResultadoCampanha(candidato, pagina.titulo);
+      await enviarEDispararResultadoCampanha(candidato, pagina.titulo, aprovado);
     }
   });
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   colunaExigeMotivoPerda,
   dataHoraInputParaIso,
@@ -218,6 +219,17 @@ export async function deleteLeadsEmLote(ids: string[]): Promise<ResultadoExclusa
 
 export async function deleteLead(id: string): Promise<{ error?: string }> {
   await requireRole("admin");
+
+  // ITEM 3 (melhorias de campanha) — campanha_respostas.lead_id tem "on delete set null" (não
+  // cascade, ver migration 20261030300000_integracoes_comercial.sql), então apagar o lead por si
+  // só NÃO apaga as respostas de campanha dele — ficariam com lead_id nulo, "desvinculadas" mas
+  // ainda existindo. Apaga explicitamente antes, via client admin (service_role) pra garantir que
+  // RLS não bloqueie (best-effort: uma falha aqui não deve impedir a exclusão do lead em si).
+  const admin = createAdminClient();
+  const { error: erroRespostas } = await admin.from("campanha_respostas").delete().eq("lead_id", id);
+  if (erroRespostas) {
+    console.error("[deleteLead] falha ao excluir respostas de campanha do lead:", erroRespostas);
+  }
 
   const supabase = await createClient();
   const { error } = await supabase.from("leads").delete().eq("id", id);

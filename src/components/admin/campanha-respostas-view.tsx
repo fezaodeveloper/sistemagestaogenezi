@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye, Loader2, Printer, Send } from "lucide-react";
+import { Download, Eye, Loader2, Printer, Send, Trash2 } from "lucide-react";
 import {
   RESPOSTA_CHAVE_DECLARACAO,
   RESPOSTA_CHAVE_LGPD,
@@ -10,7 +10,11 @@ import {
   type CampanhaResposta,
   type Etapa,
 } from "@/lib/campanha-paginas/schema";
-import { enviarResultadoWhatsapp, enviarResultadoWhatsappEmMassa } from "@/app/admin/comercial/paginas-campanha/actions";
+import {
+  enviarResultadoWhatsapp,
+  enviarResultadoWhatsappEmMassa,
+  excluirCandidatoCampanha,
+} from "@/app/admin/comercial/paginas-campanha/actions";
 import { LIMITE_PADRAO } from "@/lib/paginacao";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -151,6 +155,55 @@ function BotaoEnviarResultado({
     >
       {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
     </Button>
+  );
+}
+
+// ITEM 2 — excluir candidato individual, com confirmação (mesmo padrão de AlertDialog
+// controlado já usado em agendamentos-admin-view.tsx).
+function BotaoExcluirCandidato({
+  respostaId,
+  nome,
+  onResultado,
+}: {
+  respostaId: string;
+  nome: string;
+  onResultado: (texto: string, isErro: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  function handleExcluir() {
+    startTransition(async () => {
+      const resultado = await excluirCandidatoCampanha(respostaId);
+      setOpen(false);
+      onResultado(resultado.ok ? `${nome} excluído desta campanha.` : resultado.erro ?? "Erro ao excluir candidato.", !resultado.ok);
+    });
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Excluir ${nome}`} title="Excluir candidato">
+            <Trash2 className="size-3.5" />
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir candidato</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja excluir {nome} desta campanha? Esta ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleExcluir}>
+            {isPending ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -388,6 +441,7 @@ export function CampanhaRespostasView({
                         habilitarPontuacao={habilitarPontuacao}
                         pontuacaoMinimaBolsa={pontuacaoMinimaBolsa}
                       />
+                      <BotaoExcluirCandidato respostaId={resposta.id} nome={resposta.nome} onResultado={handleResultado} />
                     </div>
                   </TableCell>
                 </TableRow>
